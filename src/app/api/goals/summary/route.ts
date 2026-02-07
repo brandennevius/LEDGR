@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
-import { openai } from "@/lib/openai";
+import { getOpenAI } from "@/lib/openai";
 import { hydrateGoals } from "@/lib/goals";
 import { buildClientSnapshot } from "@/utils/trends";
 
@@ -153,7 +153,8 @@ export async function POST() {
     bufferDays: snapshot.bufferDays,
   }).filter((goal) => goal.status !== "COMPLETED");
 
-  if (!process.env.OPENAI_API_KEY) {
+  const openai = getOpenAI();
+  if (!openai) {
     return NextResponse.json(
       fallbackSummary({
         goalsCount: hydratedGoals.length,

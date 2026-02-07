@@ -1,5 +1,11 @@
 import OpenAI from "openai";
 
-export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let cachedClient: OpenAI | null = null;
+
+export const getOpenAI = () => {
+  if (!process.env.OPENAI_API_KEY) return null;
+  if (!cachedClient) {
+    cachedClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return cachedClient;
+};

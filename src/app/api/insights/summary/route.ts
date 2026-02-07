@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth";
 import { getClientOverviewData } from "@/lib/dashboardData";
-import { openai } from "@/lib/openai";
+import { getOpenAI } from "@/lib/openai";
 
 const summarySchema = {
   type: "object",
@@ -23,7 +23,8 @@ export async function POST() {
   const { snapshot, goals, clientName, budgetSnapshot, budgetRecommendations } =
     await getClientOverviewData(user);
 
-  if (!process.env.OPENAI_API_KEY) {
+  const openai = getOpenAI();
+  if (!openai) {
     return NextResponse.json({
       summary: "Automated summary unavailable. Showing rule-based insights.",
       highlights: snapshot.aiHighlights,

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { openai } from "@/lib/openai";
+import { getOpenAI } from "@/lib/openai";
 
 const schema = {
   type: "object",
@@ -28,7 +28,8 @@ export const categorizeTransactions = async ({
   userId: string;
   limit?: number;
 }) => {
-  if (!process.env.OPENAI_API_KEY) {
+  const openai = getOpenAI();
+  if (!openai) {
     return { updated: 0, reason: "missing_api_key" };
   }
 

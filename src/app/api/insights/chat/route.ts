@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
-import { openai } from "@/lib/openai";
+import { getOpenAI } from "@/lib/openai";
 
 const incomePattern = /income|payroll|salary|wages|benefit|deposit|refund/i;
 const transferPattern = /transfer|payment|p2p|venmo|cash app|zelle/i;
@@ -102,7 +102,8 @@ export async function POST(request: Request) {
       "Amounts are month-to-date spend. Categories marked essential are fixed/needs-based.",
   };
 
-  if (!process.env.OPENAI_API_KEY) {
+  const openai = getOpenAI();
+  if (!openai) {
     return NextResponse.json({
       answer:
         "AI insights are not configured yet. Add an OPENAI_API_KEY to enable chat.",

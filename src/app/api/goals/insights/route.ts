@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
-import { openai } from "@/lib/openai";
+import { getOpenAI } from "@/lib/openai";
 import { buildClientSnapshot } from "@/utils/trends";
 import { computeCashOnHand } from "@/lib/goals";
 
@@ -222,7 +222,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  const openai = getOpenAI();
+  if (!openai) {
     return NextResponse.json(
       { error: "Missing OpenAI API key." },
       { status: 400 }
