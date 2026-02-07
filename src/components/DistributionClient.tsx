@@ -12,10 +12,15 @@ type CategoryRow = {
 type Props = {
   clientName: string;
   rangeLabel: string;
-  incomeTotal: number;
+  inflowTotal: number;
+  inflowLabel: string;
   spendTotal: number;
+  investmentTotal: number;
+  transferTotal: number;
   savings: number;
   categories: CategoryRow[];
+  nodes: SankeyNode[];
+  links: SankeyLink[];
 };
 
 type SankeyNode = {
@@ -46,101 +51,19 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   });
 
-const palette = [
-  "#1d4ed8",
-  "#0ea5e9",
-  "#0f766e",
-  "#16a34a",
-  "#f59e0b",
-  "#f97316",
-  "#db2777",
-  "#7c3aed",
-];
-
 export default function DistributionClient({
   clientName,
   rangeLabel,
-  incomeTotal,
+  inflowTotal,
+  inflowLabel,
   spendTotal,
+  investmentTotal,
+  transferTotal,
   savings,
   categories,
+  nodes,
+  links,
 }: Props) {
-  const sankey = useMemo(() => {
-    const nodes: SankeyNode[] = [];
-    const links: SankeyLink[] = [];
-
-    if (incomeTotal > 0) {
-      nodes.push({
-        id: "income",
-        label: "Income",
-        value: incomeTotal,
-        column: 0,
-        color: "#0c7a7a",
-      });
-    }
-
-    if (spendTotal > 0) {
-      nodes.push({
-        id: "spending",
-        label: "Spending",
-        value: spendTotal,
-        column: 1,
-        color: "#d97706",
-      });
-    }
-
-    if (savings > 0) {
-      nodes.push({
-        id: "savings",
-        label: "Savings",
-        value: savings,
-        column: 1,
-        color: "#16a34a",
-      });
-    }
-
-    categories.forEach((category, index) => {
-      nodes.push({
-        id: `category-${category.name}`,
-        label: category.name,
-        value: category.value,
-        column: 2,
-        color: palette[index % palette.length],
-      });
-    });
-
-    if (incomeTotal > 0 && spendTotal > 0) {
-      links.push({
-        source: "income",
-        target: "spending",
-        value: spendTotal,
-        color: "rgba(12, 122, 122, 0.35)",
-      });
-    }
-
-    if (incomeTotal > 0 && savings > 0) {
-      links.push({
-        source: "income",
-        target: "savings",
-        value: savings,
-        color: "rgba(22, 163, 74, 0.28)",
-      });
-    }
-
-    if (spendTotal > 0) {
-      categories.forEach((category, index) => {
-        links.push({
-          source: "spending",
-          target: `category-${category.name}`,
-          value: category.value,
-          color: `rgba(15, 118, 110, ${0.15 + index * 0.06})`,
-        });
-      });
-    }
-
-    return { nodes, links };
-  }, [incomeTotal, spendTotal, savings, categories]);
-
   const chart = useMemo(() => {
     const width = 980;
     const height = 460;
@@ -151,7 +74,7 @@ export default function DistributionClient({
 
     const columns = [0, 1, 2];
     const columnNodes = columns.map((column) =>
-      sankey.nodes.filter((node) => node.column === column)
+      nodes.filter((node) => node.column === column)
     );
 
     const columnTotals = columnNodes.map((nodes) =>
@@ -189,7 +112,7 @@ export default function DistributionClient({
     const outgoing = new Map<string, number>();
     const incoming = new Map<string, number>();
 
-    const layoutLinks = sankey.links.map((link) => {
+    const layoutLinks = links.map((link) => {
       const source = nodeMap.get(link.source);
       const target = nodeMap.get(link.target);
       if (!source || !target) {
@@ -234,9 +157,13 @@ export default function DistributionClient({
         color: string;
       }>,
     };
-  }, [sankey]);
+  }, [nodes, links]);
 
-  const hasData = incomeTotal > 0 || spendTotal > 0;
+  const hasData =
+    inflowTotal > 0 ||
+    spendTotal > 0 ||
+    investmentTotal > 0 ||
+    transferTotal > 0;
 
   return (
     <div className="relative min-h-screen overflow-x-hidden text-[color:var(--ink)]">
@@ -320,11 +247,21 @@ export default function DistributionClient({
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--ink-soft)]">
                   <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">
-                    Income {formatCurrency(incomeTotal)}
+                    {inflowLabel} {formatCurrency(inflowTotal)}
                   </span>
                   <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">
                     Spend {formatCurrency(spendTotal)}
                   </span>
+                  {investmentTotal > 0 ? (
+                    <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">
+                      Invest {formatCurrency(investmentTotal)}
+                    </span>
+                  ) : null}
+                  {transferTotal > 0 ? (
+                    <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">
+                      Transfers {formatCurrency(transferTotal)}
+                    </span>
+                  ) : null}
                   <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">
                     Savings {formatCurrency(savings)}
                   </span>

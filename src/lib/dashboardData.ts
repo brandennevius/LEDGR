@@ -760,12 +760,27 @@ type DistributionCategory = {
 export const getDistributionData = async (user: User) => {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const transactions = await prisma.transaction.findMany({
-    where: { userId: user.id, date: { gte: monthStart } },
-    orderBy: { date: "desc" },
-  });
+  const [transactions, accounts, categoryGroups] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { userId: user.id, date: { gte: monthStart } },
+      orderBy: { date: "desc" },
+    }),
+    prisma.account.findMany({ where: { userId: user.id } }),
+    prisma.categoryGroup.findMany({ where: { userId: user.id } }),
+  ]);
 
   const usingMock = transactions.length === 0;
+  const accountMap = new Map(
+    accounts.map((account) => [account.id, account])
+  );
+
+  const groupMap = new Map<string, string>();
+  categoryGroups.forEach((group) => {
+    group.categories.forEach((category) => {
+      groupMap.set(category.toLowerCase(), group.name);
+    });
+  });
+
   const fallbackTransactions = usingMock
     ? mockTransactions.map((tx) => {
         const category = tx.category ?? "Uncategorized";
@@ -777,6 +792,7 @@ export const getDistributionData = async (user: User) => {
           category,
           name: tx.merchant,
           merchantName: undefined,
+          accountId: tx.accountId,
           date: new Date(tx.date),
         };
       })
@@ -785,6 +801,7 @@ export const getDistributionData = async (user: User) => {
         category: tx.category ?? "Uncategorized",
         name: tx.name,
         merchantName: tx.merchantName ?? undefined,
+        accountId: tx.accountId,
         date: tx.date,
       }));
 
@@ -798,9 +815,17 @@ export const getDistributionData = async (user: User) => {
   );
 
   const investmentTransactions = nonIncomeTransactions.filter((tx) => {
+    const account = accountMap.get(tx.accountId);
+    const accountType = account?.type?.toLowerCase() ?? "";
     const category = normalizeCategory(tx.category);
     const name = (tx.merchantName ?? tx.name ?? "").toLowerCase();
-    return investmentPattern.test(category) || investmentPattern.test(name);
+    return (
+      investmentPattern.test(category) ||
+      investmentPattern.test(name) ||
+      accountType.includes("investment") ||
+      accountType.includes("brokerage") ||
+      accountType.includes("retirement")
+    );
   });
 
   const transferTransactions = nonIncomeTransactions.filter(
@@ -834,7 +859,9 @@ export const getDistributionData = async (user: User) => {
 
   const categoryMap = new Map<string, number>();
   spendTransactions.forEach((tx) => {
-    const category = tx.category?.trim() || "Uncategorized";
+    const rawCategory = tx.category?.trim() || "Uncategorized";
+    const groupName = groupMap.get(rawCategory.toLowerCase());
+    const category = groupName ?? rawCategory;
     categoryMap.set(
       category,
       (categoryMap.get(category) ?? 0) + Math.abs(tx.amount)
@@ -881,7 +908,8 @@ export const getDistributionData = async (user: User) => {
 
   const investmentDestinations = new Map<string, number>();
   investmentTransactions.forEach((tx) => {
-    const label = tx.merchantName ?? tx.name ?? "Investment";
+    const account = accountMap.get(tx.accountId);
+    const label = account?.name ?? tx.merchantName ?? tx.name ?? "Investment";
     investmentDestinations.set(
       label,
       (investmentDestinations.get(label) ?? 0) + Math.abs(tx.amount)
@@ -1062,10 +1090,15 @@ export const getDistributionData = async (user: User) => {
     });
   });
 
+  const inflowTotal = incomeTotal > 0 ? incomeTotal : totalOutflows;
+  const inflowLabel = incomeTotal > 0 ? "Income" : "Inflows";
+
   return {
     clientName: getDisplayName(user),
     rangeLabel: "This month",
     incomeTotal,
+    inflowTotal,
+    inflowLabel,
     spendTotal,
     investmentTotal,
     transferTotal,
