@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  COACH
+  CLIENT
+  ADMIN
+}
+
+enum CategorySource {
+  PLAID
+  AI
+  USER
+}
+
+enum GoalType {
+  SAVINGS
+  DEBT
+  SPEND_LIMIT
+  INCOME_TARGET
+  BUFFER_DAYS
+}
+
+enum GoalCadence {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+}
+
+model User {
+  id             String          @id @default(uuid()) @db.Uuid
+  email          String          @unique
+  name           String?
+  role           Role            @default(CLIENT)
+  monthlyIncomeOverride Float?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  coachLinks     CoachClient[]   @relation("Coach")
+  clientLinks    CoachClient[]   @relation("Client")
+  accounts       Account[]
+  transactions   Transaction[]
+  goals          Goal[]
+  categories     Category[]
+  reviews        CoachReview[]   @relation("ClientReviews")
+  coachReviews   CoachReview[]   @relation("CoachReviews")
+  messages       Message[]       @relation("MessageSender")
+  coachThreads   Thread[]        @relation("CoachThreads")
+  clientThreads  Thread[]        @relation("ClientThreads")
+  plaidItems     PlaidItem[]
+  categoryGroups CategoryGroup[]
+}
+
+model Category {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  name          String
+  essential     Boolean  @default(false)
+  monthlyBudget Float?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, name])
+}
+
+model CoachClient {
+  id        String   @id @default(uuid()) @db.Uuid
+  coachId   String   @db.Uuid
+  clientId  String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  coach  User @relation("Coach", fields: [coachId], references: [id])
+  client User @relation("Client", fields: [clientId], references: [id])
+
+  @@unique([coachId, clientId])
+}
+
+model PlaidItem {
+  id                 String   @id @default(uuid()) @db.Uuid
+  userId             String   @db.Uuid
+  itemId             String   @unique
+  accessToken        String
+  institutionId      String?
+  institutionName    String?
+  status             String   @default("active")
+  transactionsCursor String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Account {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @db.Uuid
+  plaidAccountId   String?  @unique
+  name             String
+  type             String
+  subtype          String?
+  mask             String?
+  institutionName  String?
+  currentBalance   Float?
+  availableBalance Float?
+  isoCurrencyCode  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+  goals        Goal[]
+}
+
+model Transaction {
+  id                  String         @id @default(uuid()) @db.Uuid
+  userId              String         @db.Uuid
+  accountId           String         @db.Uuid
+  plaidTransactionId  String?        @unique
+  name                String
+  merchantName        String?
+  amount              Float
+  isoCurrencyCode     String?
+  category            String?
+  categoryNeedsReview Boolean        @default(false)
+  categorySource      CategorySource @default(PLAID)
+  date                DateTime
+  pending             Boolean        @default(false)
+  createdAt           DateTime       @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  account Account @relation(fields: [accountId], references: [id])
+}
+
+model CategoryGroup {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @db.Uuid
+  name             String
+  categories       String[]
+  unassignedBudget Float?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Goal {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String      @db.Uuid
+  accountId String?     @db.Uuid
+  name      String
+  type      GoalType    @default(SAVINGS)
+  cadence   GoalCadence @default(MONTHLY)
+  category  String?
+  startDate DateTime?
+  endDate   DateTime?
+  target    Float
+  current   Float
+  minPayment Float?
+  interestRate Float?
+  termMonths Int?
+  priority  Int?
+  status    GoalStatus  @default(ACTIVE)
+  completedAt DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id])
+  account Account? @relation(fields: [accountId], references: [id])
+}
+
+model CoachReview {
+  id         String    @id @default(uuid()) @db.Uuid
+  clientId   String    @db.Uuid
+  coachId    String?   @db.Uuid
+  highlights String[]
+  actions    String[]
+  notes      String?
+  createdAt  DateTime  @default(now())
+  approvedAt DateTime?
+
+  client User  @relation("ClientReviews", fields: [clientId], references: [id])
+  coach  User? @relation("CoachReviews", fields: [coachId], references: [id])
+}
+
+model Thread {
+  id        String   @id @default(uuid()) @db.Uuid
+  coachId   String   @db.Uuid
+  clientId  String   @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  coach    User      @relation("CoachThreads", fields: [coachId], references: [id])
+  client   User      @relation("ClientThreads", fields: [clientId], references: [id])
+  messages Message[]
+
+  @@unique([coachId, clientId])
+}
+
+model Message {
+  id        String    @id @default(uuid()) @db.Uuid
+  threadId  String    @db.Uuid
+  senderId  String    @db.Uuid
+  body      String
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  thread Thread @relation(fields: [threadId], references: [id])
+  sender User   @relation("MessageSender", fields: [senderId], references: [id])
+}
