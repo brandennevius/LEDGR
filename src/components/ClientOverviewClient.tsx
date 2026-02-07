@@ -867,13 +867,6 @@ function MonthlySpendChart({
   const lastPoint = points.split(" ").slice(-1)[0] ?? "0,0";
   const [lastX, lastY] = lastPoint.split(",").map(Number);
 
-  const budgetY =
-    budgetAtDay > 0 ? 120 - (budgetAtDay / max) * 90 : null;
-  const expectedY =
-    expectedIncome && expectedIncome > 0
-      ? 120 - (expectedIncome / max) * 90
-      : null;
-
   const tickDays = useMemo(() => {
     const ticks: number[] = [];
     for (let day = 7; day < totalDays; day += 7) {
@@ -952,28 +945,6 @@ function MonthlySpendChart({
             />
           );
         })}
-        {budgetY !== null ? (
-          <line
-            x1="0"
-            y1={budgetY}
-            x2="320"
-            y2={budgetY}
-            stroke="#d6dadd"
-            strokeWidth="2"
-            strokeDasharray="6 6"
-          />
-        ) : null}
-        {expectedY !== null ? (
-          <line
-            x1="0"
-            y1={expectedY}
-            x2="320"
-            y2={expectedY}
-            stroke="#fbbf24"
-            strokeWidth="2"
-            strokeDasharray="6 6"
-          />
-        ) : null}
         {incomePoints ? (
           <polyline
             points={incomePoints}

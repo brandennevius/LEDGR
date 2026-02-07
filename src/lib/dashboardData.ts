@@ -313,6 +313,7 @@ export const getClientOverviewData = async (user: User) => {
       snapshot,
       goals: (goals.length ? goals : mockGoals).map(serializeGoal),
       accounts: mockAccounts.map((account) => ({
+        id: account.id,
         name: account.name,
         type: account.type,
         mask: undefined,
@@ -640,6 +641,7 @@ export const getClientOverviewData = async (user: User) => {
     snapshot,
     goals: (activeGoals.length ? activeGoals : mockGoals).map(serializeGoal),
     accounts: accounts.map((account) => ({
+      id: account.id,
       name: account.name,
       type: account.type,
       mask: account.mask ?? undefined,

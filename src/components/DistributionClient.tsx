@@ -351,22 +351,6 @@ export default function DistributionClient({
                   ))}
                 </div>
               </div>
-
-              <div className="rounded-[28px] bg-[color:var(--ink)] p-5 text-white">
-                <p className="text-xs uppercase tracking-[0.3em] text-emerald-200">
-                  Next move
-                </p>
-                <p className="mt-2 text-lg font-semibold">
-                  Shift the biggest outflow first.
-                </p>
-                <p className="mt-2 text-sm text-emerald-50/80">
-                  Focusing on the top two categories will move the savings needle
-                  the fastest.
-                </p>
-                <button className="mt-5 rounded-full bg-white px-4 py-2 text-xs font-semibold text-[color:var(--ink)]">
-                  Create a plan
-                </button>
-              </div>
             </aside>
           </section>
         </main>

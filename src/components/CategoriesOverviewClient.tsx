@@ -370,10 +370,10 @@ export default function CategoriesOverviewClient({
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-black/10 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
+      <section className="rounded-[28px] border border-black/10 bg-[color:var(--ink)] p-6 text-white shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--ink-soft)]">
+            <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/80">
               Category
             </p>
             <h2 className="text-2xl font-semibold">
@@ -389,11 +389,11 @@ export default function CategoriesOverviewClient({
                 );
                 setEssentialDraft(Boolean(selectedRow?.essential));
               }}
-              className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs text-[color:var(--ink-soft)]"
+              className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white/70"
             >
               Edit budget
             </button>
-            <button className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 bg-white text-lg text-[color:var(--ink-soft)]">
+            <button className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/10 text-lg text-white/70">
               …
             </button>
           </div>
@@ -401,21 +401,21 @@ export default function CategoriesOverviewClient({
 
         <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_auto]">
           <div>
-            <p className="text-xs text-[color:var(--ink-soft)]">
+            <p className="text-xs text-white/70">
               Spent in {formatMonthShort(new Date())}
             </p>
             <p className="text-2xl font-semibold">
               {formatCurrency(selectedRow?.spend ?? 0)}
             </p>
             {selectedRow?.budget ? (
-              <p className="text-xs text-[color:var(--ink-soft)]">
+              <p className="text-xs text-white/70">
                 {formatCurrency(
                   Math.max((selectedRow?.budget ?? 0) - (selectedRow?.spend ?? 0), 0)
                 )}{" "}
                 left
               </p>
             ) : (
-              <p className="text-xs text-[color:var(--ink-soft)]">
+              <p className="text-xs text-white/70">
                 Set a budget to track pacing.
               </p>
             )}
@@ -423,15 +423,15 @@ export default function CategoriesOverviewClient({
         </div>
 
         {editingBudget && selectedRow ? (
-          <div className="mt-4 grid gap-2 rounded-2xl border border-black/10 bg-slate-50 p-4">
+          <div className="mt-4 grid gap-2 rounded-2xl border border-white/10 bg-white/10 p-4">
             <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
               <input
                 value={budgetDraft}
                 onChange={(event) => setBudgetDraft(event.target.value)}
                 placeholder="Monthly budget"
-                className="rounded-2xl border border-black/10 bg-white px-3 py-2 text-sm"
+                className="rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/60"
               />
-              <label className="flex items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 py-2 text-xs text-[color:var(--ink-soft)]">
+              <label className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-xs text-white/70">
                 <input
                   type="checkbox"
                   checked={essentialDraft}
@@ -466,21 +466,21 @@ export default function CategoriesOverviewClient({
           </div>
         ) : null}
 
-        <div className="mt-6 rounded-2xl border border-black/5 bg-slate-50 p-4">
+        <div className="mt-6 rounded-2xl border border-white/10 bg-white/10 p-4">
           <CategoryBarChart values={monthlyTotals} />
         </div>
 
         <div className="mt-6">
           <div className="flex items-center justify-between text-sm font-semibold">
             <span>Key metrics</span>
-            <div className="flex items-center gap-6 text-xs text-[color:var(--ink-soft)]">
+            <div className="flex items-center gap-6 text-xs text-white/70">
               <span>Spent per year</span>
               <span>Avg monthly spend</span>
             </div>
           </div>
-          <div className="mt-3 divide-y divide-black/5 text-sm">
+          <div className="mt-3 divide-y divide-white/10 text-sm">
             {yearlyMetrics.length === 0 ? (
-              <div className="py-3 text-xs text-[color:var(--ink-soft)]">
+              <div className="py-3 text-xs text-white/70">
                 No history yet.
               </div>
             ) : (
@@ -489,13 +489,13 @@ export default function CategoriesOverviewClient({
                   key={item.year}
                   className="grid items-center gap-4 py-3 sm:grid-cols-[1fr_1fr_1fr]"
                 >
-                  <span className="text-[color:var(--ink-soft)]">
+                  <span className="text-white/70">
                     {item.year}
                   </span>
-                  <span className="text-sm font-semibold text-[color:var(--ink)]">
+                  <span className="text-sm font-semibold text-white">
                     {formatCurrencyDetailed(item.total)}
                   </span>
-                  <span className="text-sm font-semibold text-[color:var(--ink)]">
+                  <span className="text-sm font-semibold text-white">
                     {formatCurrencyDetailed(item.avgMonthly)}
                   </span>
                 </div>
@@ -506,28 +506,28 @@ export default function CategoriesOverviewClient({
 
         <div className="mt-6 space-y-4">
           {groupedTransactions.length === 0 ? (
-            <div className="rounded-2xl border border-black/5 bg-slate-50 px-4 py-3 text-xs text-[color:var(--ink-soft)]">
+            <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-xs text-white/70">
               No transactions yet this month.
             </div>
           ) : (
             groupedTransactions.map(([label, items]) => (
               <div key={label}>
-                <p className="text-xs font-semibold text-[color:var(--ink-soft)]">
+                <p className="text-xs font-semibold text-white/70">
                   {label}
                 </p>
                 <div className="mt-2 space-y-2">
                   {items.slice(0, 8).map((tx) => (
                     <div
                       key={tx.id}
-                      className="flex items-center justify-between rounded-2xl border border-black/5 bg-white px-3 py-2 text-sm"
+                      className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-sm"
                     >
                       <div>
                         <p className="text-sm font-medium">{tx.name}</p>
-                        <p className="text-xs text-[color:var(--ink-soft)]">
+                        <p className="text-xs text-white/70">
                           {formatDayLabel(new Date(tx.date))}
                         </p>
                       </div>
-                      <span className="text-sm font-semibold text-[color:var(--ink)]">
+                      <span className="text-sm font-semibold text-white">
                         -{formatCurrencyDetailed(Math.abs(tx.amount))}
                       </span>
                     </div>
@@ -638,7 +638,7 @@ function CategoryBarChart({
               className="w-3 rounded-full bg-rose-500"
               style={{ height: `${Math.max(6, (item.value / max) * 90)}px` }}
             />
-            <span className="text-[10px] text-[color:var(--ink-soft)]">
+            <span className="text-[10px] text-white/70">
               {item.label}
             </span>
           </div>
