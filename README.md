@@ -70,6 +70,9 @@ Open http://localhost:3000
 ## Deployment
 Recommended: Vercel Git integration. Push to main and let Vercel build.
 
+## Status
+Active POC under rapid iteration.
+
 ## Getting Started
 
 First, run the development server:
