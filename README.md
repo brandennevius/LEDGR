@@ -72,6 +72,7 @@ Recommended: Vercel Git integration. Push to main and let Vercel build.
 
 ## Status
 Active POC under rapid iteration.
+Deployment test: README update.
 
 ## Getting Started
 
