@@ -26,6 +26,8 @@ export async function GET(
     name: transaction.merchantName ?? transaction.name,
     amount: transaction.amount,
     category: transaction.category ?? "Uncategorized",
+    transactionType: transaction.transactionType,
+    transferPeerId: transaction.transferPeerId,
     date: transaction.date.toISOString(),
     needsReview: transaction.categoryNeedsReview,
     source: transaction.categorySource,
@@ -47,21 +49,35 @@ export async function PATCH(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const body = (await request.json()) as { category?: string };
-  if (!body?.category?.trim()) {
-    return NextResponse.json(
-      { error: "Category required." },
-      { status: 400 }
-    );
+  const body = (await request.json()) as {
+    category?: string;
+    transactionType?: "INCOME" | "INTERNAL_TRANSFER" | "REGULAR";
+  };
+
+  const updates: {
+    category?: string;
+    categoryNeedsReview?: boolean;
+    categorySource?: "USER";
+    transactionType?: "INCOME" | "INTERNAL_TRANSFER" | "REGULAR";
+  } = {};
+
+  if (body.category?.trim()) {
+    updates.category = body.category.trim();
+    updates.categoryNeedsReview = false;
+    updates.categorySource = "USER";
+  }
+
+  if (body.transactionType) {
+    updates.transactionType = body.transactionType;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "No updates provided." }, { status: 400 });
   }
 
   const updated = await prisma.transaction.updateMany({
     where: { id, userId: user.id },
-    data: {
-      category: body.category.trim(),
-      categoryNeedsReview: false,
-      categorySource: "USER",
-    },
+    data: updates,
   });
 
   if (updated.count === 0) {

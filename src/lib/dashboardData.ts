@@ -9,12 +9,17 @@ import {
 import { buildClientSnapshot } from "@/utils/trends";
 import { categorizeTransactions } from "@/lib/categorize";
 import { computeCashOnHand, hydrateGoals } from "@/lib/goals";
+import {
+  accountKind,
+  detectInternalTransfers,
+  classifyTransactionType,
+  incomePattern,
+  investmentPattern,
+  isIncomeTransaction,
+  isTransferTransaction,
+  normalizeCategory,
+} from "@/lib/transactionRules";
 import type { User } from "@prisma/client";
-
-const incomePattern = /income|payroll|salary|wages|benefit|deposit|refund/i;
-const transferPattern = /transfer|payment|p2p|venmo|cash app|zelle/i;
-const investmentPattern =
-  /invest|investment|brokerage|401k|403b|ira|roth|vanguard|fidelity|schwab|etrade|td ameritrade|betterment|wealthfront/i;
 
 const formatDay = (date: Date) =>
   date.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
@@ -32,31 +37,6 @@ const getDisplayName = (user: User) => {
   return "Client";
 };
 
-const normalizeCategory = (value?: string | null) =>
-  value?.trim().toLowerCase() ?? "";
-
-const isIncomeTransaction = (tx: {
-  amount: number;
-  category?: string | null;
-  name?: string | null;
-  merchantName?: string | null;
-}) => {
-  const category = normalizeCategory(tx.category);
-  const name = (tx.merchantName ?? tx.name ?? "").toLowerCase();
-  return (
-    tx.amount < 0 || incomePattern.test(category) || incomePattern.test(name)
-  );
-};
-
-const isTransferTransaction = (tx: {
-  category?: string | null;
-  name?: string | null;
-  merchantName?: string | null;
-}) => {
-  const category = normalizeCategory(tx.category);
-  const name = (tx.merchantName ?? tx.name ?? "").toLowerCase();
-  return transferPattern.test(category) || transferPattern.test(name);
-};
 
 const median = (values: number[]) => {
   if (!values.length) return 0;
@@ -790,19 +770,27 @@ export const getDistributionData = async (user: User) => {
           incomePattern.test(category.toLowerCase()) ||
           incomePattern.test(tx.merchant.toLowerCase());
         return {
+          id: tx.id,
           amount: isMockIncome ? -Math.abs(tx.amount) : Math.abs(tx.amount),
           category,
           name: tx.merchant,
           merchantName: undefined,
+          transactionType: classifyTransactionType({
+            amount: isMockIncome ? -Math.abs(tx.amount) : Math.abs(tx.amount),
+            category,
+            name: tx.merchant,
+          }),
           accountId: tx.accountId,
           date: new Date(tx.date),
         };
       })
     : transactions.map((tx) => ({
+        id: tx.id,
         amount: tx.amount,
         category: tx.category ?? "Uncategorized",
         name: tx.name,
         merchantName: tx.merchantName ?? undefined,
+        transactionType: tx.transactionType ?? null,
         accountId: tx.accountId,
         date: tx.date,
       }));
@@ -816,9 +804,22 @@ export const getDistributionData = async (user: User) => {
     (tx) => !isIncomeTransaction(tx)
   );
 
+  const internalTransferMatch = detectInternalTransfers(
+    usableTransactions,
+    accountMap
+  );
+  const internalTransferTransactions = nonIncomeTransactions.filter((tx) =>
+    internalTransferMatch.internalIds.has(tx.id)
+  );
+  const internalTransferOutflows = internalTransferTransactions.filter(
+    (tx) => tx.amount > 0
+  );
+
   const investmentTransactions = nonIncomeTransactions.filter((tx) => {
+    if (internalTransferMatch.internalIds.has(tx.id)) return false;
     const account = accountMap.get(tx.accountId);
     const accountType = account?.type?.toLowerCase() ?? "";
+    const accountSubtype = account?.subtype?.toLowerCase() ?? "";
     const category = normalizeCategory(tx.category);
     const name = (tx.merchantName ?? tx.name ?? "").toLowerCase();
     return (
@@ -826,18 +827,21 @@ export const getDistributionData = async (user: User) => {
       investmentPattern.test(name) ||
       accountType.includes("investment") ||
       accountType.includes("brokerage") ||
-      accountType.includes("retirement")
+      accountType.includes("retirement") ||
+      accountSubtype.includes("cd")
     );
   });
 
   const transferTransactions = nonIncomeTransactions.filter(
     (tx) =>
+      !internalTransferMatch.internalIds.has(tx.id) &&
       isTransferTransaction(tx) &&
       !investmentTransactions.includes(tx)
   );
 
   const spendTransactions = nonIncomeTransactions.filter(
     (tx) =>
+      !internalTransferMatch.internalIds.has(tx.id) &&
       !isTransferTransaction(tx) &&
       !investmentTransactions.includes(tx)
   );
@@ -855,6 +859,10 @@ export const getDistributionData = async (user: User) => {
     0
   );
   const transferTotal = transferTransactions.reduce(
+    (acc, tx) => acc + Math.abs(tx.amount),
+    0
+  );
+  const internalTransferTotal = internalTransferOutflows.reduce(
     (acc, tx) => acc + Math.abs(tx.amount),
     0
   );
@@ -884,7 +892,12 @@ export const getDistributionData = async (user: User) => {
     categories.push({ name: "Other", value: otherTotal });
   }
 
-  const rawSavings = incomeTotal - spendTotal - investmentTotal - transferTotal;
+  const rawSavings =
+    incomeTotal -
+    spendTotal -
+    investmentTotal -
+    transferTotal -
+    internalTransferTotal;
   const savings = Math.max(rawSavings, 0);
 
   const incomeSourceMap = new Map<string, number>();
@@ -918,6 +931,23 @@ export const getDistributionData = async (user: User) => {
     );
   });
 
+  const internalDestinations = new Map<string, number>();
+  internalTransferOutflows.forEach((tx) => {
+    const destinationId = internalTransferMatch.outflowToDestination.get(tx.id);
+    const destinationAccount = destinationId
+      ? accountMap.get(destinationId)
+      : undefined;
+    const label =
+      destinationAccount?.name ??
+      tx.merchantName ??
+      tx.name ??
+      "Internal transfer";
+    internalDestinations.set(
+      label,
+      (internalDestinations.get(label) ?? 0) + Math.abs(tx.amount)
+    );
+  });
+
   const transferDestinations = new Map<string, number>();
   transferTransactions.forEach((tx) => {
     const label = tx.merchantName ?? tx.name ?? "Transfer";
@@ -941,7 +971,12 @@ export const getDistributionData = async (user: User) => {
     color: string;
   }> = [];
 
-  const totalOutflows = spendTotal + investmentTotal + transferTotal + savings;
+  const totalOutflows =
+    spendTotal +
+    investmentTotal +
+    transferTotal +
+    internalTransferTotal +
+    savings;
   if (incomeTotal <= 0 && totalOutflows > 0) {
     incomeSources = [{ name: "Inflows", value: totalOutflows }];
   }
@@ -986,6 +1021,16 @@ export const getDistributionData = async (user: User) => {
     });
   }
 
+  if (internalTransferTotal > 0) {
+    nodes.push({
+      id: "allocation-internal",
+      label: "Internal transfers",
+      value: internalTransferTotal,
+      column: 1,
+      color: "#0ea5e9",
+    });
+  }
+
   if (savings > 0) {
     nodes.push({
       id: "allocation-savings",
@@ -1026,6 +1071,16 @@ export const getDistributionData = async (user: User) => {
     });
   });
 
+  Array.from(internalDestinations.entries()).forEach(([label, value], index) => {
+    nodes.push({
+      id: `internal-${label}`,
+      label,
+      value,
+      column: 2,
+      color: index % 2 === 0 ? "#38bdf8" : "#0ea5e9",
+    });
+  });
+
   const inflowDenominator = incomeTotal > 0 ? incomeTotal : totalOutflows;
   if (inflowDenominator > 0) {
     incomeSources.forEach((source) => {
@@ -1052,6 +1107,14 @@ export const getDistributionData = async (user: User) => {
           target: "allocation-transfers",
           value: (source.value / inflowDenominator) * transferTotal,
           color: "rgba(37, 99, 235, 0.2)",
+        });
+      }
+      if (internalTransferTotal > 0) {
+        links.push({
+          source: sourceId,
+          target: "allocation-internal",
+          value: (source.value / inflowDenominator) * internalTransferTotal,
+          color: "rgba(14, 165, 233, 0.2)",
         });
       }
       if (savings > 0) {
@@ -1092,6 +1155,15 @@ export const getDistributionData = async (user: User) => {
     });
   });
 
+  internalDestinations.forEach((value, label) => {
+    links.push({
+      source: "allocation-internal",
+      target: `internal-${label}`,
+      value,
+      color: "rgba(14, 165, 233, 0.25)",
+    });
+  });
+
   const inflowTotal = incomeTotal > 0 ? incomeTotal : totalOutflows;
   const inflowLabel = incomeTotal > 0 ? "Income" : "Inflows";
 
@@ -1104,6 +1176,7 @@ export const getDistributionData = async (user: User) => {
     spendTotal,
     investmentTotal,
     transferTotal,
+    internalTransferTotal,
     savings,
     categories,
     nodes,

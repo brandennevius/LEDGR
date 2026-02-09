@@ -17,6 +17,7 @@ type Props = {
   spendTotal: number;
   investmentTotal: number;
   transferTotal: number;
+  internalTransferTotal: number;
   savings: number;
   categories: CategoryRow[];
   nodes: SankeyNode[];
@@ -59,6 +60,7 @@ export default function DistributionClient({
   spendTotal,
   investmentTotal,
   transferTotal,
+  internalTransferTotal,
   savings,
   categories,
   nodes,
@@ -163,7 +165,8 @@ export default function DistributionClient({
     inflowTotal > 0 ||
     spendTotal > 0 ||
     investmentTotal > 0 ||
-    transferTotal > 0;
+    transferTotal > 0 ||
+    internalTransferTotal > 0;
 
   return (
     <div className="relative min-h-screen overflow-x-hidden text-[color:var(--ink)]">
@@ -260,6 +263,11 @@ export default function DistributionClient({
                   {transferTotal > 0 ? (
                     <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">
                       Transfers {formatCurrency(transferTotal)}
+                    </span>
+                  ) : null}
+                  {internalTransferTotal > 0 ? (
+                    <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">
+                      Internal transfers {formatCurrency(internalTransferTotal)}
                     </span>
                   ) : null}
                   <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">

@@ -20,6 +20,7 @@ type TransactionDetail = {
   name: string;
   amount: number;
   category: string;
+  transactionType?: "INCOME" | "INTERNAL_TRANSFER" | "REGULAR";
   date: string;
   needsReview?: boolean;
   account?: {
@@ -49,6 +50,9 @@ export default function TransactionsPageClient() {
   const [selected, setSelected] = useState<TransactionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [categoryInput, setCategoryInput] = useState("");
+  const [transactionTypeInput, setTransactionTypeInput] = useState<
+    "INCOME" | "INTERNAL_TRANSFER" | "REGULAR"
+  >("REGULAR");
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -265,6 +269,9 @@ export default function TransactionsPageClient() {
                         const data = await response.json();
                         setSelected(data);
                         setCategoryInput(data.category ?? tx.category);
+                        setTransactionTypeInput(
+                          data.transactionType ?? "REGULAR"
+                        );
                         setNotes("");
                         setDetailLoading(false);
                       }}
@@ -365,6 +372,30 @@ export default function TransactionsPageClient() {
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--ink-soft)]">
+                        Type
+                      </p>
+                      <select
+                        value={transactionTypeInput}
+                        onChange={(event) =>
+                          setTransactionTypeInput(
+                            event.target.value as
+                              | "INCOME"
+                              | "INTERNAL_TRANSFER"
+                              | "REGULAR"
+                          )
+                        }
+                        className="mt-2 w-full rounded-full border border-black/10 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="REGULAR">Regular</option>
+                        <option value="INTERNAL_TRANSFER">Internal transfer</option>
+                        <option value="INCOME">Income</option>
+                      </select>
+                      <p className="mt-2 text-[11px] text-[color:var(--ink-soft)]">
+                        Internal transfers are excluded from spending.
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--ink-soft)]">
                         Account
                       </p>
                       <div className="mt-3 rounded-2xl bg-white/70 px-4 py-3 text-sm ring-soft">
@@ -423,11 +454,13 @@ export default function TransactionsPageClient() {
                     ) : null}
                     <button
                       onClick={async () => {
-                        if (!categoryInput.trim()) return;
                         await fetch(`/api/transactions/${selected.id}`, {
                           method: "PATCH",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ category: categoryInput }),
+                          body: JSON.stringify({
+                            category: categoryInput,
+                            transactionType: transactionTypeInput,
+                          }),
                         });
                         setRows((prev) =>
                           prev.map((row) =>
@@ -436,11 +469,18 @@ export default function TransactionsPageClient() {
                               : row
                           )
                         );
-                        if (!categoryList.includes(categoryInput)) {
+                        if (categoryInput.trim() && !categoryList.includes(categoryInput)) {
                           setCategoryList((prev) => [...prev, categoryInput].sort());
                         }
                         setSelected((prev) =>
-                          prev ? { ...prev, category: categoryInput, needsReview: false } : prev
+                          prev
+                            ? {
+                                ...prev,
+                                category: categoryInput,
+                                transactionType: transactionTypeInput,
+                                needsReview: false,
+                              }
+                            : prev
                         );
                       }}
                       className="rounded-full bg-[color:var(--ocean)] px-4 py-2 text-xs font-semibold text-white"

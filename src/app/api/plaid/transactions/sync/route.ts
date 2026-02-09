@@ -4,6 +4,10 @@ import { prisma } from "@/lib/db";
 import type { RemovedTransaction, Transaction as PlaidTransaction } from "plaid";
 import { categorizeTransactions } from "@/lib/categorize";
 import { getAuthedUser } from "@/lib/auth";
+import {
+  classifyTransactionType,
+  detectInternalTransfers,
+} from "@/lib/transactionRules";
 
 export async function POST() {
   const user = await getAuthedUser();
@@ -38,15 +42,23 @@ export async function POST() {
     hasMore = response.data.has_more;
   }
 
+  const accounts = await prisma.account.findMany({ where: { userId: user.id } });
   const accountMap = new Map(
-    (await prisma.account.findMany({ where: { userId: user.id } })).map(
-      (account) => [account.plaidAccountId, account.id]
-    )
+    accounts.map((account) => [account.plaidAccountId, account.id])
   );
 
   for (const tx of [...added, ...modified]) {
     const accountId = accountMap.get(tx.account_id);
     if (!accountId) continue;
+    const transactionType = classifyTransactionType({
+      amount: tx.amount,
+      category:
+        tx.personal_finance_category?.primary ??
+        tx.category?.[0] ??
+        null,
+      name: tx.name,
+      merchantName: tx.merchant_name ?? undefined,
+    });
     await prisma.transaction.upsert({
       where: { plaidTransactionId: tx.transaction_id },
       update: {
@@ -60,6 +72,7 @@ export async function POST() {
           null,
         categoryNeedsReview: false,
         categorySource: "PLAID",
+        transactionType,
         date: new Date(tx.date),
         pending: tx.pending ?? false,
         accountId,
@@ -77,6 +90,7 @@ export async function POST() {
           null,
         categoryNeedsReview: false,
         categorySource: "PLAID",
+        transactionType,
         date: new Date(tx.date),
         pending: tx.pending ?? false,
         accountId,
@@ -95,6 +109,45 @@ export async function POST() {
     where: { id: item.id },
     data: { transactionsCursor: cursor ?? undefined },
   });
+
+  const fortyFiveDaysAgo = new Date();
+  fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
+
+  const recentTransactions = await prisma.transaction.findMany({
+    where: { userId: user.id, date: { gte: fortyFiveDaysAgo } },
+  });
+
+  const accountTypeMap = new Map(
+    accounts.map((account) => [
+      account.id,
+      { type: account.type, subtype: account.subtype },
+    ])
+  );
+
+  const internalMatch = detectInternalTransfers(
+    recentTransactions.map((tx) => ({
+      id: tx.id,
+      amount: tx.amount,
+      date: tx.date,
+      accountId: tx.accountId,
+      category: tx.category,
+      name: tx.name,
+      merchantName: tx.merchantName ?? undefined,
+      transactionType: tx.transactionType ?? null,
+    })),
+    accountTypeMap
+  );
+
+  for (const [outflowId, inflowId] of internalMatch.outflowToPeer.entries()) {
+    await prisma.transaction.updateMany({
+      where: { id: outflowId, userId: user.id },
+      data: { transactionType: "INTERNAL_TRANSFER", transferPeerId: inflowId },
+    });
+    await prisma.transaction.updateMany({
+      where: { id: inflowId, userId: user.id },
+      data: { transactionType: "INTERNAL_TRANSFER", transferPeerId: outflowId },
+    });
+  }
 
   if (process.env.OPENAI_API_KEY) {
     await categorizeTransactions({ userId: user.id, limit: 50 });

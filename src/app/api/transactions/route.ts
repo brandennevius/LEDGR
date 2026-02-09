@@ -39,6 +39,7 @@ export async function GET(request: Request) {
     category: tx.category ?? "Uncategorized",
     amount: Math.abs(tx.amount),
     isIncome: tx.amount < 0,
+    transactionType: tx.transactionType,
     needsReview: tx.categoryNeedsReview,
     source: tx.categorySource,
     date: tx.date.toLocaleDateString("en-US", {
