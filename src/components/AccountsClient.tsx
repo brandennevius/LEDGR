@@ -30,6 +30,7 @@ export default function AccountsClient({
   const [items, setItems] = useState(accounts);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removingAll, setRemovingAll] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const removeAccount = async (accountId: string) => {
     setRemovingId(accountId);
@@ -53,6 +54,12 @@ export default function AccountsClient({
     setRemovingAll(false);
   };
 
+  const syncNow = async () => {
+    setSyncing(true);
+    await fetch("/api/plaid/transactions/sync", { method: "POST" });
+    setSyncing(false);
+  };
+
   return (
     <div className="relative min-h-screen overflow-x-hidden text-[color:var(--ink)]">
       <div className="pointer-events-none absolute left-[-140px] top-[6%] h-[360px] w-[360px] rounded-full bg-emerald-100/60 blur-[120px]" />
@@ -73,6 +80,14 @@ export default function AccountsClient({
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <PlaidLinkButton />
+            <button
+              type="button"
+              onClick={syncNow}
+              className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm text-[color:var(--ink-soft)]"
+              disabled={syncing}
+            >
+              {syncing ? "Syncing..." : "Sync now"}
+            </button>
             <button
               type="button"
               onClick={removeAll}
