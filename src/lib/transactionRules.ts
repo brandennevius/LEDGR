@@ -9,6 +9,9 @@ export const investmentPattern =
 export const normalizeCategory = (value?: string | null) =>
   value?.trim().toLowerCase() ?? "";
 
+export const normalizeName = (value?: string | null) =>
+  value?.trim().toLowerCase() ?? "";
+
 export const normalizeAccountType = (value?: string | null) =>
   value?.trim().toLowerCase() ?? "";
 
@@ -31,7 +34,7 @@ export const isTransferTransaction = (tx: {
   merchantName?: string | null;
 }) => {
   const category = normalizeCategory(tx.category);
-  const name = (tx.merchantName ?? tx.name ?? "").toLowerCase();
+  const name = normalizeName(tx.merchantName ?? tx.name ?? "");
   return transferPattern.test(category) || transferPattern.test(name);
 };
 

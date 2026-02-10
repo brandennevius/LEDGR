@@ -53,6 +53,10 @@ export async function PATCH(
     category?: string;
     transactionType?: "INCOME" | "INTERNAL_TRANSFER" | "REGULAR";
     applyToSimilar?: boolean;
+    applyToCategory?: boolean;
+    createRule?: boolean;
+    ruleMatchType?: "EXACT" | "PARTIAL";
+    ruleMatchValue?: string;
   };
 
   const transaction = await prisma.transaction.findFirst({
@@ -95,11 +99,38 @@ export async function PATCH(
       },
       data: updates,
     });
+  } else if (body.applyToCategory && updates.category) {
+    const currentCategory = transaction.category ?? "Uncategorized";
+    await prisma.transaction.updateMany({
+      where: {
+        userId: user.id,
+        category: currentCategory === "Uncategorized" ? null : currentCategory,
+      },
+      data: updates,
+    });
   } else {
     await prisma.transaction.updateMany({
       where: { id, userId: user.id },
       data: updates,
     });
+  }
+
+  if (body.createRule && updates.category) {
+    const matchValue =
+      body.ruleMatchValue?.trim() ||
+      transaction.merchantName ||
+      transaction.name;
+    if (matchValue) {
+      await prisma.categoryRule.create({
+        data: {
+          userId: user.id,
+          matchType: body.ruleMatchType ?? "EXACT",
+          matchValue,
+          category: updates.category,
+          transactionType: updates.transactionType ?? "REGULAR",
+        },
+      });
+    }
   }
 
   return NextResponse.json({ ok: true });

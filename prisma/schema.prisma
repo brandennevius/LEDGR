@@ -18,6 +18,7 @@ enum CategorySource {
   PLAID
   AI
   USER
+  RULE
 }
 
 enum GoalType {
@@ -46,6 +47,11 @@ enum TransactionType {
   REGULAR
 }
 
+enum RuleMatchType {
+  EXACT
+  PARTIAL
+}
+
 model User {
   id             String          @id @default(uuid()) @db.Uuid
   email          String          @unique
@@ -60,6 +66,7 @@ model User {
   transactions   Transaction[]
   goals          Goal[]
   categories     Category[]
+  rules          CategoryRule[]
   reviews        CoachReview[]   @relation("ClientReviews")
   coachReviews   CoachReview[]   @relation("CoachReviews")
   messages       Message[]       @relation("MessageSender")
@@ -150,6 +157,19 @@ model Transaction {
 
   user    User    @relation(fields: [userId], references: [id])
   account Account @relation(fields: [accountId], references: [id])
+}
+
+model CategoryRule {
+  id              String        @id @default(uuid()) @db.Uuid
+  userId          String        @db.Uuid
+  matchType       RuleMatchType @default(EXACT)
+  matchValue      String
+  category        String
+  transactionType TransactionType @default(REGULAR)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
 }
 
 model CategoryGroup {

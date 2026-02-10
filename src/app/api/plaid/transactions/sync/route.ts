@@ -7,6 +7,7 @@ import { getAuthedUser } from "@/lib/auth";
 import {
   classifyTransactionType,
   detectInternalTransfers,
+  normalizeName,
 } from "@/lib/transactionRules";
 
 export async function POST() {
@@ -43,6 +44,9 @@ export async function POST() {
   }
 
   const accounts = await prisma.account.findMany({ where: { userId: user.id } });
+  const rules = await prisma.categoryRule.findMany({
+    where: { userId: user.id },
+  });
   const accountMap = new Map(
     accounts.map((account) => [account.plaidAccountId, account.id])
   );
@@ -64,6 +68,15 @@ export async function POST() {
       accountType: accountMeta?.type ?? null,
       accountSubtype: accountMeta?.subtype ?? null,
     });
+
+    const normalizedName = normalizeName(tx.merchant_name ?? tx.name ?? "");
+    const matchedRule = rules.find((rule) =>
+      rule.matchType === "EXACT"
+        ? normalizedName === normalizeName(rule.matchValue)
+        : normalizedName.includes(normalizeName(rule.matchValue))
+    );
+    const ruleCategory = matchedRule?.category ?? null;
+    const ruleType = matchedRule?.transactionType ?? null;
     await prisma.transaction.upsert({
       where: { plaidTransactionId: tx.transaction_id },
       update: {
@@ -72,12 +85,13 @@ export async function POST() {
         amount: tx.amount,
         isoCurrencyCode: tx.iso_currency_code ?? null,
         category:
+          ruleCategory ??
           tx.personal_finance_category?.primary ??
           tx.category?.[0] ??
           null,
         categoryNeedsReview: false,
-        categorySource: "PLAID",
-        transactionType,
+        categorySource: matchedRule ? "RULE" : "PLAID",
+        transactionType: ruleType ?? transactionType,
         date: new Date(tx.date),
         pending: tx.pending ?? false,
         accountId,
@@ -90,12 +104,13 @@ export async function POST() {
         amount: tx.amount,
         isoCurrencyCode: tx.iso_currency_code ?? null,
         category:
+          ruleCategory ??
           tx.personal_finance_category?.primary ??
           tx.category?.[0] ??
           null,
         categoryNeedsReview: false,
-        categorySource: "PLAID",
-        transactionType,
+        categorySource: matchedRule ? "RULE" : "PLAID",
+        transactionType: ruleType ?? transactionType,
         date: new Date(tx.date),
         pending: tx.pending ?? false,
         accountId,

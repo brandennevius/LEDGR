@@ -54,6 +54,12 @@ export default function TransactionsPageClient() {
     "INCOME" | "INTERNAL_TRANSFER" | "REGULAR"
   >("REGULAR");
   const [applyToSimilar, setApplyToSimilar] = useState(false);
+  const [applyToCategory, setApplyToCategory] = useState(false);
+  const [createRule, setCreateRule] = useState(false);
+  const [ruleMatchType, setRuleMatchType] = useState<"EXACT" | "PARTIAL">(
+    "EXACT"
+  );
+  const [ruleMatchValue, setRuleMatchValue] = useState("");
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -279,6 +285,10 @@ export default function TransactionsPageClient() {
                           data.transactionType ?? "REGULAR"
                         );
                         setApplyToSimilar(false);
+                        setApplyToCategory(false);
+                        setCreateRule(false);
+                        setRuleMatchType("EXACT");
+                        setRuleMatchValue(data.name ?? "");
                         setNotes("");
                         setDetailLoading(false);
                       }}
@@ -443,6 +453,26 @@ export default function TransactionsPageClient() {
                       />
                       Apply to similar transactions
                     </label>
+                    <label className="flex items-center gap-2 text-xs text-[color:var(--ink-soft)]">
+                      <input
+                        type="checkbox"
+                        checked={applyToCategory}
+                        onChange={(event) =>
+                          setApplyToCategory(event.target.checked)
+                        }
+                      />
+                      Apply to all “{selected.category}” transactions
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-[color:var(--ink-soft)]">
+                      <input
+                        type="checkbox"
+                        checked={createRule}
+                        onChange={(event) =>
+                          setCreateRule(event.target.checked)
+                        }
+                      />
+                      Create a rule for new transactions
+                    </label>
                     {applyToSimilar && similarCount > 1 ? (
                       <span className="text-[11px] text-[color:var(--ink-soft)]">
                         {similarCount - 1} other match
@@ -484,6 +514,10 @@ export default function TransactionsPageClient() {
                             category: categoryInput,
                             transactionType: transactionTypeInput,
                             applyToSimilar,
+                            applyToCategory,
+                            createRule,
+                            ruleMatchType,
+                            ruleMatchValue,
                           }),
                         });
                         setRows((prev) =>
@@ -551,8 +585,50 @@ export default function TransactionsPageClient() {
                           <p className="text-[11px] text-[color:var(--ink-soft)]">
                             +{similarCount - 1 - similarTransactions.length} more
                           </p>
-                        ) : null}
+                    ) : null}
+                  </div>
+
+                  {createRule ? (
+                    <div className="rounded-2xl bg-white/70 px-4 py-3 text-xs text-[color:var(--ink-soft)] ring-soft">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
+                        Rule match
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRuleMatchType("EXACT")}
+                          className={`rounded-full px-3 py-1 text-xs ${
+                            ruleMatchType === "EXACT"
+                              ? "bg-[color:var(--ocean)] text-white"
+                              : "border border-black/10 bg-white text-[color:var(--ink-soft)]"
+                          }`}
+                        >
+                          Exact match
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRuleMatchType("PARTIAL")}
+                          className={`rounded-full px-3 py-1 text-xs ${
+                            ruleMatchType === "PARTIAL"
+                              ? "bg-[color:var(--ocean)] text-white"
+                              : "border border-black/10 bg-white text-[color:var(--ink-soft)]"
+                          }`}
+                        >
+                          Partial match
+                        </button>
                       </div>
+                      <input
+                        value={ruleMatchValue}
+                        onChange={(event) => setRuleMatchValue(event.target.value)}
+                        placeholder="Match text"
+                        className="mt-3 w-full rounded-full border border-black/10 bg-white px-3 py-2 text-sm text-[color:var(--ink)]"
+                      />
+                      <p className="mt-2 text-[11px] text-[color:var(--ink-soft)]">
+                        Future transactions that match this name will auto‑apply
+                        the category.
+                      </p>
+                    </div>
+                  ) : null}
                     </div>
                   ) : null}
 
