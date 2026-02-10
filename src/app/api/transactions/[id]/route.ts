@@ -52,7 +52,16 @@ export async function PATCH(
   const body = (await request.json()) as {
     category?: string;
     transactionType?: "INCOME" | "INTERNAL_TRANSFER" | "REGULAR";
+    applyToSimilar?: boolean;
   };
+
+  const transaction = await prisma.transaction.findFirst({
+    where: { id, userId: user.id },
+  });
+
+  if (!transaction) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const updates: {
     category?: string;
@@ -75,13 +84,22 @@ export async function PATCH(
     return NextResponse.json({ error: "No updates provided." }, { status: 400 });
   }
 
-  const updated = await prisma.transaction.updateMany({
-    where: { id, userId: user.id },
-    data: updates,
-  });
-
-  if (updated.count === 0) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (body.applyToSimilar && updates.category) {
+    const nameMatch = transaction.merchantName?.trim()
+      ? { merchantName: transaction.merchantName }
+      : { name: transaction.name };
+    await prisma.transaction.updateMany({
+      where: {
+        userId: user.id,
+        ...nameMatch,
+      },
+      data: updates,
+    });
+  } else {
+    await prisma.transaction.updateMany({
+      where: { id, userId: user.id },
+      data: updates,
+    });
   }
 
   return NextResponse.json({ ok: true });

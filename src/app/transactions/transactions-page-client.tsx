@@ -53,6 +53,7 @@ export default function TransactionsPageClient() {
   const [transactionTypeInput, setTransactionTypeInput] = useState<
     "INCOME" | "INTERNAL_TRANSFER" | "REGULAR"
   >("REGULAR");
+  const [applyToSimilar, setApplyToSimilar] = useState(false);
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -272,6 +273,7 @@ export default function TransactionsPageClient() {
                         setTransactionTypeInput(
                           data.transactionType ?? "REGULAR"
                         );
+                        setApplyToSimilar(false);
                         setNotes("");
                         setDetailLoading(false);
                       }}
@@ -425,10 +427,20 @@ export default function TransactionsPageClient() {
                     />
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    {selected.needsReview ? (
-                      <button
-                        onClick={async () => {
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex items-center gap-2 text-xs text-[color:var(--ink-soft)]">
+                        <input
+                          type="checkbox"
+                          checked={applyToSimilar}
+                          onChange={(event) =>
+                            setApplyToSimilar(event.target.checked)
+                          }
+                        />
+                        Apply to similar transactions
+                      </label>
+                      {selected.needsReview ? (
+                        <button
+                          onClick={async () => {
                           setReviewingId(selected.id);
                           await fetch("/api/transactions/review", {
                             method: "POST",
@@ -460,6 +472,7 @@ export default function TransactionsPageClient() {
                           body: JSON.stringify({
                             category: categoryInput,
                             transactionType: transactionTypeInput,
+                            applyToSimilar,
                           }),
                         });
                         setRows((prev) =>
@@ -469,6 +482,15 @@ export default function TransactionsPageClient() {
                               : row
                           )
                         );
+                        if (applyToSimilar && categoryInput.trim()) {
+                          setRows((prev) =>
+                            prev.map((row) =>
+                              row.name === selected.name
+                                ? { ...row, category: categoryInput, needsReview: false }
+                                : row
+                            )
+                          );
+                        }
                         if (categoryInput.trim() && !categoryList.includes(categoryInput)) {
                           setCategoryList((prev) => [...prev, categoryInput].sort());
                         }
