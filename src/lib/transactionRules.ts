@@ -40,11 +40,20 @@ export const classifyTransactionType = (tx: {
   category?: string | null;
   name?: string | null;
   merchantName?: string | null;
+  accountType?: string | null;
+  accountSubtype?: string | null;
 }) => {
   if (isIncomeTransaction(tx)) return "INCOME";
   if (isTransferTransaction(tx)) return "INTERNAL_TRANSFER";
   const category = normalizeCategory(tx.category);
   const name = (tx.merchantName ?? tx.name ?? "").toLowerCase();
+  const kind = accountKind({
+    type: tx.accountType ?? undefined,
+    subtype: tx.accountSubtype ?? undefined,
+  });
+  if (kind === "investment" || kind === "savings") {
+    return "INTERNAL_TRANSFER";
+  }
   if (transferHintPattern.test(category) || transferHintPattern.test(name)) {
     return "INTERNAL_TRANSFER";
   }

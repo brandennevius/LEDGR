@@ -8,6 +8,7 @@ export const mockClient = {
 export const mockAccounts = [
   { id: "acc-checking", name: "Checking", type: "checking", balance: 2480 },
   { id: "acc-savings", name: "Savings", type: "savings", balance: 1340 },
+  { id: "acc-cd", name: "CD Savings", type: "investment", balance: 5200 },
   { id: "acc-card", name: "Credit Card", type: "credit", balance: -3200 },
 ];
 
@@ -56,6 +57,8 @@ export const mockTransactions: Transaction[] = [
   { id: "tx-101", accountId: "acc-checking", merchant: "Cedar Rent", category: "Housing", amount: -1680, date: day(2, 8) },
   { id: "tx-102", accountId: "acc-checking", merchant: "Sunset Grocer", category: "Groceries", amount: -84, date: day(2, 18) },
   { id: "tx-103", accountId: "acc-checking", merchant: "Night Owl Diner", category: "Dining", amount: -42, date: day(3, 22) },
+  { id: "tx-103b", accountId: "acc-checking", merchant: "CD Deposit", category: "Transfer", amount: -1000, date: day(3, 11) },
+  { id: "tx-103c", accountId: "acc-cd", merchant: "CD Deposit", category: "Transfer", amount: 1000, date: day(3, 11) },
   { id: "tx-104", accountId: "acc-checking", merchant: "Bluewave Transit", category: "Transport", amount: -18, date: day(3, 9) },
   { id: "tx-105", accountId: "acc-checking", merchant: "Streamly", category: "Subscriptions", amount: -14, date: day(4, 7) },
   { id: "tx-106", accountId: "acc-checking", merchant: "Volt Energy", category: "Utilities", amount: -112, date: day(4, 13) },

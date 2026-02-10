@@ -779,6 +779,8 @@ export const getDistributionData = async (user: User) => {
             amount: isMockIncome ? -Math.abs(tx.amount) : Math.abs(tx.amount),
             category,
             name: tx.merchant,
+            accountType: accountMap.get(tx.accountId)?.type ?? null,
+            accountSubtype: accountMap.get(tx.accountId)?.subtype ?? null,
           }),
           accountId: tx.accountId,
           date: new Date(tx.date),
@@ -808,11 +810,16 @@ export const getDistributionData = async (user: User) => {
     usableTransactions,
     accountMap
   );
-  const internalTransferTransactions = nonIncomeTransactions.filter((tx) =>
-    internalTransferMatch.internalIds.has(tx.id)
+  const internalTransferTransactions = nonIncomeTransactions.filter(
+    (tx) =>
+      internalTransferMatch.internalIds.has(tx.id) ||
+      tx.transactionType === "INTERNAL_TRANSFER"
   );
   const internalTransferOutflows = internalTransferTransactions.filter(
     (tx) => tx.amount > 0
+  );
+  const internalTransferInflows = internalTransferTransactions.filter(
+    (tx) => tx.amount < 0
   );
 
   const investmentTransactions = nonIncomeTransactions.filter((tx) => {
@@ -862,10 +869,13 @@ export const getDistributionData = async (user: User) => {
     (acc, tx) => acc + Math.abs(tx.amount),
     0
   );
-  const internalTransferTotal = internalTransferOutflows.reduce(
-    (acc, tx) => acc + Math.abs(tx.amount),
-    0
+  const pairedOutflowIds = new Set(internalTransferOutflows.map((tx) => tx.id));
+  const unpairedInflows = internalTransferInflows.filter(
+    (tx) => !internalTransferMatch.internalIds.has(tx.id)
   );
+  const internalTransferTotal =
+    internalTransferOutflows.reduce((acc, tx) => acc + Math.abs(tx.amount), 0) +
+    unpairedInflows.reduce((acc, tx) => acc + Math.abs(tx.amount), 0);
 
   const categoryMap = new Map<string, number>();
   spendTransactions.forEach((tx) => {
@@ -937,6 +947,18 @@ export const getDistributionData = async (user: User) => {
     const destinationAccount = destinationId
       ? accountMap.get(destinationId)
       : undefined;
+    const label =
+      destinationAccount?.name ??
+      tx.merchantName ??
+      tx.name ??
+      "Internal transfer";
+    internalDestinations.set(
+      label,
+      (internalDestinations.get(label) ?? 0) + Math.abs(tx.amount)
+    );
+  });
+  unpairedInflows.forEach((tx) => {
+    const destinationAccount = accountMap.get(tx.accountId);
     const label =
       destinationAccount?.name ??
       tx.merchantName ??

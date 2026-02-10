@@ -50,6 +50,9 @@ export async function POST() {
   for (const tx of [...added, ...modified]) {
     const accountId = accountMap.get(tx.account_id);
     if (!accountId) continue;
+    const accountMeta = accounts.find(
+      (account) => account.plaidAccountId === tx.account_id
+    );
     const transactionType = classifyTransactionType({
       amount: tx.amount,
       category:
@@ -58,6 +61,8 @@ export async function POST() {
         null,
       name: tx.name,
       merchantName: tx.merchant_name ?? undefined,
+      accountType: accountMeta?.type ?? null,
+      accountSubtype: accountMeta?.subtype ?? null,
     });
     await prisma.transaction.upsert({
       where: { plaidTransactionId: tx.transaction_id },
