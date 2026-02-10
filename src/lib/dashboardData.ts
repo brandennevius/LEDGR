@@ -977,7 +977,9 @@ export const getDistributionData = async (user: User) => {
     transferTotal +
     internalTransferTotal +
     savings;
-  if (incomeTotal <= 0 && totalOutflows > 0) {
+  const inflowFallbackNeeded =
+    totalOutflows > 0 && (incomeTotal <= 0 || incomeTotal < totalOutflows * 0.5);
+  if (inflowFallbackNeeded) {
     incomeSources = [{ name: "Inflows", value: totalOutflows }];
   }
 
@@ -1081,7 +1083,11 @@ export const getDistributionData = async (user: User) => {
     });
   });
 
-  const inflowDenominator = incomeTotal > 0 ? incomeTotal : totalOutflows;
+  const inflowDenominator = inflowFallbackNeeded
+    ? totalOutflows
+    : incomeTotal > 0
+    ? incomeTotal
+    : totalOutflows;
   if (inflowDenominator > 0) {
     incomeSources.forEach((source) => {
       const sourceId = `income-${source.name}`;
@@ -1164,8 +1170,12 @@ export const getDistributionData = async (user: User) => {
     });
   });
 
-  const inflowTotal = incomeTotal > 0 ? incomeTotal : totalOutflows;
-  const inflowLabel = incomeTotal > 0 ? "Income" : "Inflows";
+  const inflowTotal = inflowFallbackNeeded
+    ? totalOutflows
+    : incomeTotal > 0
+    ? incomeTotal
+    : totalOutflows;
+  const inflowLabel = inflowFallbackNeeded ? "Inflows" : "Income";
 
   return {
     clientName: getDisplayName(user),
