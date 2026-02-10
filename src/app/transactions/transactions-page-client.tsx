@@ -107,6 +107,11 @@ export default function TransactionsPageClient() {
       .slice(0, 6);
   }, [rows, selected]);
 
+  const similarCount = useMemo(() => {
+    if (!selected) return 0;
+    return rows.filter((row) => row.name === selected.name).length;
+  }, [rows, selected]);
+
   return (
     <div className="relative min-h-screen overflow-x-hidden text-[color:var(--ink)]">
       <div className="pointer-events-none absolute left-[-140px] top-[6%] h-[360px] w-[360px] rounded-full bg-emerald-100/60 blur-[120px]" />
@@ -427,19 +432,25 @@ export default function TransactionsPageClient() {
                     />
                   </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label className="flex items-center gap-2 text-xs text-[color:var(--ink-soft)]">
-                        <input
-                          type="checkbox"
-                          checked={applyToSimilar}
-                          onChange={(event) =>
-                            setApplyToSimilar(event.target.checked)
-                          }
-                        />
-                        Apply to similar transactions
-                      </label>
-                      {selected.needsReview ? (
-                        <button
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="flex items-center gap-2 text-xs text-[color:var(--ink-soft)]">
+                      <input
+                        type="checkbox"
+                        checked={applyToSimilar}
+                        onChange={(event) =>
+                          setApplyToSimilar(event.target.checked)
+                        }
+                      />
+                      Apply to similar transactions
+                    </label>
+                    {applyToSimilar && similarCount > 1 ? (
+                      <span className="text-[11px] text-[color:var(--ink-soft)]">
+                        {similarCount - 1} other match
+                        {similarCount - 1 === 1 ? "" : "es"}
+                      </span>
+                    ) : null}
+                    {selected.needsReview ? (
+                      <button
                           onClick={async () => {
                           setReviewingId(selected.id);
                           await fetch("/api/transactions/review", {
@@ -510,6 +521,40 @@ export default function TransactionsPageClient() {
                       Save changes
                     </button>
                   </div>
+
+                  {applyToSimilar && similarTransactions.length > 0 ? (
+                    <div className="rounded-2xl bg-white/70 px-4 py-3 text-xs text-[color:var(--ink-soft)] ring-soft">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
+                        Will update
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        {similarTransactions.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between"
+                          >
+                            <div>
+                              <p className="text-xs font-medium text-[color:var(--ink)]">
+                                {item.name}
+                              </p>
+                              <p className="text-[11px] text-[color:var(--ink-soft)]">
+                                {item.category} · {item.date}
+                              </p>
+                            </div>
+                            <span className="text-[11px] font-semibold text-[color:var(--ink)]">
+                              {item.isIncome ? "+" : "-"}$
+                              {item.amount.toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                        {similarCount - 1 > similarTransactions.length ? (
+                          <p className="text-[11px] text-[color:var(--ink-soft)]">
+                            +{similarCount - 1 - similarTransactions.length} more
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {similarTransactions.length > 0 ? (
                     <div>
