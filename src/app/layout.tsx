@@ -13,7 +13,7 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Arbor • Financial Coaching",
+  title: "LEDGR • Financial Coaching",
   description:
     "Behavior-first financial coaching with software insights and human accountability.",
 };

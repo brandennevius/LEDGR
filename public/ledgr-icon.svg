@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="64" y1="64" x2="960" y2="960" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f142b"/>
+      <stop offset="0.52" stop-color="#272042"/>
+      <stop offset="1" stop-color="#5a2f73"/>
+    </linearGradient>
+    <linearGradient id="book" x1="250" y1="240" x2="820" y2="820" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1a2141"/>
+      <stop offset="1" stop-color="#221b3d"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="300" y1="260" x2="300" y2="780" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="rgba(255,255,255,0.35)"/>
+      <stop offset="1" stop-color="rgba(255,255,255,0.05)"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="360" y1="320" x2="780" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7ee6ff"/>
+      <stop offset="1" stop-color="#9a7bff"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(360 280) rotate(45) scale(560)">
+      <stop offset="0" stop-color="rgba(126,230,255,0.22)"/>
+      <stop offset="1" stop-color="rgba(126,230,255,0)"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#bg)"/>
+  <circle cx="360" cy="280" r="240" fill="url(#glow)"/>
+
+  <!-- Book body -->
+  <rect x="220" y="220" width="584" height="584" rx="120" fill="url(#book)" stroke="rgba(255,255,255,0.08)" stroke-width="12"/>
+
+  <!-- Book spine -->
+  <rect x="248" y="248" width="92" height="528" rx="46" fill="rgba(255,255,255,0.06)"/>
+  <rect x="266" y="268" width="20" height="488" rx="10" fill="url(#edge)"/>
+
+  <!-- Page edge highlight -->
+  <path d="M352 252 H740 C790 252 828 292 828 342 V682 C828 732 790 772 740 772 H352" stroke="rgba(255,255,255,0.08)" stroke-width="10"/>
+
+  <!-- Ledger lines -->
+  <g opacity="0.2" stroke="white" stroke-width="6">
+    <line x1="380" y1="360" x2="740" y2="360"/>
+    <line x1="380" y1="460" x2="740" y2="460"/>
+    <line x1="380" y1="560" x2="740" y2="560"/>
+    <line x1="380" y1="660" x2="740" y2="660"/>
+  </g>
+
+  <!-- Premium monogram mark -->
+  <path d="M410 330 V690 H640" stroke="url(#accent)" stroke-width="92" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Bookmark ribbon -->
+  <path d="M730 250 V520 L688 486 L646 520 V250" fill="url(#accent)" opacity="0.9"/>
+</svg>

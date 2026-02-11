@@ -2,10 +2,10 @@ import { prisma } from "@/lib/db";
 
 export const getDemoClient = async () => {
   return prisma.user.upsert({
-    where: { email: "demo@arbor.app" },
+    where: { email: "demo@ledgr.app" },
     update: {},
     create: {
-      email: "demo@arbor.app",
+      email: "demo@ledgr.app",
       name: "Alex Rivera",
       role: "CLIENT",
     },

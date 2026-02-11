@@ -57,7 +57,7 @@ export default async function Dashboard() {
             </div>
             <div>
               <p className="text-sm uppercase tracking-[0.2em] text-[color:var(--ocean)]">
-                Arbor
+                LEDGR
               </p>
               <p className="text-xs text-[color:var(--ink-soft)]">Coach view</p>
             </div>

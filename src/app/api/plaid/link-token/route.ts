@@ -20,7 +20,7 @@ export async function POST() {
     user: {
       client_user_id: user.id,
     },
-    client_name: "Arbor",
+    client_name: "LEDGR",
     products: [Products.Transactions],
     country_codes: [CountryCode.Us],
     language: "en",

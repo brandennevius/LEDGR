@@ -192,7 +192,7 @@ export default function DistributionClient({
                 A
               </div>
               <div>
-                <p className="text-sm font-semibold">Arbor</p>
+                <p className="text-sm font-semibold">LEDGR</p>
                 <p className="text-xs text-[color:var(--ink-soft)]">Client view</p>
               </div>
             </div>

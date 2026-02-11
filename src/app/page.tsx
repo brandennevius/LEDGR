@@ -86,7 +86,7 @@ export default function Landing() {
             </div>
             <div>
               <p className="text-sm uppercase tracking-[0.2em] text-[color:var(--ocean)]">
-                Arbor
+                LEDGR
               </p>
               <p className="text-xs text-[color:var(--ink-soft)]">
                 Financial Coaching
@@ -136,7 +136,7 @@ export default function Landing() {
               Diagnose behavior. Build momentum.
             </h1>
             <p className="text-lg text-[color:var(--ink-soft)]">
-              Arbor combines a behavior-first money platform with real coaches who
+              LEDGR combines a behavior-first money platform with real coaches who
               interpret your data. We don’t just track spending — we change the
               patterns behind it.
             </p>

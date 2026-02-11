@@ -79,7 +79,7 @@ export default function LoginClient() {
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 rounded-[36px] border border-white/60 bg-white/60 p-8 shadow-[0_20px_60px_-40px_rgba(11,30,35,0.6)] md:flex-row md:items-center md:p-12">
         <div className="flex-1 space-y-6">
           <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--ocean)]">
-            Arbor coaching platform
+            LEDGR coaching platform
           </p>
           <h1 className="font-display text-4xl text-[color:var(--ink)] md:text-5xl">
             Sign in to keep your goals on track.
