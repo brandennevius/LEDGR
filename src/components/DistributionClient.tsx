@@ -52,6 +52,9 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   });
 
+const truncateLabel = (value: string, max = 20) =>
+  value.length > max ? `${value.slice(0, max - 1)}…` : value;
+
 export default function DistributionClient({
   clientName,
   rangeLabel,
@@ -305,6 +308,7 @@ export default function DistributionClient({
                           rx={6}
                           fill={node.color}
                         />
+                        <title>{node.label}</title>
                         {node.column === 1 ? (
                           <g>
                             <rect
@@ -321,7 +325,7 @@ export default function DistributionClient({
                               y={node.y + 20}
                               className="fill-[color:var(--ink)] text-[12px] font-semibold"
                             >
-                              <tspan>{node.label}</tspan>
+                              <tspan>{truncateLabel(node.label, 18)}</tspan>
                               <tspan
                                 x={node.x + chart.nodeWidth + 24}
                                 dy="1.2em"
@@ -342,7 +346,7 @@ export default function DistributionClient({
                             textAnchor={node.column === 0 ? "end" : "start"}
                             className="fill-[color:var(--ink)] text-[12px] font-semibold"
                           >
-                            <tspan>{node.label}</tspan>
+                            <tspan>{truncateLabel(node.label, 20)}</tspan>
                             <tspan
                               x={
                                 node.column === 0
