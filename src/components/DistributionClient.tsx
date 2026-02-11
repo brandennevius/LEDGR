@@ -69,8 +69,8 @@ export default function DistributionClient({
   const chart = useMemo(() => {
     const width = 980;
     const height = 460;
-    const nodeWidth = 18;
-    const columnX = [40, 360, 680];
+    const nodeWidth = 22;
+    const columnX = [80, 420, 760];
     const padding = 18;
     const topBottom = 40;
 
@@ -285,36 +285,15 @@ export default function DistributionClient({
                     aria-label="Sankey diagram showing distribution of income"
                   >
                     <defs>
-                      <linearGradient id="sankeyFade" x1="0" x2="1" y1="0" y2="0">
-                        <stop offset="0%" stopColor="rgba(255,255,255,0.15)" />
-                        <stop offset="50%" stopColor="rgba(255,255,255,0.02)" />
-                        <stop offset="100%" stopColor="rgba(255,255,255,0.12)" />
-                      </linearGradient>
-                      <filter id="linkGlow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feGaussianBlur stdDeviation="4" result="blur" />
+                      <filter id="textOutline">
+                        <feGaussianBlur stdDeviation="0.6" result="blur" />
                         <feColorMatrix
                           in="blur"
                           type="matrix"
-                          values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.6 0"
-                        />
-                      </filter>
-                      <filter id="nodeGlow" x="-40%" y="-40%" width="180%" height="180%">
-                        <feGaussianBlur stdDeviation="6" result="blur" />
-                        <feColorMatrix
-                          in="blur"
-                          type="matrix"
-                          values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.5 0"
+                          values="1 0 0 0 1  0 1 0 0 1  0 0 1 0 1  0 0 0 1 0"
                         />
                       </filter>
                     </defs>
-                    <rect
-                      x="16"
-                      y="20"
-                      width={chart.width - 32}
-                      height={chart.height - 40}
-                      rx="28"
-                      fill="url(#sankeyFade)"
-                    />
                     {chart.links.map((link) => (
                       <path
                         key={link.id}
@@ -323,22 +302,11 @@ export default function DistributionClient({
                         stroke={link.color}
                         strokeWidth={Math.max(2, link.thickness)}
                         strokeLinecap="round"
-                        opacity={0.75}
-                        filter="url(#linkGlow)"
+                        opacity={0.6}
                       />
                     ))}
                     {chart.nodes.map((node) => (
                       <g key={node.id}>
-                        <rect
-                          x={node.x - 2}
-                          y={node.y - 2}
-                          width={chart.nodeWidth + 4}
-                          height={node.height + 4}
-                          rx={10}
-                          fill={node.color}
-                          opacity={0.18}
-                          filter="url(#nodeGlow)"
-                        />
                         <rect
                           x={node.x}
                           y={node.y}
@@ -350,22 +318,28 @@ export default function DistributionClient({
                         <text
                           x={
                             node.column === 0
-                              ? node.x - 10
-                              : node.x + chart.nodeWidth + 10
+                              ? node.x - 16
+                              : node.x + chart.nodeWidth + 14
                           }
                           y={node.y + 6}
                           textAnchor={node.column === 0 ? "end" : "start"}
                           className="fill-[color:var(--ink)] text-[12px] font-semibold"
+                          stroke="rgba(255,255,255,0.9)"
+                          strokeWidth="3"
+                          paintOrder="stroke"
                         >
                           <tspan>{node.label}</tspan>
                           <tspan
                             x={
                               node.column === 0
-                                ? node.x - 10
-                                : node.x + chart.nodeWidth + 10
+                                ? node.x - 16
+                                : node.x + chart.nodeWidth + 14
                             }
                             dy="1.2em"
                             className="fill-[color:var(--ink-soft)] text-[11px]"
+                            stroke="rgba(255,255,255,0.9)"
+                            strokeWidth="3"
+                            paintOrder="stroke"
                           >
                             {formatCurrency(node.value)}
                           </tspan>
