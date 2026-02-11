@@ -812,41 +812,44 @@ export const getDistributionData = async (user: User) => {
     });
   });
 
-  const fallbackTransactions: SplitAwareTransaction[] = usingMock
-    ? mockTransactions.map((tx) => {
-        const category = tx.category ?? "Uncategorized";
-        const isMockIncome =
-          incomePattern.test(category.toLowerCase()) ||
-          incomePattern.test(tx.merchant.toLowerCase());
-        return {
-          id: tx.id,
+  let fallbackTransactions: SplitAwareTransaction[];
+  if (usingMock) {
+    fallbackTransactions = mockTransactions.map((tx) => {
+      const category = tx.category ?? "Uncategorized";
+      const isMockIncome =
+        incomePattern.test(category.toLowerCase()) ||
+        incomePattern.test(tx.merchant.toLowerCase());
+      return {
+        id: tx.id,
+        amount: isMockIncome ? -Math.abs(tx.amount) : Math.abs(tx.amount),
+        category,
+        name: tx.merchant,
+        merchantName: null,
+        transactionType: classifyTransactionType({
           amount: isMockIncome ? -Math.abs(tx.amount) : Math.abs(tx.amount),
           category,
           name: tx.merchant,
-          merchantName: null,
-          transactionType: classifyTransactionType({
-            amount: isMockIncome ? -Math.abs(tx.amount) : Math.abs(tx.amount),
-            category,
-            name: tx.merchant,
-            accountType: accountMap.get(tx.accountId)?.type ?? null,
-            accountSubtype: accountMap.get(tx.accountId)?.subtype ?? null,
-          }),
-          accountId: tx.accountId,
-          date: new Date(tx.date),
-          splits: [],
-        };
-      })
-    : transactions.map((tx) => ({
-        id: tx.id,
-        amount: tx.amount,
-        category: tx.category ?? "Uncategorized",
-        name: tx.name,
-        merchantName: tx.merchantName ?? null,
-        transactionType: tx.transactionType ?? null,
+          accountType: accountMap.get(tx.accountId)?.type ?? null,
+          accountSubtype: accountMap.get(tx.accountId)?.subtype ?? null,
+        }),
         accountId: tx.accountId,
-        date: tx.date,
-        splits: tx.splits ?? [],
-      }));
+        date: new Date(tx.date),
+        splits: [],
+      };
+    });
+  } else {
+    fallbackTransactions = transactions.map((tx) => ({
+      id: tx.id,
+      amount: tx.amount,
+      category: tx.category ?? "Uncategorized",
+      name: tx.name,
+      merchantName: tx.merchantName ?? null,
+      transactionType: tx.transactionType ?? null,
+      accountId: tx.accountId,
+      date: tx.date,
+      splits: tx.splits ?? [],
+    }));
+  }
 
   const usableTransactions = expandTransactionsWithSplits(fallbackTransactions);
 
