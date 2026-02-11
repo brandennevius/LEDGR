@@ -67,10 +67,10 @@ export default function DistributionClient({
   links,
 }: Props) {
   const chart = useMemo(() => {
-    const width = 980;
-    const height = 460;
+    const width = 1120;
+    const height = 520;
     const nodeWidth = 22;
-    const columnX = [80, 420, 760];
+    const columnX = [90, 460, 860];
     const padding = 18;
     const topBottom = 40;
 
@@ -240,7 +240,7 @@ export default function DistributionClient({
           </header>
 
           <section className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-            <div className="rounded-[32px] bg-white/80 p-6 ring-soft shadow-[0_30px_80px_-50px_rgba(12,30,50,0.45)]">
+            <div className="rounded-[32px] bg-white p-6 ring-soft shadow-[0_26px_60px_-40px_rgba(15,23,42,0.25)]">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-semibold">Budget flow</p>
@@ -249,51 +249,41 @@ export default function DistributionClient({
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--ink-soft)]">
-                  <span className="rounded-full bg-white/70 px-3 py-1 ring-soft shadow-[0_10px_30px_-20px_rgba(15,23,42,0.45)]">
+                  <span className="rounded-full bg-slate-50 px-3 py-1 ring-soft">
                     {inflowLabel} {formatCurrency(inflowTotal)}
                   </span>
-                  <span className="rounded-full bg-white/70 px-3 py-1 ring-soft shadow-[0_10px_30px_-20px_rgba(15,23,42,0.45)]">
+                  <span className="rounded-full bg-slate-50 px-3 py-1 ring-soft">
                     Spend {formatCurrency(spendTotal)}
                   </span>
                   {investmentTotal > 0 ? (
-                    <span className="rounded-full bg-white/70 px-3 py-1 ring-soft shadow-[0_10px_30px_-20px_rgba(15,23,42,0.45)]">
+                    <span className="rounded-full bg-slate-50 px-3 py-1 ring-soft">
                       Invest {formatCurrency(investmentTotal)}
                     </span>
                   ) : null}
                   {transferTotal > 0 ? (
-                    <span className="rounded-full bg-white/70 px-3 py-1 ring-soft shadow-[0_10px_30px_-20px_rgba(15,23,42,0.45)]">
+                    <span className="rounded-full bg-slate-50 px-3 py-1 ring-soft">
                       Transfers {formatCurrency(transferTotal)}
                     </span>
                   ) : null}
                   {internalTransferTotal > 0 ? (
-                    <span className="rounded-full bg-white/70 px-3 py-1 ring-soft shadow-[0_10px_30px_-20px_rgba(15,23,42,0.45)]">
+                    <span className="rounded-full bg-slate-50 px-3 py-1 ring-soft">
                       Internal transfers {formatCurrency(internalTransferTotal)}
                     </span>
                   ) : null}
-                  <span className="rounded-full bg-white/70 px-3 py-1 ring-soft shadow-[0_10px_30px_-20px_rgba(15,23,42,0.45)]">
+                  <span className="rounded-full bg-slate-50 px-3 py-1 ring-soft">
                     Savings {formatCurrency(savings)}
                   </span>
                 </div>
               </div>
 
-              <div className="mt-6 rounded-[28px] bg-white/70 p-4 ring-soft shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)]">
+              <div className="mt-6 rounded-[28px] bg-white p-4 ring-soft">
                 {hasData ? (
                   <svg
                     viewBox={`0 0 ${chart.width} ${chart.height}`}
-                    className="h-[420px] w-full"
+                    className="h-[460px] w-full"
                     role="img"
                     aria-label="Sankey diagram showing distribution of income"
                   >
-                    <defs>
-                      <filter id="textOutline">
-                        <feGaussianBlur stdDeviation="0.6" result="blur" />
-                        <feColorMatrix
-                          in="blur"
-                          type="matrix"
-                          values="1 0 0 0 1  0 1 0 0 1  0 0 1 0 1  0 0 0 1 0"
-                        />
-                      </filter>
-                    </defs>
                     {chart.links.map((link) => (
                       <path
                         key={link.id}
@@ -302,7 +292,7 @@ export default function DistributionClient({
                         stroke={link.color}
                         strokeWidth={Math.max(2, link.thickness)}
                         strokeLinecap="round"
-                        opacity={0.6}
+                        opacity={0.75}
                       />
                     ))}
                     {chart.nodes.map((node) => (
@@ -312,38 +302,60 @@ export default function DistributionClient({
                           y={node.y}
                           width={chart.nodeWidth}
                           height={node.height}
-                          rx={8}
+                          rx={6}
                           fill={node.color}
                         />
-                        <text
-                          x={
-                            node.column === 0
-                              ? node.x - 16
-                              : node.x + chart.nodeWidth + 14
-                          }
-                          y={node.y + 6}
-                          textAnchor={node.column === 0 ? "end" : "start"}
-                          className="fill-[color:var(--ink)] text-[12px] font-semibold"
-                          stroke="rgba(255,255,255,0.9)"
-                          strokeWidth="3"
-                          paintOrder="stroke"
-                        >
-                          <tspan>{node.label}</tspan>
-                          <tspan
+                        {node.column === 1 ? (
+                          <g>
+                            <rect
+                              x={node.x + chart.nodeWidth + 14}
+                              y={node.y + 4}
+                              width={140}
+                              height={38}
+                              rx={10}
+                              fill="white"
+                              stroke="rgba(15,23,42,0.08)"
+                            />
+                            <text
+                              x={node.x + chart.nodeWidth + 24}
+                              y={node.y + 20}
+                              className="fill-[color:var(--ink)] text-[12px] font-semibold"
+                            >
+                              <tspan>{node.label}</tspan>
+                              <tspan
+                                x={node.x + chart.nodeWidth + 24}
+                                dy="1.2em"
+                                className="fill-[color:var(--ink-soft)] text-[11px]"
+                              >
+                                {formatCurrency(node.value)}
+                              </tspan>
+                            </text>
+                          </g>
+                        ) : (
+                          <text
                             x={
                               node.column === 0
-                                ? node.x - 16
-                                : node.x + chart.nodeWidth + 14
+                                ? node.x - 14
+                                : node.x + chart.nodeWidth + 12
                             }
-                            dy="1.2em"
-                            className="fill-[color:var(--ink-soft)] text-[11px]"
-                            stroke="rgba(255,255,255,0.9)"
-                            strokeWidth="3"
-                            paintOrder="stroke"
+                            y={node.y + 6}
+                            textAnchor={node.column === 0 ? "end" : "start"}
+                            className="fill-[color:var(--ink)] text-[12px] font-semibold"
                           >
-                            {formatCurrency(node.value)}
-                          </tspan>
-                        </text>
+                            <tspan>{node.label}</tspan>
+                            <tspan
+                              x={
+                                node.column === 0
+                                  ? node.x - 14
+                                  : node.x + chart.nodeWidth + 12
+                              }
+                              dy="1.2em"
+                              className="fill-[color:var(--ink-soft)] text-[11px]"
+                            >
+                              {formatCurrency(node.value)}
+                            </tspan>
+                          </text>
+                        )}
                       </g>
                     ))}
                   </svg>
