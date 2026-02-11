@@ -1017,6 +1017,11 @@ export const getDistributionData = async (user: User) => {
     savings;
   const inflowFallbackNeeded =
     totalOutflows > 0 && (incomeTotal <= 0 || incomeTotal < totalOutflows * 0.5);
+  const inflowTotal = inflowFallbackNeeded
+    ? totalOutflows
+    : incomeTotal > 0
+    ? incomeTotal
+    : totalOutflows;
   if (inflowFallbackNeeded) {
     incomeSources = [{ name: "Inflows", value: totalOutflows }];
   }
@@ -1248,11 +1253,6 @@ export const getDistributionData = async (user: User) => {
     });
   }
 
-  const inflowTotal = inflowFallbackNeeded
-    ? totalOutflows
-    : incomeTotal > 0
-    ? incomeTotal
-    : totalOutflows;
   const inflowLabel = inflowFallbackNeeded ? "Inflows" : "Income";
 
   return {
