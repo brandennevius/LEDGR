@@ -36,7 +36,7 @@ type SplitAwareTransaction = {
   amount: number;
   category?: string | null;
   name: string;
-  merchantName?: string | null;
+  merchantName?: string | null | undefined;
   transactionType?: string | null;
   accountId: string;
   date: Date;
@@ -48,10 +48,10 @@ type SplitAwareTransaction = {
   }>;
 };
 
-const expandTransactionsWithSplits = <T extends SplitAwareTransaction>(
-  transactions: T[]
+const expandTransactionsWithSplits = (
+  transactions: SplitAwareTransaction[]
 ) => {
-  const expanded: Array<T & { splitId?: string }> = [];
+  const expanded: Array<SplitAwareTransaction & { splitId?: string }> = [];
   transactions.forEach((tx) => {
     if (!tx.splits || tx.splits.length === 0) {
       expanded.push(tx);
