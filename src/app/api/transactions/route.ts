@@ -44,6 +44,7 @@ export async function GET(request: Request) {
       return [
         {
           id: tx.id,
+          baseId: tx.id,
           name: label,
           category: tx.category ?? "Uncategorized",
           amount: Math.abs(tx.amount),
@@ -60,6 +61,7 @@ export async function GET(request: Request) {
     const sign = tx.amount < 0 ? -1 : 1;
     const splitRows = tx.splits.map((split) => ({
       id: `split-${split.id}`,
+      baseId: tx.id,
       name: `${label} (Split)`,
       category: split.category,
       amount: Math.abs(split.amount),
@@ -78,6 +80,7 @@ export async function GET(request: Request) {
         ? [
             {
               id: `${tx.id}-remainder`,
+              baseId: tx.id,
               name: `${label} (Remainder)`,
               category: tx.category ?? "Uncategorized",
               amount: remaining,

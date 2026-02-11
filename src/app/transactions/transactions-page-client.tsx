@@ -6,6 +6,7 @@ import SignOutButton from "@/components/SignOutButton";
 
 type TransactionRow = {
   id: string;
+  baseId?: string;
   name: string;
   category: string;
   amount: number;
@@ -306,7 +307,10 @@ export default function TransactionsPageClient() {
                       type="button"
                       onClick={async () => {
                         setDetailLoading(true);
-                        const response = await fetch(`/api/transactions/${tx.id}`);
+                        const targetId = tx.baseId ?? tx.id;
+                        const response = await fetch(
+                          `/api/transactions/${targetId}`
+                        );
                         const data = await response.json();
                         setSelected(data);
                         setCategoryInput(data.category ?? tx.category);
