@@ -240,7 +240,7 @@ export default function DistributionClient({
           </header>
 
           <section className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-            <div className="rounded-[32px] bg-white/85 p-6 ring-soft">
+            <div className="rounded-[32px] bg-white/80 p-6 ring-soft shadow-[0_30px_80px_-50px_rgba(12,30,50,0.45)]">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-semibold">Budget flow</p>
@@ -249,34 +249,34 @@ export default function DistributionClient({
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--ink-soft)]">
-                  <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">
+                  <span className="rounded-full bg-white/70 px-3 py-1 ring-soft shadow-[0_10px_30px_-20px_rgba(15,23,42,0.45)]">
                     {inflowLabel} {formatCurrency(inflowTotal)}
                   </span>
-                  <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">
+                  <span className="rounded-full bg-white/70 px-3 py-1 ring-soft shadow-[0_10px_30px_-20px_rgba(15,23,42,0.45)]">
                     Spend {formatCurrency(spendTotal)}
                   </span>
                   {investmentTotal > 0 ? (
-                    <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">
+                    <span className="rounded-full bg-white/70 px-3 py-1 ring-soft shadow-[0_10px_30px_-20px_rgba(15,23,42,0.45)]">
                       Invest {formatCurrency(investmentTotal)}
                     </span>
                   ) : null}
                   {transferTotal > 0 ? (
-                    <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">
+                    <span className="rounded-full bg-white/70 px-3 py-1 ring-soft shadow-[0_10px_30px_-20px_rgba(15,23,42,0.45)]">
                       Transfers {formatCurrency(transferTotal)}
                     </span>
                   ) : null}
                   {internalTransferTotal > 0 ? (
-                    <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">
+                    <span className="rounded-full bg-white/70 px-3 py-1 ring-soft shadow-[0_10px_30px_-20px_rgba(15,23,42,0.45)]">
                       Internal transfers {formatCurrency(internalTransferTotal)}
                     </span>
                   ) : null}
-                  <span className="rounded-full bg-white/70 px-3 py-1 ring-soft">
+                  <span className="rounded-full bg-white/70 px-3 py-1 ring-soft shadow-[0_10px_30px_-20px_rgba(15,23,42,0.45)]">
                     Savings {formatCurrency(savings)}
                   </span>
                 </div>
               </div>
 
-              <div className="mt-6 rounded-[28px] bg-white/70 p-4 ring-soft">
+              <div className="mt-6 rounded-[28px] bg-white/70 p-4 ring-soft shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)]">
                 {hasData ? (
                   <svg
                     viewBox={`0 0 ${chart.width} ${chart.height}`}
@@ -284,6 +284,37 @@ export default function DistributionClient({
                     role="img"
                     aria-label="Sankey diagram showing distribution of income"
                   >
+                    <defs>
+                      <linearGradient id="sankeyFade" x1="0" x2="1" y1="0" y2="0">
+                        <stop offset="0%" stopColor="rgba(255,255,255,0.15)" />
+                        <stop offset="50%" stopColor="rgba(255,255,255,0.02)" />
+                        <stop offset="100%" stopColor="rgba(255,255,255,0.12)" />
+                      </linearGradient>
+                      <filter id="linkGlow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="4" result="blur" />
+                        <feColorMatrix
+                          in="blur"
+                          type="matrix"
+                          values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.6 0"
+                        />
+                      </filter>
+                      <filter id="nodeGlow" x="-40%" y="-40%" width="180%" height="180%">
+                        <feGaussianBlur stdDeviation="6" result="blur" />
+                        <feColorMatrix
+                          in="blur"
+                          type="matrix"
+                          values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.5 0"
+                        />
+                      </filter>
+                    </defs>
+                    <rect
+                      x="16"
+                      y="20"
+                      width={chart.width - 32}
+                      height={chart.height - 40}
+                      rx="28"
+                      fill="url(#sankeyFade)"
+                    />
                     {chart.links.map((link) => (
                       <path
                         key={link.id}
@@ -292,11 +323,22 @@ export default function DistributionClient({
                         stroke={link.color}
                         strokeWidth={Math.max(2, link.thickness)}
                         strokeLinecap="round"
-                        opacity={0.9}
+                        opacity={0.75}
+                        filter="url(#linkGlow)"
                       />
                     ))}
                     {chart.nodes.map((node) => (
                       <g key={node.id}>
+                        <rect
+                          x={node.x - 2}
+                          y={node.y - 2}
+                          width={chart.nodeWidth + 4}
+                          height={node.height + 4}
+                          rx={10}
+                          fill={node.color}
+                          opacity={0.18}
+                          filter="url(#nodeGlow)"
+                        />
                         <rect
                           x={node.x}
                           y={node.y}
