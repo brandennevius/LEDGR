@@ -93,7 +93,6 @@ export async function PUT(
     prisma.transaction.update({
       where: { id },
       data: {
-        category: splits.length ? "Split" : transaction.category,
         categorySource: splits.length ? "USER" : transaction.categorySource,
         categoryNeedsReview: false,
       },

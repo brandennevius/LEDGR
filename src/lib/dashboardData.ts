@@ -584,7 +584,7 @@ export const getClientOverviewData = async (user: User) => {
     .map((tx) => ({
       id: tx.id,
       name: tx.merchantName ?? tx.name,
-      category: tx.splits?.length ? "Split" : tx.category ?? "Uncategorized",
+      category: tx.category ?? "Uncategorized",
       amount: Math.abs(tx.amount),
       isIncome: tx.amount < 0,
       date: formatDay(tx.date),
@@ -774,7 +774,7 @@ export const getCoachDashboardData = async (user: User) => {
     bufferDays: snapshot.bufferDays,
     recentTransactions: transactions.map((tx) => ({
       name: tx.merchantName ?? tx.name,
-      category: tx.splits?.length ? "Split" : tx.category ?? "Uncategorized",
+      category: tx.category ?? "Uncategorized",
       amount: Math.abs(tx.amount),
       isIncome: tx.amount < 0,
       day: formatDay(tx.date),
