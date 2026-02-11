@@ -31,6 +31,46 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   });
 
+type SplitAwareTransaction = {
+  id: string;
+  amount: number;
+  category?: string | null;
+  name: string;
+  merchantName?: string | null;
+  transactionType?: string | null;
+  accountId: string;
+  date: Date;
+  splits?: Array<{
+    id: string;
+    amount: number;
+    category: string;
+    note?: string | null;
+  }>;
+};
+
+const expandTransactionsWithSplits = <T extends SplitAwareTransaction>(
+  transactions: T[]
+) => {
+  const expanded: Array<T & { splitId?: string }> = [];
+  transactions.forEach((tx) => {
+    if (!tx.splits || tx.splits.length === 0) {
+      expanded.push(tx);
+      return;
+    }
+    const sign = tx.amount < 0 ? -1 : 1;
+    tx.splits.forEach((split) => {
+      expanded.push({
+        ...tx,
+        id: `split-${split.id}`,
+        splitId: split.id,
+        amount: Math.abs(split.amount) * sign,
+        category: split.category,
+      });
+    });
+  });
+  return expanded;
+};
+
 const getDisplayName = (user: User) => {
   if (user.name?.trim()) return user.name;
   if (user.email?.includes("@")) return user.email.split("@")[0];
@@ -169,7 +209,10 @@ export const getClientOverviewData = async (user: User) => {
     await Promise.all([
     prisma.account.findMany({ where: { userId: user.id } }),
     prisma.goal.findMany({ where: { userId: user.id } }),
-    prisma.transaction.findMany({ where: { userId: user.id } }),
+    prisma.transaction.findMany({
+      where: { userId: user.id },
+      include: { splits: true },
+    }),
     prisma.category.findMany({ where: { userId: user.id } }),
     prisma.plaidItem.findFirst({
       where: { userId: user.id, status: "active" },
@@ -341,13 +384,15 @@ export const getClientOverviewData = async (user: User) => {
     await categorizeTransactions({ userId: user.id, limit: 80 });
     transactions = await prisma.transaction.findMany({
       where: { userId: user.id },
+      include: { splits: true },
     });
   }
 
+  const expandedTransactions = expandTransactionsWithSplits(transactions);
   const cashOnHand = computeCashOnHand(accounts);
   const snapshot = buildClientSnapshot({
     asOf: new Date(),
-    transactions: transactions.map((tx) => ({
+    transactions: expandedTransactions.map((tx) => ({
       amount: tx.amount,
       date: tx.date,
       category: tx.category,
@@ -371,7 +416,7 @@ export const getClientOverviewData = async (user: User) => {
   const monthDailyIncome = Array.from({ length: daysInMonth }, () => 0);
 
   const categoryTotals = new Map<string, number>();
-  transactions.forEach((tx) => {
+  expandedTransactions.forEach((tx) => {
     if (tx.amount <= 0) return;
     if (isIncomeTransaction(tx) || isTransferTransaction(tx)) return;
     if (tx.date < windowStart) return;
@@ -380,7 +425,7 @@ export const getClientOverviewData = async (user: User) => {
   });
 
   const monthCategoryTotals = new Map<string, number>();
-  transactions.forEach((tx) => {
+  expandedTransactions.forEach((tx) => {
     if (tx.amount <= 0) return;
     if (isIncomeTransaction(tx) || isTransferTransaction(tx)) return;
     if (tx.date < monthStart) return;
@@ -393,7 +438,7 @@ export const getClientOverviewData = async (user: User) => {
     monthDaily[dayIndex] += tx.amount;
   });
 
-  transactions.forEach((tx) => {
+  expandedTransactions.forEach((tx) => {
     if (!isIncomeTransaction(tx) || isTransferTransaction(tx)) return;
     if (tx.date < monthStart) return;
     const dayIndex = tx.date.getDate() - 1;
@@ -487,7 +532,7 @@ export const getClientOverviewData = async (user: User) => {
   const monthSpendTotal = monthDaily.reduce((acc, value) => acc + value, 0);
 
   const incomeSummary = computeIncomeForecast(
-    transactions.map((tx) => ({
+    expandedTransactions.map((tx) => ({
       amount: tx.amount,
       date: tx.date,
       category: tx.category,
@@ -500,7 +545,7 @@ export const getClientOverviewData = async (user: User) => {
   const hydratedGoals = goals.length
     ? hydrateGoals({
         goals,
-        transactions,
+        transactions: expandedTransactions,
         accounts,
         bufferDays: snapshot.bufferDays,
       })
@@ -516,7 +561,7 @@ export const getClientOverviewData = async (user: User) => {
   const debtRemaining = debtGoal
     ? Math.max(0, debtGoal.target - debtGoal.current)
     : 0;
-  const debtPayments = transactions
+  const debtPayments = expandedTransactions
     .filter((tx) => {
       if (tx.amount <= 0) return false;
       if (tx.date < monthStart) return false;
@@ -539,7 +584,7 @@ export const getClientOverviewData = async (user: User) => {
     .map((tx) => ({
       id: tx.id,
       name: tx.merchantName ?? tx.name,
-      category: tx.category ?? "Uncategorized",
+      category: tx.splits?.length ? "Split" : tx.category ?? "Uncategorized",
       amount: Math.abs(tx.amount),
       isIncome: tx.amount < 0,
       date: formatDay(tx.date),
@@ -666,6 +711,7 @@ export const getCoachDashboardData = async (user: User) => {
     prisma.account.findMany({ where: { userId: user.id } }),
     prisma.transaction.findMany({
       where: { userId: user.id },
+      include: { splits: true },
       orderBy: { date: "desc" },
       take: 5,
     }),
@@ -698,19 +744,21 @@ export const getCoachDashboardData = async (user: User) => {
 
   const monthTx = await prisma.transaction.findMany({
     where: { userId: user.id, date: { gte: thirtyDaysAgo } },
+    include: { splits: true },
   });
+  const expandedMonthTx = expandTransactionsWithSplits(monthTx);
 
-  const income = monthTx
+  const income = expandedMonthTx
     .filter((tx) => tx.amount < 0)
     .reduce((acc, tx) => acc + Math.abs(tx.amount), 0);
-  const spend = monthTx
+  const spend = expandedMonthTx
     .filter((tx) => tx.amount > 0)
     .reduce((acc, tx) => acc + tx.amount, 0);
 
   const cashOnHand = computeCashOnHand(accounts);
   const snapshot = buildClientSnapshot({
     asOf: new Date(),
-    transactions: monthTx.map((tx) => ({
+    transactions: expandedMonthTx.map((tx) => ({
       amount: tx.amount,
       date: tx.date,
       category: tx.category,
@@ -726,7 +774,7 @@ export const getCoachDashboardData = async (user: User) => {
     bufferDays: snapshot.bufferDays,
     recentTransactions: transactions.map((tx) => ({
       name: tx.merchantName ?? tx.name,
-      category: tx.category ?? "Uncategorized",
+      category: tx.splits?.length ? "Split" : tx.category ?? "Uncategorized",
       amount: Math.abs(tx.amount),
       isIncome: tx.amount < 0,
       day: formatDay(tx.date),
@@ -745,6 +793,7 @@ export const getDistributionData = async (user: User) => {
   const [transactions, accounts, categoryGroups] = await Promise.all([
     prisma.transaction.findMany({
       where: { userId: user.id, date: { gte: monthStart } },
+      include: { splits: true },
       orderBy: { date: "desc" },
     }),
     prisma.account.findMany({ where: { userId: user.id } }),
@@ -784,6 +833,7 @@ export const getDistributionData = async (user: User) => {
           }),
           accountId: tx.accountId,
           date: new Date(tx.date),
+          splits: [],
         };
       })
     : transactions.map((tx) => ({
@@ -795,9 +845,10 @@ export const getDistributionData = async (user: User) => {
         transactionType: tx.transactionType ?? null,
         accountId: tx.accountId,
         date: tx.date,
+        splits: tx.splits ?? [],
       }));
 
-  const usableTransactions = fallbackTransactions;
+  const usableTransactions = expandTransactionsWithSplits(fallbackTransactions);
 
   const incomeTransactions = usableTransactions.filter((tx) =>
     isIncomeTransaction(tx)

@@ -1,4 +1,12 @@
-import type { Account, Goal, Transaction } from "@prisma/client";
+import type { Account, Goal } from "@prisma/client";
+
+type GoalTransaction = {
+  amount: number;
+  date: Date;
+  category?: string | null;
+  name: string;
+  merchantName?: string | null;
+};
 
 const debtPattern = /loan|debt|credit|card payment|payment|mortgage|student/i;
 
@@ -40,7 +48,7 @@ export const computeGoalCurrent = ({
   cashOnHand,
 }: {
   goal: Goal;
-  transactions: Transaction[];
+  transactions: GoalTransaction[];
   accounts: Account[];
   bufferDays: number;
   cashOnHand: number;
@@ -104,7 +112,7 @@ export const hydrateGoals = ({
   bufferDays,
 }: {
   goals: Goal[];
-  transactions: Transaction[];
+  transactions: GoalTransaction[];
   accounts: Account[];
   bufferDays: number;
 }) => {

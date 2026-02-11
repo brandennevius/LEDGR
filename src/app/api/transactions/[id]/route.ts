@@ -14,7 +14,7 @@ export async function GET(
 
   const transaction = await prisma.transaction.findFirst({
     where: { id, userId: user.id },
-    include: { account: true },
+    include: { account: true, splits: true },
   });
 
   if (!transaction) {
@@ -31,6 +31,13 @@ export async function GET(
     date: transaction.date.toISOString(),
     needsReview: transaction.categoryNeedsReview,
     source: transaction.categorySource,
+    hasSplits: transaction.splits.length > 0,
+    splits: transaction.splits.map((split) => ({
+      id: split.id,
+      category: split.category,
+      amount: Math.abs(split.amount),
+      note: split.note,
+    })),
     account: {
       name: transaction.account.name,
       institutionName: transaction.account.institutionName,

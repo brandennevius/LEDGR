@@ -31,17 +31,19 @@ export async function GET(request: Request) {
     },
     orderBy: { date: "desc" },
     take: 200,
+    include: { splits: true },
   });
 
   const data = transactions.map((tx) => ({
     id: tx.id,
     name: tx.merchantName ?? tx.name,
-    category: tx.category ?? "Uncategorized",
+    category: tx.splits.length > 0 ? "Split" : tx.category ?? "Uncategorized",
     amount: Math.abs(tx.amount),
     isIncome: tx.amount < 0,
     transactionType: tx.transactionType,
     needsReview: tx.categoryNeedsReview,
     source: tx.categorySource,
+    hasSplits: tx.splits.length > 0,
     date: tx.date.toLocaleDateString("en-US", {
       month: "short",
       day: "2-digit",
