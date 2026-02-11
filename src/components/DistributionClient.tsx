@@ -70,10 +70,10 @@ export default function DistributionClient({
   links,
 }: Props) {
   const chart = useMemo(() => {
-    const width = 1120;
+    const width = 1280;
     const height = 520;
-    const nodeWidth = 22;
-    const columnX = [90, 460, 860];
+    const nodeWidth = 24;
+    const columnX = [160, 560, 980];
     const padding = 18;
     const topBottom = 40;
 
@@ -339,7 +339,7 @@ export default function DistributionClient({
                           <text
                             x={
                               node.column === 0
-                                ? node.x - 14
+                                ? node.x - 20
                                 : node.x + chart.nodeWidth + 12
                             }
                             y={node.y + 6}
