@@ -812,7 +812,7 @@ export const getDistributionData = async (user: User) => {
     });
   });
 
-  const fallbackTransactions = usingMock
+  const fallbackTransactions: SplitAwareTransaction[] = usingMock
     ? mockTransactions.map((tx) => {
         const category = tx.category ?? "Uncategorized";
         const isMockIncome =
@@ -823,7 +823,7 @@ export const getDistributionData = async (user: User) => {
           amount: isMockIncome ? -Math.abs(tx.amount) : Math.abs(tx.amount),
           category,
           name: tx.merchant,
-          merchantName: undefined,
+          merchantName: null,
           transactionType: classifyTransactionType({
             amount: isMockIncome ? -Math.abs(tx.amount) : Math.abs(tx.amount),
             category,
@@ -841,7 +841,7 @@ export const getDistributionData = async (user: User) => {
         amount: tx.amount,
         category: tx.category ?? "Uncategorized",
         name: tx.name,
-        merchantName: tx.merchantName ?? undefined,
+        merchantName: tx.merchantName ?? null,
         transactionType: tx.transactionType ?? null,
         accountId: tx.accountId,
         date: tx.date,
