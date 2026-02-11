@@ -70,17 +70,17 @@ export default function DistributionClient({
   links,
 }: Props) {
   const chart = useMemo(() => {
-    const width = 1500;
-    const height = 560;
-    const nodeWidth = 24;
+    const width = 1700;
+    const height = 580;
+    const nodeWidth = 26;
     const padding = 18;
     const topBottom = 40;
 
     const columns = Array.from(new Set(nodes.map((node) => node.column))).sort(
       (a, b) => a - b
     );
-    const leftMargin = 220;
-    const rightMargin = 220;
+    const leftMargin = 260;
+    const rightMargin = 260;
     const usableWidth = Math.max(1, width - leftMargin - rightMargin);
     const gap =
       columns.length > 1 ? usableWidth / (columns.length - 1) : 0;
@@ -291,7 +291,7 @@ export default function DistributionClient({
                 {hasData ? (
                   <svg
                     viewBox={`0 0 ${chart.width} ${chart.height}`}
-                    className="h-[480px] w-full"
+                    className="h-[500px] w-full"
                     role="img"
                     aria-label="Sankey diagram showing distribution of income"
                   >
@@ -320,22 +320,22 @@ export default function DistributionClient({
                         {node.column === 1 ? (
                           <g>
                             <rect
-                              x={node.x + chart.nodeWidth + 14}
+                              x={node.x + chart.nodeWidth + 18}
                               y={node.y + 4}
-                              width={140}
+                              width={160}
                               height={38}
                               rx={10}
                               fill="white"
                               stroke="rgba(15,23,42,0.08)"
                             />
                             <text
-                              x={node.x + chart.nodeWidth + 24}
+                              x={node.x + chart.nodeWidth + 28}
                               y={node.y + 20}
                               className="fill-[color:var(--ink)] text-[12px] font-semibold"
                             >
                               <tspan>{truncateLabel(node.label, 18)}</tspan>
                               <tspan
-                                x={node.x + chart.nodeWidth + 24}
+                                x={node.x + chart.nodeWidth + 28}
                                 dy="1.2em"
                                 className="fill-[color:var(--ink-soft)] text-[11px]"
                               >
