@@ -70,14 +70,22 @@ export default function DistributionClient({
   links,
 }: Props) {
   const chart = useMemo(() => {
-    const width = 1280;
-    const height = 520;
+    const width = 1500;
+    const height = 560;
     const nodeWidth = 24;
-    const columnX = [160, 560, 980];
     const padding = 18;
     const topBottom = 40;
 
-    const columns = [0, 1, 2];
+    const columns = Array.from(new Set(nodes.map((node) => node.column))).sort(
+      (a, b) => a - b
+    );
+    const leftMargin = 220;
+    const rightMargin = 220;
+    const usableWidth = Math.max(1, width - leftMargin - rightMargin);
+    const gap =
+      columns.length > 1 ? usableWidth / (columns.length - 1) : 0;
+    const columnX = columns.map((_, index) => leftMargin + gap * index);
+
     const columnNodes = columns.map((column) =>
       nodes.filter((node) => node.column === column)
     );
@@ -94,8 +102,8 @@ export default function DistributionClient({
 
     const layoutNodes: LayoutNode[] = [];
 
-    columnNodes.forEach((nodes, columnIndex) => {
-      const sorted = [...nodes].sort((a, b) => b.value - a.value);
+    columnNodes.forEach((nodesForColumn, columnIndex) => {
+      const sorted = [...nodesForColumn].sort((a, b) => b.value - a.value);
       const totalHeight =
         sorted.reduce((acc, node) => acc + node.value * scale, 0) +
         padding * (sorted.length - 1);
@@ -105,7 +113,7 @@ export default function DistributionClient({
         const nodeHeight = Math.max(4, node.value * scale);
         layoutNodes.push({
           ...node,
-          x: columnX[columnIndex],
+          x: columnX[columnIndex] ?? leftMargin,
           y: cursor,
           height: nodeHeight,
         });
@@ -283,7 +291,7 @@ export default function DistributionClient({
                 {hasData ? (
                   <svg
                     viewBox={`0 0 ${chart.width} ${chart.height}`}
-                    className="h-[460px] w-full"
+                    className="h-[480px] w-full"
                     role="img"
                     aria-label="Sankey diagram showing distribution of income"
                   >
@@ -339,18 +347,18 @@ export default function DistributionClient({
                           <text
                             x={
                               node.column === 0
-                                ? node.x - 20
+                                ? node.x - 16
                                 : node.x + chart.nodeWidth + 12
                             }
                             y={node.y + 6}
                             textAnchor={node.column === 0 ? "end" : "start"}
                             className="fill-[color:var(--ink)] text-[12px] font-semibold"
                           >
-                            <tspan>{truncateLabel(node.label, 20)}</tspan>
+                            <tspan>{truncateLabel(node.label, 22)}</tspan>
                             <tspan
                               x={
                                 node.column === 0
-                                  ? node.x - 14
+                                  ? node.x - 12
                                   : node.x + chart.nodeWidth + 12
                               }
                               dy="1.2em"

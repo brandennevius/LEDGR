@@ -878,13 +878,29 @@ export const getDistributionData = async (user: User) => {
     unpairedInflows.reduce((acc, tx) => acc + Math.abs(tx.amount), 0);
 
   const categoryMap = new Map<string, number>();
+  const groupTotals = new Map<string, number>();
+  const categoriesByGroup = new Map<string, Map<string, number>>();
+
   spendTransactions.forEach((tx) => {
     const rawCategory = tx.category?.trim() || "Uncategorized";
-    const groupName = groupMap.get(rawCategory.toLowerCase());
-    const category = groupName ?? rawCategory;
+    const groupName = groupMap.get(rawCategory.toLowerCase()) ?? "Other";
+
     categoryMap.set(
-      category,
-      (categoryMap.get(category) ?? 0) + Math.abs(tx.amount)
+      rawCategory,
+      (categoryMap.get(rawCategory) ?? 0) + Math.abs(tx.amount)
+    );
+    groupTotals.set(
+      groupName,
+      (groupTotals.get(groupName) ?? 0) + Math.abs(tx.amount)
+    );
+
+    if (!categoriesByGroup.has(groupName)) {
+      categoriesByGroup.set(groupName, new Map());
+    }
+    const groupMapEntry = categoriesByGroup.get(groupName)!;
+    groupMapEntry.set(
+      rawCategory,
+      (groupMapEntry.get(rawCategory) ?? 0) + Math.abs(tx.amount)
     );
   });
 
@@ -1015,63 +1031,82 @@ export const getDistributionData = async (user: User) => {
     });
   });
 
-  if (spendTotal > 0) {
-    nodes.push({
-      id: "allocation-spending",
-      label: "Spending",
-      value: spendTotal,
-      column: 1,
-      color: "#d97706",
+  nodes.push({
+    id: "income-total",
+    label: "Gross income",
+    value: inflowTotal,
+    column: 1,
+    color: "#16a34a",
+  });
+
+  incomeSources.forEach((source) => {
+    links.push({
+      source: `income-${source.name}`,
+      target: "income-total",
+      value: source.value,
+      color: "rgba(16, 185, 129, 0.35)",
     });
-  }
+  });
+  Array.from(groupTotals.entries()).forEach(([groupName, value], index) => {
+    nodes.push({
+      id: `group-${groupName}`,
+      label: groupName,
+      value,
+      column: 2,
+      color: ["#1d4ed8", "#0ea5e9", "#14b8a6", "#22c55e", "#f59e0b", "#f97316", "#db2777", "#7c3aed"][index % 8],
+    });
+  });
 
   if (investmentTotal > 0) {
     nodes.push({
-      id: "allocation-investments",
+      id: "group-investments",
       label: "Investments",
       value: investmentTotal,
-      column: 1,
+      column: 2,
       color: "#7c3aed",
     });
   }
 
   if (transferTotal > 0) {
     nodes.push({
-      id: "allocation-transfers",
+      id: "group-transfers",
       label: "Transfers",
       value: transferTotal,
-      column: 1,
+      column: 2,
       color: "#2563eb",
     });
   }
 
   if (internalTransferTotal > 0) {
     nodes.push({
-      id: "allocation-internal",
+      id: "group-internal",
       label: "Internal transfers",
       value: internalTransferTotal,
-      column: 1,
+      column: 2,
       color: "#0ea5e9",
     });
   }
 
   if (savings > 0) {
     nodes.push({
-      id: "allocation-savings",
+      id: "group-savings",
       label: "Savings",
       value: savings,
-      column: 1,
+      column: 2,
       color: "#16a34a",
     });
   }
 
-  categories.forEach((category, index) => {
-    nodes.push({
-      id: `category-${category.name}`,
-      label: category.name,
-      value: category.value,
-      column: 2,
-      color: ["#1d4ed8", "#0ea5e9", "#14b8a6", "#22c55e", "#f59e0b", "#f97316", "#db2777", "#7c3aed"][index % 8],
+  Array.from(categoriesByGroup.entries()).forEach(([groupName, map]) => {
+    const entries = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+    entries.forEach(([categoryName, value], index) => {
+      nodes.push({
+        id: `category-${groupName}-${categoryName}`,
+        label: categoryName,
+        value,
+        column: 3,
+        color: ["#1d4ed8", "#0ea5e9", "#14b8a6", "#22c55e", "#f59e0b", "#f97316", "#db2777", "#7c3aed"][index % 8],
+      });
     });
   });
 
@@ -1080,7 +1115,7 @@ export const getDistributionData = async (user: User) => {
       id: `investment-${label}`,
       label,
       value,
-      column: 2,
+      column: 3,
       color: index % 2 === 0 ? "#8b5cf6" : "#a855f7",
     });
   });
@@ -1090,7 +1125,7 @@ export const getDistributionData = async (user: User) => {
       id: `transfer-${label}`,
       label,
       value,
-      column: 2,
+      column: 3,
       color: index % 2 === 0 ? "#60a5fa" : "#3b82f6",
     });
   });
@@ -1100,10 +1135,20 @@ export const getDistributionData = async (user: User) => {
       id: `internal-${label}`,
       label,
       value,
-      column: 2,
+      column: 3,
       color: index % 2 === 0 ? "#38bdf8" : "#0ea5e9",
     });
   });
+
+  if (savings > 0) {
+    nodes.push({
+      id: "savings-destination",
+      label: "Unallocated savings",
+      value: savings,
+      column: 3,
+      color: "#22c55e",
+    });
+  }
 
   const inflowDenominator = inflowFallbackNeeded
     ? totalOutflows
@@ -1111,63 +1156,65 @@ export const getDistributionData = async (user: User) => {
     ? incomeTotal
     : totalOutflows;
   if (inflowDenominator > 0) {
-    incomeSources.forEach((source) => {
-      const sourceId = `income-${source.name}`;
-      if (spendTotal > 0) {
+    const totalForGroups = spendTotal + investmentTotal + transferTotal + internalTransferTotal + savings;
+    if (totalForGroups > 0) {
+      Array.from(groupTotals.entries()).forEach(([groupName, value]) => {
         links.push({
-          source: sourceId,
-          target: "allocation-spending",
-          value: (source.value / inflowDenominator) * spendTotal,
-          color: "rgba(12, 122, 122, 0.3)",
+          source: "income-total",
+          target: `group-${groupName}`,
+          value,
+          color: "rgba(15, 118, 110, 0.25)",
         });
-      }
+      });
       if (investmentTotal > 0) {
         links.push({
-          source: sourceId,
-          target: "allocation-investments",
-          value: (source.value / inflowDenominator) * investmentTotal,
+          source: "income-total",
+          target: "group-investments",
+          value: investmentTotal,
           color: "rgba(124, 58, 237, 0.25)",
         });
       }
       if (transferTotal > 0) {
         links.push({
-          source: sourceId,
-          target: "allocation-transfers",
-          value: (source.value / inflowDenominator) * transferTotal,
+          source: "income-total",
+          target: "group-transfers",
+          value: transferTotal,
           color: "rgba(37, 99, 235, 0.2)",
         });
       }
       if (internalTransferTotal > 0) {
         links.push({
-          source: sourceId,
-          target: "allocation-internal",
-          value: (source.value / inflowDenominator) * internalTransferTotal,
+          source: "income-total",
+          target: "group-internal",
+          value: internalTransferTotal,
           color: "rgba(14, 165, 233, 0.2)",
         });
       }
       if (savings > 0) {
         links.push({
-          source: sourceId,
-          target: "allocation-savings",
-          value: (source.value / inflowDenominator) * savings,
+          source: "income-total",
+          target: "group-savings",
+          value: savings,
           color: "rgba(22, 163, 74, 0.25)",
         });
       }
-    });
+    }
   }
 
-  categories.forEach((category) => {
-    links.push({
-      source: "allocation-spending",
-      target: `category-${category.name}`,
-      value: category.value,
-      color: "rgba(15, 118, 110, 0.2)",
+  categoriesByGroup.forEach((map, groupName) => {
+    map.forEach((value, categoryName) => {
+      links.push({
+        source: `group-${groupName}`,
+        target: `category-${groupName}-${categoryName}`,
+        value,
+        color: "rgba(15, 118, 110, 0.2)",
+      });
     });
   });
 
   investmentDestinations.forEach((value, label) => {
     links.push({
-      source: "allocation-investments",
+      source: "group-investments",
       target: `investment-${label}`,
       value,
       color: "rgba(124, 58, 237, 0.25)",
@@ -1176,7 +1223,7 @@ export const getDistributionData = async (user: User) => {
 
   transferDestinations.forEach((value, label) => {
     links.push({
-      source: "allocation-transfers",
+      source: "group-transfers",
       target: `transfer-${label}`,
       value,
       color: "rgba(37, 99, 235, 0.2)",
@@ -1185,12 +1232,21 @@ export const getDistributionData = async (user: User) => {
 
   internalDestinations.forEach((value, label) => {
     links.push({
-      source: "allocation-internal",
+      source: "group-internal",
       target: `internal-${label}`,
       value,
       color: "rgba(14, 165, 233, 0.25)",
     });
   });
+
+  if (savings > 0) {
+    links.push({
+      source: "group-savings",
+      target: "savings-destination",
+      value: savings,
+      color: "rgba(22, 163, 74, 0.25)",
+    });
+  }
 
   const inflowTotal = inflowFallbackNeeded
     ? totalOutflows
