@@ -80,19 +80,19 @@ export default function TransactionsPageClient() {
     [categoryList]
   );
 
-  useEffect(() => {
-    const fetchRows = async () => {
-      setLoading(true);
-      const params = new URLSearchParams();
-      params.set("days", String(days));
-      if (category !== "All") params.set("category", category);
-      if (needsReviewOnly) params.set("needsReview", "true");
-      const response = await fetch(`/api/transactions?${params.toString()}`);
-      const data = await response.json();
-      setRows(data.transactions ?? []);
-      setLoading(false);
-    };
+  const fetchRows = async () => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    params.set("days", String(days));
+    if (category !== "All") params.set("category", category);
+    if (needsReviewOnly) params.set("needsReview", "true");
+    const response = await fetch(`/api/transactions?${params.toString()}`);
+    const data = await response.json();
+    setRows(data.transactions ?? []);
+    setLoading(false);
+  };
 
+  useEffect(() => {
     fetchRows().catch(() => setLoading(false));
   }, [days, category, needsReviewOnly]);
 
@@ -600,17 +600,7 @@ export default function TransactionsPageClient() {
                                       }
                                     : prev
                                 );
-                                setRows((prev) =>
-                                  prev.map((row) =>
-                                    row.id === selected.id
-                                      ? {
-                                          ...row,
-                                          category: payload.length ? "Split" : row.category,
-                                          hasSplits: payload.length > 0,
-                                        }
-                                      : row
-                                  )
-                                );
+                                await fetchRows();
                               }
                               setSplitSaving(false);
                             }}
