@@ -99,9 +99,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return 'Unable to start OAuth flow.';
     }
 
-    console.log('[auth] oauth url', data.url);
+    let oauthUrl = data.url;
+    try {
+      const parsedUrl = new URL(data.url);
+      parsedUrl.searchParams.set('redirect_to', redirectTo);
+      oauthUrl = parsedUrl.toString();
+    } catch (urlError) {
+      console.log('[auth] failed to normalize oauth url', urlError);
+    }
 
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    console.log('[auth] oauth url', oauthUrl);
+
+    const result = await WebBrowser.openAuthSessionAsync(oauthUrl, redirectTo);
     console.log('[auth] openAuthSession result', result);
 
     if (result.type !== 'success' || !result.url) {
