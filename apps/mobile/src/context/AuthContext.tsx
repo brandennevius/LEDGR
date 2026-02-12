@@ -1,4 +1,3 @@
-import * as AuthSession from 'expo-auth-session';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import {
@@ -26,7 +25,7 @@ export type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const redirectScheme = 'financialcoaching';
+WebBrowser.maybeCompleteAuthSession();
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -72,10 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithOAuth = useCallback(async (provider: 'google' | 'apple') => {
-    const redirectTo = AuthSession.makeRedirectUri({
-      scheme: redirectScheme,
-      path: 'auth/callback',
-    });
+    // Expo Go must use exp://.../--/auth/callback; production build uses custom scheme.
+    const redirectTo = Linking.createURL('auth/callback');
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
