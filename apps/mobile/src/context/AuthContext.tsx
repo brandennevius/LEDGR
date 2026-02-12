@@ -76,6 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       process.env.EXPO_PUBLIC_SUPABASE_REDIRECT_URL ??
       Linking.createURL('auth/callback');
 
+    console.log('[auth] starting oauth', {
+      provider,
+      redirectTo,
+    });
+
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -85,27 +90,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (error) {
+      console.log('[auth] signInWithOAuth error', error);
       return error.message;
     }
 
     if (!data?.url) {
+      console.log('[auth] missing oauth url from supabase response');
       return 'Unable to start OAuth flow.';
     }
 
+    console.log('[auth] oauth url', data.url);
+
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    console.log('[auth] openAuthSession result', result);
 
     if (result.type !== 'success' || !result.url) {
       return 'OAuth cancelled.';
     }
 
-    const params = Linking.parse(result.url).queryParams;
+    const parsed = Linking.parse(result.url);
+    const params = parsed.queryParams;
+    console.log('[auth] callback url parsed', {
+      callbackUrl: result.url,
+      path: parsed.path,
+      queryParams: params,
+    });
+
     const code = typeof params?.code === 'string' ? params.code : null;
+    const errorDescription =
+      typeof params?.error_description === 'string'
+        ? params.error_description
+        : null;
+    const errorCode = typeof params?.error === 'string' ? params.error : null;
 
     if (!code) {
-      return 'Missing OAuth response code.';
+      return (
+        'Missing OAuth response code.' +
+        (errorCode ? ` error=${errorCode}` : '') +
+        (errorDescription ? ` description=${errorDescription}` : '')
+      );
     }
 
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+    if (exchangeError) {
+      console.log('[auth] exchangeCodeForSession error', exchangeError);
+    } else {
+      console.log('[auth] exchangeCodeForSession success');
+    }
     return exchangeError?.message ?? null;
   }, []);
 
