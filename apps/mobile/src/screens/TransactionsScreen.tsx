@@ -13,7 +13,6 @@ import {
 import Chip from '../components/Chip';
 import ModalSheet from '../components/ModalSheet';
 import { Screen } from '../components/Screen';
-import SectionCard from '../components/SectionCard';
 import { apiRequest } from '../lib/api';
 import { colors } from '../theme';
 
@@ -25,17 +24,8 @@ type TransactionRow = {
   amount: number;
   isIncome: boolean;
   needsReview?: boolean;
-  source?: string;
   hasSplits?: boolean;
   date: string;
-  transactionType?: 'INCOME' | 'INTERNAL_TRANSFER' | 'REGULAR';
-};
-
-type SplitRow = {
-  id?: string;
-  category: string;
-  amount: number;
-  note?: string | null;
 };
 
 type TransactionDetail = {
@@ -47,7 +37,7 @@ type TransactionDetail = {
   date: string;
   needsReview?: boolean;
   hasSplits?: boolean;
-  splits?: SplitRow[];
+  splits?: Array<{ id?: string; category: string; amount: number; note?: string | null }>;
   account?: {
     name?: string;
     institutionName?: string;
@@ -61,7 +51,13 @@ type TransactionsResponse = {
 };
 
 type CategoriesResponse = {
-  categories?: string[];
+  categories: string[];
+};
+
+type SplitDraft = {
+  category: string;
+  amount: string;
+  note?: string;
 };
 
 const dayOptions = [
@@ -75,82 +71,47 @@ const formatCurrency = (value: number) =>
   value.toLocaleString('en-US', {
     style: 'currency',
     currency: 'USD',
-    maximumFractionDigits: 2,
   });
-
-const buildQuery = (days: number, category: string, needsReview: boolean) => {
-  const params = new URLSearchParams();
-  params.set('days', String(days));
-  if (category !== 'All') params.set('category', category);
-  if (needsReview) params.set('needsReview', 'true');
-  return params.toString();
-};
-
-const buildRulePreview = (rows: TransactionRow[], matchType: 'EXACT' | 'PARTIAL', value: string) => {
-  const trimmed = value.trim().toLowerCase();
-  if (!trimmed) return [];
-  return rows.filter((row) => {
-    const name = row.name.toLowerCase();
-    if (matchType === 'EXACT') {
-      return name === trimmed;
-    }
-    return name.includes(trimmed);
-  });
-};
-
-const normalizeSplit = (split: SplitRow) => ({
-  category: split.category.trim(),
-  amount: Number(split.amount) || 0,
-  note: split.note?.trim() || null,
-});
 
 export function TransactionsScreen() {
-  const [days, setDays] = useState(30);
-  const [category, setCategory] = useState('All');
-  const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
-  const [query, setQuery] = useState('');
-  const [rows, setRows] = useState<TransactionRow[]>([]);
+  const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [days, setDays] = useState(30);
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
+  const [categoryList, setCategoryList] = useState<string[]>([]);
+  const [query, setQuery] = useState('');
 
-  const [categories, setCategories] = useState<string[]>([]);
   const [selected, setSelected] = useState<TransactionDetail | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [categoryInput, setCategoryInput] = useState('');
-  const [transactionTypeInput, setTransactionTypeInput] = useState<
-    'INCOME' | 'INTERNAL_TRANSFER' | 'REGULAR'
-  >('REGULAR');
+  const [transactionTypeInput, setTransactionTypeInput] = useState<'INCOME' | 'INTERNAL_TRANSFER' | 'REGULAR'>('REGULAR');
   const [applyToSimilar, setApplyToSimilar] = useState(false);
   const [applyToCategory, setApplyToCategory] = useState(false);
   const [createRule, setCreateRule] = useState(false);
   const [ruleMatchType, setRuleMatchType] = useState<'EXACT' | 'PARTIAL'>('EXACT');
   const [ruleMatchValue, setRuleMatchValue] = useState('');
+  const [splits, setSplits] = useState<SplitDraft[]>([]);
+  const [savingSplits, setSavingSplits] = useState(false);
   const [savingDetail, setSavingDetail] = useState(false);
 
-  const [splits, setSplits] = useState<SplitRow[]>([]);
-  const [splitSaving, setSplitSaving] = useState(false);
-
-  const loadCategories = async () => {
+  const fetchRows = async () => {
     try {
-      const data = await apiRequest<CategoriesResponse>('/api/categories');
-      const list = Array.isArray(data.categories) ? data.categories : [];
-      setCategories(['All', ...list.filter((item) => item !== 'All')]);
-    } catch {
-      setCategories(['All']);
-    }
-  };
-
-  const loadTransactions = async () => {
-    try {
-      const queryString = buildQuery(days, category, needsReviewOnly);
-      const data = await apiRequest<TransactionsResponse>(`/api/transactions?${queryString}`);
-      setRows(data.transactions ?? []);
+      setLoading(true);
+      const params = new URLSearchParams();
+      params.set('days', String(days));
+      if (categoryFilter !== 'All') params.set('category', categoryFilter);
+      if (needsReviewOnly) params.set('needsReview', 'true');
+      const data = await apiRequest<TransactionsResponse>(`/api/transactions?${params.toString()}`);
+      setTransactions(data.transactions ?? []);
       setError(null);
     } catch (err) {
       const message =
-        typeof err === 'object' && err && 'message' in err
-          ? String((err as { message?: string }).message)
+        typeof err === 'object' && err && 'error' in err
+          ? String((err as { error?: string }).error)
           : 'Unable to load transactions.';
       setError(message);
     } finally {
@@ -159,77 +120,55 @@ export function TransactionsScreen() {
     }
   };
 
-  useEffect(() => {
-    loadCategories().catch(() => null);
-  }, []);
+  const fetchCategories = async () => {
+    try {
+      const data = await apiRequest<CategoriesResponse>('/api/categories');
+      setCategoryList(['All', ...(data.categories ?? [])]);
+    } catch {
+      setCategoryList(['All']);
+    }
+  };
 
   useEffect(() => {
-    setLoading(true);
-    loadTransactions();
-  }, [days, category, needsReviewOnly]);
+    fetchRows();
+  }, [days, categoryFilter, needsReviewOnly]);
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
   const filteredRows = useMemo(() => {
     const trimmed = query.trim().toLowerCase();
-    if (!trimmed) return rows;
-    return rows.filter(
-      (row) => row.name.toLowerCase().includes(trimmed) || row.category.toLowerCase().includes(trimmed)
+    if (!trimmed) return transactions;
+    return transactions.filter(
+      (row) =>
+        row.name.toLowerCase().includes(trimmed) ||
+        row.category.toLowerCase().includes(trimmed)
     );
-  }, [rows, query]);
+  }, [query, transactions]);
 
-  const summary = useMemo(() => {
-    const income = rows.filter((row) => row.isIncome).reduce((acc, row) => acc + row.amount, 0);
-    const spend = rows.filter((row) => !row.isIncome).reduce((acc, row) => acc + row.amount, 0);
-    const review = rows.filter((row) => row.needsReview).length;
-    return { income, spend, review };
-  }, [rows]);
+  const stats = useMemo(() => {
+    const income = transactions
+      .filter((tx) => tx.isIncome)
+      .reduce((acc, tx) => acc + tx.amount, 0);
+    const spend = transactions
+      .filter((tx) => !tx.isIncome)
+      .reduce((acc, tx) => acc + tx.amount, 0);
+    return { income, spend };
+  }, [transactions]);
 
-  const similarRows = useMemo(() => {
-    if (!selected) return [];
-    return rows.filter((row) => row.name === selected.name && row.id !== selected.id).slice(0, 6);
-  }, [rows, selected]);
-
-  const similarCount = useMemo(() => {
-    if (!selected) return 0;
-    return rows.filter((row) => row.name === selected.name).length;
-  }, [rows, selected]);
-
-  const rulePreview = useMemo(
-    () => buildRulePreview(rows, ruleMatchType, ruleMatchValue).slice(0, 6),
-    [rows, ruleMatchType, ruleMatchValue]
-  );
-
-  const splitTotal = useMemo(
-    () => splits.reduce((acc, split) => acc + (Number(split.amount) || 0), 0),
-    [splits]
-  );
-
-  const remainingSplit = useMemo(() => {
-    if (!selected) return 0;
-    return Math.max(0, Math.abs(selected.amount) - splitTotal);
-  }, [selected, splitTotal]);
-
-  const canSaveSplits = useMemo(() => {
-    if (!selected) return false;
-    if (splits.length === 0) return false;
-    if (splitTotal <= 0) return false;
-    return splitTotal <= Math.abs(selected.amount) + 0.01;
-  }, [selected, splits, splitTotal]);
-
-  const openDetail = async (row: TransactionRow) => {
+  const openDetail = async (id: string) => {
+    setDetailOpen(true);
     setDetailLoading(true);
-    setSelected(null);
     try {
-      const targetId = row.baseId ?? row.id;
-      const data = await apiRequest<TransactionDetail>(`/api/transactions/${targetId}`);
-      setSelected(data);
-      setCategoryInput(data.category ?? '');
-      setTransactionTypeInput(data.transactionType ?? 'REGULAR');
-      setRuleMatchValue(data.name ?? '');
+      const detail = await apiRequest<TransactionDetail>(`/api/transactions/${id}`);
+      setSelected(detail);
+      setCategoryInput(detail.category ?? '');
+      setTransactionTypeInput(detail.transactionType ?? 'REGULAR');
       setSplits(
-        (data.splits ?? []).map((split) => ({
-          id: split.id,
+        (detail.splits ?? []).map((split) => ({
           category: split.category,
-          amount: split.amount,
+          amount: String(split.amount),
           note: split.note ?? '',
         }))
       );
@@ -237,47 +176,30 @@ export function TransactionsScreen() {
       setApplyToCategory(false);
       setCreateRule(false);
       setRuleMatchType('EXACT');
-    } catch (err) {
-      const message =
-        typeof err === 'object' && err && 'message' in err
-          ? String((err as { message?: string }).message)
-          : 'Unable to load transaction.';
-      setError(message);
+      setRuleMatchValue('');
     } finally {
       setDetailLoading(false);
     }
   };
 
-  const closeDetail = () => {
-    setSelected(null);
-  };
-
   const saveDetail = async () => {
     if (!selected) return;
-    const payload = {
-      category: categoryInput,
-      transactionType: transactionTypeInput,
-      applyToSimilar,
-      applyToCategory,
-      createRule,
-      ruleMatchType,
-      ruleMatchValue,
-    };
-
     setSavingDetail(true);
     try {
       await apiRequest(`/api/transactions/${selected.id}`, {
         method: 'PATCH',
-        body: payload,
+        body: {
+          category: categoryInput,
+          transactionType: transactionTypeInput,
+          applyToSimilar,
+          applyToCategory,
+          createRule,
+          ruleMatchType,
+          ruleMatchValue,
+        },
       });
-      await loadTransactions();
-      await openDetail({ id: selected.id, name: selected.name, category: selected.category, amount: selected.amount, isIncome: selected.amount < 0, date: selected.date });
-    } catch (err) {
-      const message =
-        typeof err === 'object' && err && 'message' in err
-          ? String((err as { message?: string }).message)
-          : 'Unable to save transaction.';
-      setError(message);
+      await fetchRows();
+      setDetailOpen(false);
     } finally {
       setSavingDetail(false);
     }
@@ -285,53 +207,39 @@ export function TransactionsScreen() {
 
   const saveSplits = async () => {
     if (!selected) return;
-    setSplitSaving(true);
+    setSavingSplits(true);
     try {
       await apiRequest(`/api/transactions/${selected.id}/splits`, {
         method: 'PUT',
         body: {
-          splits: splits.map(normalizeSplit).filter((split) => split.category && split.amount > 0),
+          splits: splits
+            .map((split) => ({
+              category: split.category,
+              amount: Number(split.amount),
+              note: split.note?.trim() || null,
+            }))
+            .filter((split) => split.category && split.amount > 0),
         },
       });
-      await loadTransactions();
-      await openDetail({ id: selected.id, name: selected.name, category: selected.category, amount: selected.amount, isIncome: selected.amount < 0, date: selected.date });
-    } catch (err) {
-      const message =
-        typeof err === 'object' && err && 'message' in err
-          ? String((err as { message?: string }).message)
-          : 'Unable to save splits.';
-      setError(message);
+      await fetchRows();
+      setDetailOpen(false);
     } finally {
-      setSplitSaving(false);
+      setSavingSplits(false);
     }
   };
 
-  const addSplit = () => {
-    setSplits((prev) => [
-      ...prev,
-      { id: `draft-${Date.now()}`, category: categoryInput || 'Uncategorized', amount: 0, note: '' },
-    ]);
-  };
-
-  const updateSplit = (index: number, key: keyof SplitRow, value: string) => {
-    setSplits((prev) =>
-      prev.map((split, idx) => {
-        if (idx !== index) return split;
-        if (key === 'amount') {
-          const amount = Number.parseFloat(value.replace(/[^0-9.]/g, ''));
-          return { ...split, amount: Number.isNaN(amount) ? 0 : amount };
-        }
-        return { ...split, [key]: value };
-      })
-    );
-  };
-
-  const removeSplit = (index: number) => {
-    setSplits((prev) => prev.filter((_, idx) => idx !== index));
+  const markReviewed = async () => {
+    if (!selected) return;
+    await apiRequest('/api/transactions/review', {
+      method: 'POST',
+      body: { id: selected.id, category: categoryInput || selected.category },
+    });
+    await fetchRows();
+    setDetailOpen(false);
   };
 
   return (
-    <Screen title="Transactions" subtitle="Review, categorize, and split activity.">
+    <Screen title="Transactions" subtitle="Review, filter, and recategorize.">
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -340,7 +248,7 @@ export function TransactionsScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              loadTransactions();
+              fetchRows();
             }}
             tintColor={colors.text}
           />
@@ -348,57 +256,48 @@ export function TransactionsScreen() {
       >
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Spend</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(summary.spend)}</Text>
+            <Text style={styles.summaryLabel}>Spend ({days}d)</Text>
+            <Text style={styles.summaryValue}>{formatCurrency(stats.spend)}</Text>
           </View>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Income</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(summary.income)}</Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Needs review</Text>
-            <Text style={styles.summaryValue}>{summary.review}</Text>
+            <Text style={styles.summaryLabel}>Income ({days}d)</Text>
+            <Text style={styles.summaryValue}>{formatCurrency(stats.income)}</Text>
           </View>
         </View>
 
-        <View style={styles.searchCard}>
+        <View style={styles.filtersCard}>
           <TextInput
-            style={styles.searchInput}
-            placeholder="Search merchants or categories"
-            placeholderTextColor={colors.textMuted}
             value={query}
             onChangeText={setQuery}
+            placeholder="Search transactions"
+            placeholderTextColor={colors.textMuted}
+            style={styles.searchInput}
           />
-        </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-          {dayOptions.map((option) => (
+          <View style={styles.filterRow}>
+            {dayOptions.map((option) => (
+              <Chip
+                key={option.value}
+                label={option.label}
+                active={days === option.value}
+                onPress={() => setDays(option.value)}
+              />
+            ))}
+          </View>
+          <View style={styles.filterRow}>
+            {(categoryList.length ? categoryList : ['All']).slice(0, 6).map((name) => (
+              <Chip
+                key={name}
+                label={name}
+                active={categoryFilter === name}
+                onPress={() => setCategoryFilter(name)}
+              />
+            ))}
             <Chip
-              key={option.value}
-              label={option.label}
-              active={days === option.value}
-              onPress={() => setDays(option.value)}
+              label={needsReviewOnly ? 'Needs review' : 'All reviews'}
+              active={needsReviewOnly}
+              onPress={() => setNeedsReviewOnly((prev) => !prev)}
             />
-          ))}
-        </ScrollView>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-          {categories.map((item) => (
-            <Chip
-              key={item}
-              label={item}
-              active={category === item}
-              onPress={() => setCategory(item)}
-            />
-          ))}
-        </ScrollView>
-
-        <View style={styles.filterRow}>
-          <Chip
-            label="Needs review"
-            active={needsReviewOnly}
-            onPress={() => setNeedsReviewOnly((prev) => !prev)}
-          />
+          </View>
         </View>
 
         {loading ? (
@@ -411,252 +310,162 @@ export function TransactionsScreen() {
 
         {filteredRows.length === 0 && !loading ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No transactions found</Text>
-            <Text style={styles.emptyBody}>Try a different filter or search term.</Text>
+            <Text style={styles.emptyTitle}>No transactions yet</Text>
+            <Text style={styles.emptyBody}>Connect a bank account to start syncing.</Text>
           </View>
         ) : null}
 
         {filteredRows.map((item) => (
-          <Pressable key={item.id} style={styles.row} onPress={() => openDetail(item)}>
-            <View style={styles.rowMeta}>
-              <Text style={styles.merchant}>{item.name}</Text>
-              <Text style={styles.category}>
-                {item.category} · {item.date}
-              </Text>
-            </View>
-            <View style={styles.rowRight}>
-              <Text style={[styles.amount, item.isIncome ? styles.amountPositive : styles.amountNegative]}>
+          <Pressable key={item.id} onPress={() => openDetail(item.baseId ?? item.id)}>
+            <View style={styles.row}>
+              <View style={styles.meta}>
+                <Text style={styles.merchant}>{item.name}</Text>
+                <Text style={styles.category}>
+                  {item.category} · {item.date}
+                  {item.needsReview ? ' · Review' : ''}
+                  {item.hasSplits ? ' · Split' : ''}
+                </Text>
+              </View>
+              <Text style={[styles.amount, item.isIncome ? styles.positive : styles.negative]}>
+                {item.isIncome ? '+' : '-'}
                 {formatCurrency(item.amount)}
               </Text>
-              <View style={styles.tagRow}>
-                {item.needsReview ? <Text style={styles.tagWarning}>Review</Text> : null}
-                {item.hasSplits ? <Text style={styles.tagInfo}>Split</Text> : null}
-              </View>
             </View>
           </Pressable>
         ))}
       </ScrollView>
 
-      <ModalSheet visible={Boolean(selected) || detailLoading} onClose={closeDetail}>
-        {detailLoading ? (
+      <ModalSheet visible={detailOpen} onClose={() => setDetailOpen(false)}>
+        {detailLoading || !selected ? (
           <View style={styles.loadingCard}>
             <ActivityIndicator color={colors.primary} />
             <Text style={styles.loadingText}>Loading details...</Text>
           </View>
-        ) : null}
-        {selected ? (
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>{selected.name}</Text>
-              <Text style={styles.sheetAmount}>{formatCurrency(Math.abs(selected.amount))}</Text>
-              <Text style={styles.sheetMeta}>{selected.date}</Text>
+        ) : (
+          <ScrollView contentContainerStyle={styles.detailContent}>
+            <Text style={styles.detailTitle}>{selected.name}</Text>
+            <Text style={styles.detailSubtitle}>
+              {selected.account?.institutionName ?? 'Account'} · {selected.date}
+            </Text>
+            <Text style={styles.detailAmount}>
+              {selected.amount < 0 ? '+' : '-'} {formatCurrency(Math.abs(selected.amount))}
+            </Text>
+
+            <Text style={styles.detailSectionTitle}>Category</Text>
+            <TextInput
+              value={categoryInput}
+              onChangeText={setCategoryInput}
+              placeholder="Category"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+            />
+
+            <Text style={styles.detailSectionTitle}>Transaction type</Text>
+            <View style={styles.filterRow}>
+              {(['REGULAR', 'INCOME', 'INTERNAL_TRANSFER'] as const).map((type) => (
+                <Chip
+                  key={type}
+                  label={type.replace('_', ' ')}
+                  active={transactionTypeInput === type}
+                  onPress={() => setTransactionTypeInput(type)}
+                />
+              ))}
             </View>
 
-            <SectionCard title="Account">
-              <Text style={styles.detailValue}>
-                {selected.account?.institutionName
-                  ? `${selected.account.institutionName} • ${selected.account.mask ?? ''}`
-                  : selected.account?.name ?? 'Account details unavailable'}
+            <View style={styles.toggleRow}>
+              <Pressable onPress={() => setApplyToSimilar((prev) => !prev)} style={styles.toggleButton}>
+                <Text style={styles.toggleLabel}>
+                  {applyToSimilar ? 'Apply to similar ✓' : 'Apply to similar'}
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => setApplyToCategory((prev) => !prev)} style={styles.toggleButton}>
+                <Text style={styles.toggleLabel}>
+                  {applyToCategory ? 'Apply to category ✓' : 'Apply to category'}
+                </Text>
+              </Pressable>
+            </View>
+
+            <Pressable onPress={() => setCreateRule((prev) => !prev)} style={styles.toggleButton}>
+              <Text style={styles.toggleLabel}>
+                {createRule ? 'Create rule ✓' : 'Create rule'}
               </Text>
-            </SectionCard>
-
-            <SectionCard title="Category + rules">
-              <TextInput
-                style={styles.input}
-                placeholder="Category"
-                placeholderTextColor={colors.textMuted}
-                value={categoryInput}
-                onChangeText={setCategoryInput}
-              />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-                {categories
-                  .filter((item) => item !== 'All')
-                  .slice(0, 12)
-                  .map((item) => (
-                    <Chip
-                      key={item}
-                      label={item}
-                      active={categoryInput === item}
-                      onPress={() => setCategoryInput(item)}
-                    />
-                  ))}
-              </ScrollView>
-
-              <View style={styles.toggleRow}>
-                <Chip
-                  label="Apply to similar"
-                  active={applyToSimilar}
-                  onPress={() => {
-                    setApplyToSimilar((prev) => !prev);
-                    if (!applyToSimilar) setApplyToCategory(false);
-                  }}
-                />
-                <Chip
-                  label="Apply to category"
-                  active={applyToCategory}
-                  onPress={() => {
-                    setApplyToCategory((prev) => !prev);
-                    if (!applyToCategory) setApplyToSimilar(false);
-                  }}
-                />
-              </View>
-
-              <View style={styles.toggleRow}>
-                <Chip
-                  label="Create rule"
-                  active={createRule}
-                  onPress={() => setCreateRule((prev) => !prev)}
-                />
-                <Chip
-                  label={`Match ${ruleMatchType === 'EXACT' ? 'exact' : 'partial'}`}
-                  active={ruleMatchType === 'PARTIAL'}
-                  onPress={() =>
-                    setRuleMatchType((prev) => (prev === 'EXACT' ? 'PARTIAL' : 'EXACT'))
-                  }
-                />
-              </View>
-
-              {createRule ? (
+            </Pressable>
+            {createRule ? (
+              <View style={styles.ruleBox}>
+                <View style={styles.filterRow}>
+                  <Chip
+                    label="Exact"
+                    active={ruleMatchType === 'EXACT'}
+                    onPress={() => setRuleMatchType('EXACT')}
+                  />
+                  <Chip
+                    label="Partial"
+                    active={ruleMatchType === 'PARTIAL'}
+                    onPress={() => setRuleMatchType('PARTIAL')}
+                  />
+                </View>
                 <TextInput
-                  style={styles.input}
-                  placeholder="Rule match value"
-                  placeholderTextColor={colors.textMuted}
                   value={ruleMatchValue}
                   onChangeText={setRuleMatchValue}
+                  placeholder="Match text"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
                 />
-              ) : null}
-            </SectionCard>
-
-            <SectionCard title="Transaction type">
-              <View style={styles.toggleRow}>
-                {['REGULAR', 'INCOME', 'INTERNAL_TRANSFER'].map((value) => (
-                  <Chip
-                    key={value}
-                    label={
-                      value === 'INTERNAL_TRANSFER'
-                        ? 'Transfer'
-                        : value === 'REGULAR'
-                        ? 'Regular'
-                        : 'Income'
-                    }
-                    active={transactionTypeInput === value}
-                    onPress={() =>
-                      setTransactionTypeInput(value as 'INCOME' | 'INTERNAL_TRANSFER' | 'REGULAR')
-                    }
-                  />
-                ))}
               </View>
-            </SectionCard>
-
-            <SectionCard
-              title="Similar transactions"
-              subtitle={
-                similarCount > 1
-                  ? `${similarCount - 1} similar transactions`
-                  : 'No similar transactions'
-              }
-            >
-              {similarRows.length > 0 ? (
-                similarRows.map((item) => (
-                  <View key={item.id} style={styles.similarRow}>
-                    <Text style={styles.detailLabel}>{item.name}</Text>
-                    <Text style={styles.detailValue}>{formatCurrency(item.amount)}</Text>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.helperText}>No similar transactions yet.</Text>
-              )}
-            </SectionCard>
-
-            {createRule ? (
-              <SectionCard title="Rule preview">
-                {rulePreview.length > 0 ? (
-                  rulePreview.map((item) => (
-                    <View key={item.id} style={styles.similarRow}>
-                      <Text style={styles.detailLabel}>{item.name}</Text>
-                      <Text style={styles.detailValue}>{formatCurrency(item.amount)}</Text>
-                    </View>
-                  ))
-                ) : (
-                  <Text style={styles.helperText}>No matches for this rule yet.</Text>
-                )}
-              </SectionCard>
             ) : null}
 
-            <View style={styles.actionRow}>
-              <Pressable
-                style={[styles.primaryButton, savingDetail && styles.buttonDisabled]}
-                onPress={saveDetail}
-                disabled={savingDetail}
-              >
-                <Text style={styles.primaryButtonText}>
-                  {savingDetail ? 'Saving...' : 'Save changes'}
-                </Text>
+            {selected.needsReview ? (
+              <Pressable style={styles.secondaryButton} onPress={markReviewed}>
+                <Text style={styles.secondaryLabel}>Mark reviewed</Text>
               </Pressable>
-            </View>
+            ) : null}
 
-            <SectionCard title="Splits">
-              {splits.length === 0 ? (
-                <Text style={styles.helperText}>No splits yet.</Text>
-              ) : null}
-              {splits.map((split, index) => (
-                <View key={split.id ?? `${split.category}-${index}`} style={styles.splitRow}>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Category"
-                    placeholderTextColor={colors.textMuted}
-                    value={split.category}
-                    onChangeText={(value) => updateSplit(index, 'category', value)}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Amount"
-                    placeholderTextColor={colors.textMuted}
-                    keyboardType="numeric"
-                    value={String(split.amount)}
-                    onChangeText={(value) => updateSplit(index, 'amount', value)}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Note (optional)"
-                    placeholderTextColor={colors.textMuted}
-                    value={split.note ?? ''}
-                    onChangeText={(value) => updateSplit(index, 'note', value)}
-                  />
-                  <Pressable style={styles.removeButton} onPress={() => removeSplit(index)}>
-                    <Text style={styles.removeButtonText}>Remove</Text>
-                  </Pressable>
-                </View>
-              ))}
-              <Pressable style={styles.secondaryButton} onPress={addSplit}>
-                <Text style={styles.secondaryButtonText}>Add split</Text>
-              </Pressable>
-            </SectionCard>
+            <Pressable style={styles.primaryButton} onPress={saveDetail} disabled={savingDetail}>
+              <Text style={styles.primaryLabel}>{savingDetail ? 'Saving...' : 'Save changes'}</Text>
+            </Pressable>
 
-            <SectionCard title="Split totals">
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Allocated</Text>
-                <Text style={styles.detailValue}>{formatCurrency(splitTotal)}</Text>
+            <Text style={styles.detailSectionTitle}>Splits</Text>
+            {splits.length === 0 ? (
+              <Text style={styles.emptyText}>No splits yet.</Text>
+            ) : null}
+            {splits.map((split, index) => (
+              <View key={`${split.category}-${index}`} style={styles.splitRow}>
+                <TextInput
+                  value={split.category}
+                  onChangeText={(value) => {
+                    setSplits((prev) =>
+                      prev.map((item, idx) => (idx === index ? { ...item, category: value } : item))
+                    );
+                  }}
+                  placeholder="Category"
+                  placeholderTextColor={colors.textMuted}
+                  style={[styles.input, styles.splitInput]}
+                />
+                <TextInput
+                  value={split.amount}
+                  onChangeText={(value) => {
+                    setSplits((prev) =>
+                      prev.map((item, idx) => (idx === index ? { ...item, amount: value } : item))
+                    );
+                  }}
+                  placeholder="Amount"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="numeric"
+                  style={[styles.input, styles.splitInput]}
+                />
               </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Remaining</Text>
-                <Text style={styles.detailValue}>{formatCurrency(remainingSplit)}</Text>
-              </View>
-            </SectionCard>
-
-            <View style={styles.actionRow}>
-              <Pressable
-                style={[styles.secondaryButton, splitSaving && styles.buttonDisabled]}
-                onPress={saveSplits}
-                disabled={splitSaving || !canSaveSplits}
-              >
-                <Text style={styles.secondaryButtonText}>
-                  {splitSaving ? 'Saving...' : 'Save splits'}
-                </Text>
-              </Pressable>
-            </View>
+            ))}
+            <Pressable
+              style={styles.secondaryButton}
+              onPress={() => setSplits((prev) => [...prev, { category: '', amount: '' }])}
+            >
+              <Text style={styles.secondaryLabel}>Add split</Text>
+            </Pressable>
+            <Pressable style={styles.primaryButton} onPress={saveSplits} disabled={savingSplits}>
+              <Text style={styles.primaryLabel}>{savingSplits ? 'Saving...' : 'Save splits'}</Text>
+            </Pressable>
           </ScrollView>
-        ) : null}
+        )}
       </ModalSheet>
     </Screen>
   );
@@ -665,7 +474,7 @@ export function TransactionsScreen() {
 const styles = StyleSheet.create({
   content: {
     paddingBottom: 24,
-    gap: 16,
+    gap: 12,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -673,7 +482,7 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     flex: 1,
-    padding: 12,
+    padding: 14,
     borderRadius: 18,
     backgroundColor: 'rgba(18, 24, 46, 0.7)',
     borderWidth: 1,
@@ -681,29 +490,37 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     color: colors.textMuted,
-    fontSize: 11,
+    fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
   summaryValue: {
     color: colors.text,
-    marginTop: 6,
     fontSize: 16,
     fontWeight: '700',
+    marginTop: 6,
   },
-  searchCard: {
-    borderRadius: 16,
-    backgroundColor: 'rgba(18, 24, 46, 0.7)',
+  filtersCard: {
+    backgroundColor: 'rgba(17, 22, 43, 0.7)',
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    paddingHorizontal: 12,
+    gap: 10,
   },
   searchInput: {
-    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 14,
+    paddingHorizontal: 12,
     paddingVertical: 10,
+    color: colors.text,
+    backgroundColor: 'rgba(9, 13, 27, 0.7)',
   },
   filterRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   loadingCard: {
     flexDirection: 'row',
@@ -744,149 +561,121 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 16,
-    backgroundColor: 'rgba(18, 24, 46, 0.7)',
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: 'rgba(15, 20, 40, 0.6)',
     borderWidth: 1,
     borderColor: colors.cardBorder,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  rowMeta: {
+  meta: {
     flex: 1,
-    paddingRight: 12,
+    marginRight: 12,
   },
   merchant: {
     color: colors.text,
+    fontSize: 15,
     fontWeight: '600',
-    fontSize: 14,
   },
   category: {
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 4,
   },
-  rowRight: {
-    alignItems: 'flex-end',
-  },
   amount: {
-    fontWeight: '700',
     fontSize: 14,
+    fontWeight: '700',
   },
-  amountNegative: {
-    color: colors.danger,
-  },
-  amountPositive: {
+  positive: {
     color: colors.success,
   },
-  tagRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: 6,
+  negative: {
+    color: colors.danger,
   },
-  tagWarning: {
-    color: colors.accent,
-    fontSize: 11,
-    fontWeight: '600',
+  detailContent: {
+    gap: 12,
   },
-  tagInfo: {
-    color: colors.primary,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  sheetHeader: {
-    marginBottom: 16,
-  },
-  sheetTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  sheetAmount: {
+  detailTitle: {
     color: colors.text,
     fontSize: 18,
     fontWeight: '700',
-    marginTop: 6,
   },
-  sheetMeta: {
-    color: colors.textMuted,
-    marginTop: 4,
-    fontSize: 12,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  detailLabel: {
+  detailSubtitle: {
     color: colors.textMuted,
     fontSize: 12,
   },
-  detailValue: {
+  detailAmount: {
     color: colors.text,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  detailSectionTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 6,
   },
   input: {
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: colors.text,
-    marginTop: 10,
+    backgroundColor: 'rgba(9, 13, 27, 0.7)',
   },
   toggleRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 10,
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  actionRow: {
-    marginTop: 12,
+  toggleButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  toggleLabel: {
+    color: colors.text,
+    fontSize: 12,
+  },
+  ruleBox: {
+    gap: 8,
   },
   primaryButton: {
     backgroundColor: colors.primary,
-    paddingVertical: 12,
     borderRadius: 14,
+    paddingVertical: 10,
     alignItems: 'center',
   },
-  primaryButtonText: {
+  primaryLabel: {
     color: colors.background,
     fontWeight: '700',
   },
   secondaryButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    paddingVertical: 12,
     borderRadius: 14,
+    paddingVertical: 10,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  secondaryButtonText: {
+  secondaryLabel: {
     color: colors.text,
     fontWeight: '600',
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  similarRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  helperText: {
-    color: colors.textMuted,
     fontSize: 12,
   },
   splitRow: {
-    marginTop: 10,
-    gap: 6,
+    flexDirection: 'row',
+    gap: 8,
   },
-  removeButton: {
-    alignSelf: 'flex-start',
-    paddingVertical: 6,
+  splitInput: {
+    flex: 1,
   },
-  removeButtonText: {
-    color: colors.danger,
+  emptyText: {
+    color: colors.textMuted,
     fontSize: 12,
-    fontWeight: '600',
   },
 });

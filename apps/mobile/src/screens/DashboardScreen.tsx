@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
+import ModalSheet from '../components/ModalSheet';
 import { Screen } from '../components/Screen';
 import { apiRequest } from '../lib/api';
 import { colors } from '../theme';
@@ -9,7 +18,9 @@ type OverviewResponse = {
   assetsTotal?: number;
   debtTotal?: number;
   monthDailySpend?: number[];
+  monthDailyIncome?: number[];
   monthSpendTotal?: number;
+  monthBudgetTotal?: number;
   monthDaysElapsed?: number;
   incomeSummary?: {
     actual: number;
@@ -24,6 +35,29 @@ type OverviewResponse = {
     budget: number | null;
   }>;
   categorySummaryLabel?: string;
+  recentTransactions?: Array<{
+    id: string;
+    name: string;
+    category: string;
+    amount: number;
+    isIncome: boolean;
+    date: string;
+  }>;
+  budgetSnapshot?: {
+    essentialsSpend: number;
+    essentialsBudget: number;
+    flexibleSpend: number;
+    flexibleBudget: number;
+    totalBudget: number;
+    totalSpend: number;
+    overBudgetCategories: number;
+  };
+  budgetRecommendations?: string[];
+  connectionStatus?: {
+    state: 'connected' | 'attention' | 'disconnected';
+    title: string;
+    description: string;
+  };
   goals?: Array<{
     id?: string;
     name: string;
@@ -123,6 +157,12 @@ export function DashboardScreen() {
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
+    { role: 'assistant', content: 'Ask me about your spending and I’ll surface insights.' },
+  ]);
 
   useEffect(() => {
     let isMounted = true;
@@ -233,6 +273,37 @@ export function DashboardScreen() {
     };
   }, [overview]);
 
+  const sendMessage = async () => {
+    const trimmed = chatInput.trim();
+    if (!trimmed || chatLoading) return;
+    const nextMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+      ...messages,
+      { role: 'user', content: trimmed },
+    ];
+    setMessages(nextMessages);
+    setChatInput('');
+    setChatLoading(true);
+    try {
+      const response = await apiRequest<{ answer?: string }>('/api/insights/chat', {
+        method: 'POST',
+        body: {
+          messages: nextMessages.slice(-6),
+        },
+      });
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: response.answer ?? 'No insights available yet.' },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'I couldn’t fetch insights right now.' },
+      ]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
   return (
     <Screen title="Dashboard" subtitle="February snapshot and key wins.">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -264,6 +335,13 @@ export function DashboardScreen() {
           ))}
         </View>
 
+        {overview?.connectionStatus && overview.connectionStatus.state !== 'connected' ? (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>{overview.connectionStatus.title}</Text>
+            <Text style={styles.sectionSubtitle}>{overview.connectionStatus.description}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Monthly spend</Text>
@@ -291,6 +369,102 @@ export function DashboardScreen() {
 
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Transactions snapshot</Text>
+            <Text style={styles.sectionSubtitle}>Recent activity</Text>
+          </View>
+          {(overview?.recentTransactions ?? []).length === 0 ? (
+            <Text style={styles.emptyText}>No recent transactions yet.</Text>
+          ) : (
+            overview?.recentTransactions?.map((tx) => (
+              <View key={tx.id} style={styles.snapshotRow}>
+                <View>
+                  <Text style={styles.snapshotName}>{tx.name}</Text>
+                  <Text style={styles.snapshotMeta}>{tx.category} · {tx.date}</Text>
+                </View>
+                <Text style={[styles.snapshotAmount, tx.isIncome ? styles.positive : styles.negative]}>
+                  {tx.isIncome ? '+' : '-'}{formatCurrency(tx.amount)}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Income forecast</Text>
+            <Text style={styles.sectionSubtitle}>Month-to-date income</Text>
+          </View>
+          <View style={styles.forecastRow}>
+            <Text style={styles.forecastValue}>{formatCurrency(overview?.incomeSummary?.actual ?? 0)}</Text>
+            <Text style={styles.forecastMeta}>
+              of {formatCurrency(overview?.incomeSummary?.expected ?? 0)} expected
+            </Text>
+          </View>
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  width: `${Math.min(100, Math.round((overview?.incomeSummary?.progress ?? 0) * 100))}%`,
+                },
+              ]}
+            />
+          </View>
+          <Text style={styles.forecastMeta}>
+            {(overview?.incomeSummary?.expected ?? 0) > 0
+              ? `${(overview?.incomeSummary?.variance ?? 0) >= 0 ? '+' : '-'}${formatCurrency(
+                  Math.abs(overview?.incomeSummary?.variance ?? 0)
+                )} vs expected`
+              : 'No forecast yet'}
+          </Text>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Assets & debt</Text>
+            <Text style={styles.sectionSubtitle}>Across linked accounts</Text>
+          </View>
+          <View style={styles.assetRow}>
+            <View style={styles.assetCard}>
+              <Text style={styles.assetLabel}>Assets</Text>
+              <Text style={styles.assetValue}>{formatCurrency(overview?.assetsTotal ?? 0)}</Text>
+            </View>
+            <View style={styles.assetCard}>
+              <Text style={styles.assetLabel}>Debt</Text>
+              <Text style={styles.assetValue}>{formatCurrency(overview?.debtTotal ?? 0)}</Text>
+            </View>
+          </View>
+        </View>
+
+        {overview?.budgetSnapshot ? (
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Budget snapshot</Text>
+              <Text style={styles.sectionSubtitle}>Essentials vs flexible</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Essentials</Text>
+              <Text style={styles.detailValue}>
+                {formatCurrency(overview.budgetSnapshot.essentialsSpend)} / {formatCurrency(overview.budgetSnapshot.essentialsBudget)}
+              </Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Flexible</Text>
+              <Text style={styles.detailValue}>
+                {formatCurrency(overview.budgetSnapshot.flexibleSpend)} / {formatCurrency(overview.budgetSnapshot.flexibleBudget)}
+              </Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Total</Text>
+              <Text style={styles.detailValue}>
+                {formatCurrency(overview.budgetSnapshot.totalSpend)} / {formatCurrency(overview.budgetSnapshot.totalBudget)}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Top categories</Text>
             <Text style={styles.sectionSubtitle}>Most active this month</Text>
           </View>
@@ -306,6 +480,15 @@ export function DashboardScreen() {
             </View>
           ))}
         </View>
+
+        {overview?.budgetRecommendations && overview.budgetRecommendations.length > 0 ? (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Budget recommendations</Text>
+            {overview.budgetRecommendations.map((item) => (
+              <Text key={item} style={styles.recommendationText}>{item}</Text>
+            ))}
+          </View>
+        ) : null}
 
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
@@ -333,8 +516,48 @@ export function DashboardScreen() {
             <Text style={styles.aiTag}>Next step</Text>
             <Text style={styles.aiAction}>{aiSummary.action}</Text>
           </View>
+          <Pressable style={styles.chatButton} onPress={() => setChatOpen(true)}>
+            <Text style={styles.chatButtonLabel}>Open chat coach</Text>
+          </Pressable>
         </View>
       </ScrollView>
+
+      <ModalSheet visible={chatOpen} onClose={() => setChatOpen(false)}>
+        <Text style={styles.modalTitle}>AI spending insights</Text>
+        <View style={styles.chatList}>
+          {messages.map((message, index) => (
+            <View
+              key={`${message.role}-${index}`}
+              style={[
+                styles.chatBubble,
+                message.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.chatText,
+                  message.role === 'user' ? styles.chatTextUser : styles.chatTextAssistant,
+                ]}
+              >
+                {message.content}
+              </Text>
+            </View>
+          ))}
+          {chatLoading ? <Text style={styles.chatLoading}>Thinking…</Text> : null}
+        </View>
+        <View style={styles.chatInputRow}>
+          <TextInput
+            value={chatInput}
+            onChangeText={setChatInput}
+            placeholder="Ask about your spending..."
+            placeholderTextColor={colors.textMuted}
+            style={styles.chatInput}
+          />
+          <Pressable style={styles.chatSend} onPress={sendMessage} disabled={chatLoading}>
+            <Text style={styles.chatSendLabel}>{chatLoading ? '...' : 'Send'}</Text>
+          </Pressable>
+        </View>
+      </ModalSheet>
     </Screen>
   );
 }
@@ -420,6 +643,92 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 4,
+  },
+  emptyText: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  snapshotRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  snapshotName: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  snapshotMeta: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  snapshotAmount: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  forecastRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 8,
+  },
+  forecastValue: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  forecastMeta: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+  },
+  assetRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  assetCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 14,
+    padding: 12,
+  },
+  assetLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  assetValue: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  detailLabel: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  detailValue: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '600',
   },
   chart: {
     flexDirection: 'row',
@@ -540,6 +849,19 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
   },
+  chatButton: {
+    marginTop: 14,
+    borderRadius: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  chatButtonLabel: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   aiTag: {
     color: colors.accent,
     fontSize: 11,
@@ -551,5 +873,73 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginTop: 4,
+  },
+  recommendationText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 6,
+  },
+  modalTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  chatList: {
+    gap: 8,
+    maxHeight: 320,
+    marginBottom: 12,
+  },
+  chatBubble: {
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    maxWidth: '85%',
+  },
+  chatBubbleUser: {
+    alignSelf: 'flex-end',
+    backgroundColor: colors.primary,
+  },
+  chatBubbleAssistant: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  chatText: {
+    fontSize: 12,
+  },
+  chatTextUser: {
+    color: colors.background,
+  },
+  chatTextAssistant: {
+    color: colors.text,
+  },
+  chatLoading: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  chatInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  chatInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    color: colors.text,
+    backgroundColor: 'rgba(9, 13, 27, 0.7)',
+  },
+  chatSend: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  chatSendLabel: {
+    color: colors.background,
+    fontWeight: '700',
   },
 });

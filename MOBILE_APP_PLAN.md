@@ -89,6 +89,8 @@
 - Added transaction detail sheet with category edit and split actions.
 - Built category editor with exact/partial rules and similar-transaction preview.
 - Built split transaction flow with split totals + delta validation.
+- Wired Transactions to the real API with Supabase bearer auth (list, detail, category updates, rules, splits).
+- Added live category list and transaction type selector.
 
 ---
 

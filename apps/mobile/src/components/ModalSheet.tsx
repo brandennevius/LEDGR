@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
-import { theme } from '../theme';
+import { colors } from '../theme';
 
 type ModalSheetProps = {
   visible: boolean;
@@ -30,12 +30,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(9, 12, 18, 0.65)',
   },
   sheet: {
-    backgroundColor: theme.colors.card,
+    backgroundColor: colors.surface,
     padding: 20,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: colors.cardBorder,
     maxHeight: '85%',
   },
 });
