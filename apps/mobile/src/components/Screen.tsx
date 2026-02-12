@@ -1,0 +1,68 @@
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { ReactNode } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { colors, gradients } from '../theme';
+
+type ScreenProps = {
+  title?: string;
+  subtitle?: string;
+  children?: ReactNode;
+};
+
+export function Screen({ title, subtitle, children }: ScreenProps) {
+  return (
+    <LinearGradient colors={gradients.app} style={styles.root}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+        {(title || subtitle) && (
+          <View style={styles.header}>
+            {title ? <Text style={styles.title}>{title}</Text> : null}
+            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          </View>
+        )}
+        <BlurView intensity={18} tint="dark" style={styles.content}>
+          <View style={styles.inner}>{children}</View>
+        </BlurView>
+      </SafeAreaView>
+    </LinearGradient>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+  safe: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  header: {
+    marginBottom: 16,
+  },
+  title: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  subtitle: {
+    color: colors.textMuted,
+    marginTop: 6,
+    fontSize: 14,
+  },
+  content: {
+    flex: 1,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    overflow: 'hidden',
+  },
+  inner: {
+    flex: 1,
+    padding: 20,
+    backgroundColor: colors.card,
+  },
+});
