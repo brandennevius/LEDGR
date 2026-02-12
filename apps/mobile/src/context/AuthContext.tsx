@@ -71,8 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithOAuth = useCallback(async (provider: 'google' | 'apple') => {
-    // Expo Go must use exp://.../--/auth/callback; production build uses custom scheme.
-    const redirectTo = Linking.createURL('auth/callback');
+    // Allow explicit override so Supabase allow-list and runtime callback are guaranteed to match.
+    const redirectTo =
+      process.env.EXPO_PUBLIC_SUPABASE_REDIRECT_URL ??
+      Linking.createURL('auth/callback');
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
