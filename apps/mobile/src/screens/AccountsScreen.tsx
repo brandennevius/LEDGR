@@ -7,8 +7,14 @@ import {
   Text,
   View,
 } from 'react-native';
+import {
+  create as createPlaidLink,
+  destroy as destroyPlaidLink,
+  open as openPlaidLink,
+  type LinkExit,
+  type LinkSuccess,
+} from 'react-native-plaid-link-sdk';
 
-import ModalSheet from '../components/ModalSheet';
 import { Screen } from '../components/Screen';
 import { apiRequest } from '../lib/api';
 import { colors } from '../theme';
@@ -52,11 +58,10 @@ export function AccountsScreen() {
   const [clientName, setClientName] = useState('');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [linking, setLinking] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removingAll, setRemovingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [linkToken, setLinkToken] = useState<string | null>(null);
-  const [linkOpen, setLinkOpen] = useState(false);
 
   const load = async () => {
     try {
@@ -81,20 +86,24 @@ export function AccountsScreen() {
   }, []);
 
   const connectionCounts = useMemo(() => {
+    const itemIdByInternal = new Map(connections.map((connection) => [connection.id, connection.itemId]));
     const map = new Map<string, number>();
     connections.forEach((connection) => {
       map.set(connection.itemId, 0);
     });
     accounts.forEach((account) => {
       if (!account.plaidItemId) return;
-      const count = map.get(account.plaidItemId) ?? 0;
-      map.set(account.plaidItemId, count + 1);
+      const itemId = itemIdByInternal.get(account.plaidItemId);
+      if (!itemId) return;
+      const count = map.get(itemId) ?? 0;
+      map.set(itemId, count + 1);
     });
     return map;
   }, [accounts, connections]);
 
   const syncNow = async () => {
     setSyncing(true);
+    setError(null);
     try {
       await apiRequest('/api/plaid/accounts/sync', { method: 'POST' });
       await apiRequest('/api/plaid/transactions/sync', { method: 'POST' });
@@ -132,15 +141,35 @@ export function AccountsScreen() {
   };
 
   const startLink = async () => {
+    setLinking(true);
+    setError(null);
     try {
       const data = await apiRequest<LinkTokenResponse>('/api/plaid/link-token', {
         method: 'POST',
         body: { mode: 'create' },
       });
-      setLinkToken(data.link_token);
-      setLinkOpen(true);
-    } catch (err) {
-      setError('Unable to start Plaid Link.');
+      await destroyPlaidLink();
+      createPlaidLink({ token: data.link_token });
+      openPlaidLink({
+        onSuccess: async (success: LinkSuccess) => {
+          await apiRequest('/api/plaid/exchange', {
+            method: 'POST',
+            body: { public_token: success.publicToken },
+          });
+          await apiRequest('/api/plaid/accounts/sync', { method: 'POST' });
+          await apiRequest('/api/plaid/transactions/sync', { method: 'POST' });
+          await load();
+        },
+        onExit: (exit: LinkExit) => {
+          if (exit.error?.displayMessage || exit.error?.errorMessage) {
+            setError(exit.error.displayMessage ?? exit.error.errorMessage);
+          }
+        },
+      });
+    } catch {
+      setError('Unable to start Plaid Link on this build.');
+    } finally {
+      setLinking(false);
     }
   };
 
@@ -155,7 +184,7 @@ export function AccountsScreen() {
             </Text>
           </View>
           <Pressable style={styles.primaryButton} onPress={startLink}>
-            <Text style={styles.primaryLabel}>Connect</Text>
+            <Text style={styles.primaryLabel}>{linking ? 'Opening...' : 'Connect'}</Text>
           </Pressable>
         </View>
 
@@ -230,23 +259,6 @@ export function AccountsScreen() {
           )}
         </View>
       </ScrollView>
-
-      <ModalSheet visible={linkOpen} onClose={() => setLinkOpen(false)}>
-        <Text style={styles.modalTitle}>Finish connecting your bank</Text>
-        <Text style={styles.modalBody}>
-          Plaid Link needs a native integration step in the mobile app. A link token has
-          been created for this session.
-        </Text>
-        {linkToken ? (
-          <View style={styles.tokenBox}>
-            <Text style={styles.tokenLabel}>Link token</Text>
-            <Text style={styles.tokenValue}>{linkToken}</Text>
-          </View>
-        ) : null}
-        <Pressable style={styles.primaryButton} onPress={() => setLinkOpen(false)}>
-          <Text style={styles.primaryLabel}>Close</Text>
-        </Pressable>
-      </ModalSheet>
     </Screen>
   );
 }
@@ -388,32 +400,5 @@ const styles = StyleSheet.create({
   removeLabel: {
     color: colors.textMuted,
     fontSize: 11,
-  },
-  modalTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  modalBody: {
-    color: colors.textMuted,
-    fontSize: 12,
-    marginBottom: 12,
-  },
-  tokenBox: {
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  tokenLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    marginBottom: 6,
-  },
-  tokenValue: {
-    color: colors.text,
-    fontSize: 12,
   },
 });

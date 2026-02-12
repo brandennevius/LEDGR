@@ -1,9 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Svg, { G, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 import { Screen } from '../components/Screen';
 import { apiRequest } from '../lib/api';
 import { colors } from '../theme';
+
+type SankeyNode = {
+  id: string;
+  label: string;
+  value: number;
+  column: number;
+  color: string;
+};
+
+type SankeyLink = {
+  source: string;
+  target: string;
+  value: number;
+  color: string;
+};
 
 type DistributionResponse = {
   clientName: string;
@@ -16,6 +32,14 @@ type DistributionResponse = {
   internalTransferTotal: number;
   savings: number;
   categories: Array<{ name: string; value: number }>;
+  nodes: SankeyNode[];
+  links: SankeyLink[];
+};
+
+type LayoutNode = SankeyNode & {
+  x: number;
+  y: number;
+  height: number;
 };
 
 const formatCurrency = (value: number) =>
@@ -24,6 +48,9 @@ const formatCurrency = (value: number) =>
     currency: 'USD',
     maximumFractionDigits: 0,
   });
+
+const truncateLabel = (value: string, max = 16) =>
+  value.length > max ? `${value.slice(0, max - 1)}...` : value;
 
 export function DistributionScreen() {
   const [data, setData] = useState<DistributionResponse | null>(null);
@@ -80,6 +107,108 @@ export function DistributionScreen() {
     return Math.max(...data.categories.map((item) => item.value), 1);
   }, [data]);
 
+  const chart = useMemo(() => {
+    const nodes = data?.nodes ?? [];
+    const links = data?.links ?? [];
+    const width = 940;
+    const height = 540;
+    const nodeWidth = 18;
+    const padding = 12;
+    const topBottom = 20;
+
+    if (!nodes.length) {
+      return {
+        width,
+        height,
+        nodeWidth,
+        nodes: [] as LayoutNode[],
+        links: [] as Array<{ id: string; path: string; thickness: number; color: string }>,
+      };
+    }
+
+    const columns = Array.from(new Set(nodes.map((node) => node.column))).sort((a, b) => a - b);
+    const leftMargin = 120;
+    const rightMargin = 180;
+    const usableWidth = Math.max(1, width - leftMargin - rightMargin);
+    const gap = columns.length > 1 ? usableWidth / (columns.length - 1) : 0;
+    const columnX = columns.map((_, index) => leftMargin + gap * index);
+
+    const columnNodes = columns.map((column) => nodes.filter((node) => node.column === column));
+    const columnTotals = columnNodes.map((group) => group.reduce((acc, node) => acc + node.value, 0));
+    const maxColumnTotal = Math.max(1, ...columnTotals);
+    const maxNodeCount = Math.max(1, ...columnNodes.map((group) => group.length));
+
+    const scale = (height - topBottom * 2 - padding * (maxNodeCount - 1)) / maxColumnTotal;
+
+    const layoutNodes: LayoutNode[] = [];
+
+    columnNodes.forEach((group, columnIndex) => {
+      const sorted = [...group].sort((a, b) => b.value - a.value);
+      const totalHeight =
+        sorted.reduce((acc, node) => acc + node.value * scale, 0) + padding * (sorted.length - 1);
+      let cursor = (height - totalHeight) / 2;
+
+      sorted.forEach((node) => {
+        const nodeHeight = Math.max(4, node.value * scale);
+        layoutNodes.push({
+          ...node,
+          x: columnX[columnIndex] ?? leftMargin,
+          y: cursor,
+          height: nodeHeight,
+        });
+        cursor += nodeHeight + padding;
+      });
+    });
+
+    const nodeMap = new Map(layoutNodes.map((node) => [node.id, node]));
+    const outgoing = new Map<string, number>();
+    const incoming = new Map<string, number>();
+
+    const layoutLinks = links
+      .map((link) => {
+        const source = nodeMap.get(link.source);
+        const target = nodeMap.get(link.target);
+        if (!source || !target) {
+          return null;
+        }
+
+        const thickness = Math.max(1, link.value * scale);
+        const sourceOffset = outgoing.get(source.id) ?? 0;
+        const targetOffset = incoming.get(target.id) ?? 0;
+
+        const sourceY = source.y + sourceOffset + thickness / 2;
+        const targetY = target.y + targetOffset + thickness / 2;
+
+        outgoing.set(source.id, sourceOffset + thickness);
+        incoming.set(target.id, targetOffset + thickness);
+
+        const startX = source.x + nodeWidth;
+        const endX = target.x;
+        const dx = (endX - startX) * 0.45;
+        const path = `M ${startX} ${sourceY} C ${startX + dx} ${sourceY}, ${endX - dx} ${targetY}, ${endX} ${targetY}`;
+
+        return {
+          id: `${link.source}-${link.target}`,
+          path,
+          thickness,
+          color: link.color,
+        };
+      })
+      .filter((item): item is { id: string; path: string; thickness: number; color: string } =>
+        Boolean(item)
+      );
+
+    return {
+      width,
+      height,
+      nodeWidth,
+      nodes: layoutNodes,
+      links: layoutLinks,
+    };
+  }, [data]);
+
+  const hasChartData = chart.nodes.length > 0;
+
   return (
     <Screen title="Distribution" subtitle="Flow of funds across this month.">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -101,8 +230,54 @@ export function DistributionScreen() {
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Flow breakdown</Text>
+          <Text style={styles.sectionTitle}>Flow map</Text>
           <Text style={styles.sectionSubtitle}>{data?.rangeLabel ?? 'This month'}</Text>
+          <View style={styles.chartWrapper}>
+            {hasChartData ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <Svg width={chart.width} height={chart.height}>
+                  {chart.links.map((link) => (
+                    <Path
+                      key={link.id}
+                      d={link.path}
+                      fill="none"
+                      stroke={link.color}
+                      strokeWidth={Math.max(1.5, link.thickness)}
+                      strokeLinecap="round"
+                      opacity={0.7}
+                    />
+                  ))}
+                  {chart.nodes.map((node) => (
+                    <G key={node.id}>
+                      <Rect
+                        x={node.x}
+                        y={node.y}
+                        width={chart.nodeWidth}
+                        height={node.height}
+                        rx={5}
+                        fill={node.color}
+                      />
+                      <SvgText
+                        x={node.x + chart.nodeWidth + 6}
+                        y={node.y + 12}
+                        fill={colors.text}
+                        fontSize={10}
+                        fontWeight="600"
+                      >
+                        {truncateLabel(node.label)}
+                      </SvgText>
+                    </G>
+                  ))}
+                </Svg>
+              </ScrollView>
+            ) : (
+              <Text style={styles.emptyText}>Connect accounts to see your distribution flow.</Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Flow breakdown</Text>
           <View style={styles.flowRow}>
             <View style={styles.flowItem}>
               <Text style={styles.flowLabel}>Investments</Text>
@@ -212,6 +387,16 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 4,
+  },
+  chartWrapper: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(9, 13, 27, 0.45)',
+    overflow: 'hidden',
+    minHeight: 320,
+    paddingVertical: 8,
   },
   flowRow: {
     flexDirection: 'row',

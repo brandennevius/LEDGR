@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 
 import ModalSheet from '../components/ModalSheet';
 import { Screen } from '../components/Screen';
@@ -53,6 +54,20 @@ type OverviewResponse = {
     overBudgetCategories: number;
   };
   budgetRecommendations?: string[];
+  categoryBudgets?: Array<{
+    name: string;
+    essential: boolean;
+    budget: number;
+    spend: number;
+    projected: number;
+    remaining: number;
+    status: 'ok' | 'risk' | 'over';
+  }>;
+  debtProjection?: {
+    remaining: number;
+    basePayment: number;
+    monthsRemaining: number;
+  };
   connectionStatus?: {
     state: 'connected' | 'attention' | 'disconnected';
     title: string;
@@ -163,6 +178,8 @@ export function DashboardScreen() {
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
     { role: 'assistant', content: 'Ask me about your spending and I’ll surface insights.' },
   ]);
+  const [selectedBudgetName, setSelectedBudgetName] = useState('');
+  const [sliderValue, setSliderValue] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -272,6 +289,45 @@ export function DashboardScreen() {
       action: overview.snapshot.aiActions?.[0] ?? 'Review your latest insights.',
     };
   }, [overview]);
+
+  const flexibleBudgets = useMemo(
+    () =>
+      (overview?.categoryBudgets ?? []).filter(
+        (item) => !item.essential && (item.budget > 0 || item.spend > 0)
+      ),
+    [overview]
+  );
+
+  useEffect(() => {
+    if (!flexibleBudgets.length) return;
+    if (!selectedBudgetName) {
+      const first = flexibleBudgets[0];
+      setSelectedBudgetName(first.name);
+      setSliderValue(first.budget || first.spend || 0);
+      return;
+    }
+    const match = flexibleBudgets.find((item) => item.name === selectedBudgetName);
+    if (!match) {
+      const first = flexibleBudgets[0];
+      setSelectedBudgetName(first.name);
+      setSliderValue(first.budget || first.spend || 0);
+    }
+  }, [flexibleBudgets, selectedBudgetName]);
+
+  const selectedBudget = flexibleBudgets.find((item) => item.name === selectedBudgetName);
+  const sliderMax = selectedBudget
+    ? Math.max(selectedBudget.spend, selectedBudget.budget || 0, 100) * 1.5
+    : 0;
+  const sliderMin = 0;
+  const baselineSpend = selectedBudget?.spend ?? 0;
+  const changeAmount = baselineSpend - sliderValue;
+  const basePayment = overview?.debtProjection?.basePayment ?? 0;
+  const debtRemaining = overview?.debtProjection?.remaining ?? 0;
+  const monthsNow = overview?.debtProjection?.monthsRemaining ?? 0;
+  const newPayment = basePayment + changeAmount;
+  const monthsWith =
+    debtRemaining > 0 && newPayment > 0 ? Math.ceil(debtRemaining / newPayment) : 0;
+  const monthsDelta = monthsNow && monthsWith ? monthsNow - monthsWith : 0;
 
   const sendMessage = async () => {
     const trimmed = chatInput.trim();
@@ -489,6 +545,71 @@ export function DashboardScreen() {
             ))}
           </View>
         ) : null}
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Budget tuning</Text>
+            <Text style={styles.sectionSubtitle}>
+              Adjust a flexible category and see payoff timing change.
+            </Text>
+          </View>
+          {flexibleBudgets.length > 0 ? (
+            <View style={styles.tuningCard}>
+              <View style={styles.filterRow}>
+                {flexibleBudgets.slice(0, 4).map((item) => (
+                  <Pressable
+                    key={item.name}
+                    style={[
+                      styles.tuningChip,
+                      selectedBudgetName === item.name && styles.tuningChipActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedBudgetName(item.name);
+                      setSliderValue(item.budget || item.spend || 0);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.tuningChipLabel,
+                        selectedBudgetName === item.name && styles.tuningChipLabelActive,
+                      ]}
+                    >
+                      {item.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={styles.tuningScaleRow}>
+                <Text style={styles.tuningScaleLabel}>{formatCurrency(sliderMin)}</Text>
+                <Text style={styles.tuningScaleValue}>{formatCurrency(sliderValue)}</Text>
+                <Text style={styles.tuningScaleLabel}>{formatCurrency(Math.round(sliderMax))}</Text>
+              </View>
+              <Slider
+                minimumValue={sliderMin}
+                maximumValue={sliderMax || 1}
+                value={sliderValue}
+                onValueChange={setSliderValue}
+                step={10}
+                minimumTrackTintColor={colors.primary}
+                maximumTrackTintColor={colors.cardBorder}
+                thumbTintColor={colors.primary}
+              />
+              <Text style={styles.tuningSummary}>
+                {debtRemaining <= 0
+                  ? 'Add a debt payoff goal to see projections.'
+                  : newPayment <= 0
+                  ? 'Lowering this too much removes your debt payoff signal.'
+                  : monthsDelta > 0
+                  ? `With ${formatCurrency(Math.abs(changeAmount))} freed up monthly, you finish about ${monthsDelta} months sooner.`
+                  : monthsDelta < 0
+                  ? `With ${formatCurrency(Math.abs(changeAmount))} added monthly spend, payoff moves about ${Math.abs(monthsDelta)} months later.`
+                  : 'This setting keeps your debt payoff pace unchanged.'}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>Add flexible budgets to enable payoff tuning.</Text>
+          )}
+        </View>
 
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
@@ -878,6 +999,59 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 6,
+  },
+  tuningCard: {
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tuningChip: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  tuningChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  tuningChipLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  tuningChipLabelActive: {
+    color: colors.background,
+  },
+  tuningScaleRow: {
+    marginTop: 10,
+    marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tuningScaleLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+  },
+  tuningScaleValue: {
+    color: colors.text,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  tuningSummary: {
+    marginTop: 10,
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
   },
   modalTitle: {
     color: colors.text,
