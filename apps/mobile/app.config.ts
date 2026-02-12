@@ -6,6 +6,11 @@ type ConfigContext = {
 };
 
 export default ({ config }: ConfigContext): ExpoConfig => {
+  const bundleIdentifier =
+    process.env.EXPO_IOS_BUNDLE_IDENTIFIER ?? 'com.brandennevius.ledgr';
+  const androidPackage =
+    process.env.EXPO_ANDROID_PACKAGE ?? 'com.brandennevius.ledgr';
+
   return {
     ...config,
     name: 'Financial Coaching',
@@ -22,8 +27,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     ios: {
       supportsTablet: true,
+      bundleIdentifier,
     },
     android: {
+      package: androidPackage,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#0B0F1E',
@@ -39,6 +46,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL,
+      supabaseRedirectUrl: process.env.EXPO_PUBLIC_SUPABASE_REDIRECT_URL,
     },
   };
 };

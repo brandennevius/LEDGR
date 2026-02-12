@@ -1,4 +1,6 @@
 import * as Linking from 'expo-linking';
+import * as AuthSession from 'expo-auth-session';
+import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import {
   createContext,
@@ -71,13 +73,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithOAuth = useCallback(async (provider: 'google' | 'apple') => {
-    // Allow explicit override so Supabase allow-list and runtime callback are guaranteed to match.
+    if (Constants.appOwnership === 'expo') {
+      return 'Google/Apple OAuth requires a development build. Run `npm run run:ios` (or `run:android`) and then `npm run dev-client`.';
+    }
+
+    const fallbackRedirect = AuthSession.makeRedirectUri({
+      path: 'auth/callback',
+      scheme: 'financialcoaching',
+      native: 'financialcoaching://auth/callback',
+    });
     const redirectTo =
-      process.env.EXPO_PUBLIC_SUPABASE_REDIRECT_URL ??
-      Linking.createURL('auth/callback');
+      process.env.EXPO_PUBLIC_SUPABASE_REDIRECT_URL ?? fallbackRedirect;
 
     console.log('[auth] starting oauth', {
       provider,
+      appOwnership: Constants.appOwnership,
       redirectTo,
     });
 
@@ -99,18 +109,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return 'Unable to start OAuth flow.';
     }
 
-    let oauthUrl = data.url;
-    try {
-      const parsedUrl = new URL(data.url);
-      parsedUrl.searchParams.set('redirect_to', redirectTo);
-      oauthUrl = parsedUrl.toString();
-    } catch (urlError) {
-      console.log('[auth] failed to normalize oauth url', urlError);
-    }
+    console.log('[auth] oauth url', data.url);
 
-    console.log('[auth] oauth url', oauthUrl);
-
-    const result = await WebBrowser.openAuthSessionAsync(oauthUrl, redirectTo);
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
     console.log('[auth] openAuthSession result', result);
 
     if (result.type !== 'success' || !result.url) {
