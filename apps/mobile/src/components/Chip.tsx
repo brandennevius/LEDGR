@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
 
-import { theme } from '../theme';
+import { colors } from '../theme';
 
 type ChipProps = {
   label: string;
@@ -30,12 +30,12 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   chipActive: {
-    backgroundColor: theme.colors.accent,
-    borderColor: theme.colors.accent,
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   chipInactive: {
-    backgroundColor: theme.colors.cardStrong,
-    borderColor: theme.colors.border,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: colors.cardBorder,
   },
   label: {
     fontSize: 12,
@@ -45,6 +45,6 @@ const styles = StyleSheet.create({
     color: '#0B0E14',
   },
   labelInactive: {
-    color: theme.colors.muted,
+    color: colors.textMuted,
   },
 });

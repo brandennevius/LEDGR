@@ -1,10 +1,11 @@
-import type { Theme } from '@react-navigation/native';
+import { DarkTheme, type Theme } from '@react-navigation/native';
 
 import { colors } from './colors';
 
 export const navigationTheme: Theme = {
-  dark: true,
+  ...DarkTheme,
   colors: {
+    ...DarkTheme.colors,
     primary: colors.primary,
     background: colors.background,
     card: colors.surface,

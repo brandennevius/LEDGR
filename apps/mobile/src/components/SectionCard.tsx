@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { theme } from '../theme';
+import { colors } from '../theme';
 
 type SectionCardProps = {
   title: string;
@@ -23,24 +23,24 @@ export default function SectionCard({ title, subtitle, children }: SectionCardPr
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.lg,
+    backgroundColor: 'rgba(18, 24, 46, 0.7)',
+    borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: colors.cardBorder,
     marginBottom: 16,
   },
   header: {
     marginBottom: 12,
   },
   title: {
-    color: theme.colors.text,
+    color: colors.text,
     fontSize: 16,
     fontWeight: '700',
   },
   subtitle: {
     marginTop: 4,
-    color: theme.colors.muted,
+    color: colors.textMuted,
     fontSize: 12,
   },
   body: {
