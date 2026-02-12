@@ -6,11 +6,20 @@ import PlaidLinkButton from "@/components/PlaidLinkButton";
 
 type Account = {
   id: string;
+  plaidItemId?: string;
   name: string;
   type: string;
   mask?: string;
   institutionName?: string;
   balance: number;
+};
+
+type Connection = {
+  id: string;
+  itemId: string;
+  institutionName?: string;
+  status: string;
+  updatedAt: string;
 };
 
 const formatCurrency = (value: number) =>
@@ -23,14 +32,32 @@ const formatCurrency = (value: number) =>
 export default function AccountsClient({
   clientName,
   accounts,
+  connections,
 }: {
   clientName: string;
   accounts: Account[];
+  connections: Connection[];
 }) {
   const [items, setItems] = useState(accounts);
+  const [connectionsState, setConnectionsState] = useState(connections);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removingAll, setRemovingAll] = useState(false);
   const [syncing, setSyncing] = useState(false);
+
+  const itemIdByInternal = new Map(
+    connectionsState.map((connection) => [connection.id, connection.itemId])
+  );
+  const connectionCounts = new Map<string, number>();
+  connectionsState.forEach((connection) => {
+    connectionCounts.set(connection.itemId, 0);
+  });
+
+  items.forEach((account) => {
+    if (!account.plaidItemId) return;
+    const itemId = itemIdByInternal.get(account.plaidItemId);
+    if (!itemId) return;
+    connectionCounts.set(itemId, (connectionCounts.get(itemId) ?? 0) + 1);
+  });
 
   const removeAccount = async (accountId: string) => {
     setRemovingId(accountId);
@@ -51,11 +78,13 @@ export default function AccountsClient({
       body: JSON.stringify({ all: true }),
     });
     setItems([]);
+    setConnectionsState([]);
     setRemovingAll(false);
   };
 
   const syncNow = async () => {
     setSyncing(true);
+    await fetch("/api/plaid/accounts/sync", { method: "POST" });
     await fetch("/api/plaid/transactions/sync", { method: "POST" });
     setSyncing(false);
   };
@@ -75,7 +104,8 @@ export default function AccountsClient({
               Manage connected accounts.
             </h1>
             <p className="text-sm text-[color:var(--ink-soft)]">
-              {clientName} · {items.length} accounts
+              {clientName} · {items.length} accounts ·{" "}
+              {connectionsState.length} connections
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -104,6 +134,69 @@ export default function AccountsClient({
             </Link>
           </div>
         </header>
+
+        <section className="rounded-[32px] bg-white/85 p-6 ring-soft">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--ocean)]">
+                Connections
+              </p>
+              <h2 className="font-display text-2xl">
+                Bank logins and sync status.
+              </h2>
+            </div>
+            <PlaidLinkButton label="Add connection" />
+          </div>
+          <div className="mt-5 space-y-3">
+            {connectionsState.length === 0 ? (
+              <div className="rounded-2xl bg-white/70 px-4 py-3 text-xs text-[color:var(--ink-soft)] ring-soft">
+                No connections yet. Link a bank to get started.
+              </div>
+            ) : (
+              connectionsState.map((connection) => (
+                <div
+                  key={connection.id}
+                  className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-white/70 px-4 py-3 ring-soft"
+                >
+                  <div>
+                    <p className="text-sm font-medium">
+                      {connection.institutionName ?? "Bank connection"}
+                    </p>
+                    <p className="text-xs text-[color:var(--ink-soft)]">
+                      Status: {connection.status} ·{" "}
+                      {connectionCounts.get(connection.itemId) ?? 0} accounts
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-[color:var(--ink-soft)]">
+                      Updated {new Date(connection.updatedAt).toLocaleDateString()}
+                    </span>
+                    {connection.status !== "active" ? (
+                      <PlaidLinkButton
+                        mode="update"
+                        itemId={connection.itemId}
+                        label="Reverify"
+                        className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs text-[color:var(--ink-soft)]"
+                        onLinked={async () => {
+                          const refreshed = await fetch(
+                            "/api/plaid/items",
+                            { method: "GET" }
+                          ).catch(() => null);
+                          if (refreshed?.ok) {
+                            const data = await refreshed.json();
+                            if (Array.isArray(data?.items)) {
+                              setConnectionsState(data.items);
+                            }
+                          }
+                        }}
+                      />
+                    ) : null}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
 
         <section className="rounded-[32px] bg-white/85 p-6 ring-soft">
           {items.length === 0 ? (

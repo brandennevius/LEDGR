@@ -29,23 +29,25 @@ export async function POST(request: Request) {
     });
   }
 
-  await prisma.plaidItem.upsert({
+  const accountsResponse = await plaidClient.accountsGet({ access_token: accessToken });
+  const institutionName = accountsResponse.data.item?.institution_name ?? null;
+
+  const plaidItem = await prisma.plaidItem.upsert({
     where: { itemId },
     update: {
       accessToken,
       userId: user.id,
       status: "active",
+      institutionName,
     },
     create: {
       itemId,
       accessToken,
       userId: user.id,
       status: "active",
+      institutionName,
     },
   });
-
-  const accountsResponse = await plaidClient.accountsGet({ access_token: accessToken });
-  const institutionName = accountsResponse.data.item?.institution_name ?? null;
 
   for (const account of accountsResponse.data.accounts) {
     await prisma.account.upsert({
@@ -59,6 +61,7 @@ export async function POST(request: Request) {
         currentBalance: account.balances.current ?? null,
         availableBalance: account.balances.available ?? null,
         isoCurrencyCode: account.balances.iso_currency_code ?? null,
+        plaidItemId: plaidItem.id,
         userId: user.id,
       },
       create: {
@@ -72,6 +75,7 @@ export async function POST(request: Request) {
         currentBalance: account.balances.current ?? null,
         availableBalance: account.balances.available ?? null,
         isoCurrencyCode: account.balances.iso_currency_code ?? null,
+        plaidItemId: plaidItem.id,
       },
     });
   }

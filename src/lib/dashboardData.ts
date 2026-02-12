@@ -205,7 +205,7 @@ const serializeGoal = (goal: {
 });
 
 export const getClientOverviewData = async (user: User) => {
-  let [accounts, goals, transactions, categorySettings, activeItem] =
+  let [accounts, goals, transactions, categorySettings, plaidItems] =
     await Promise.all([
     prisma.account.findMany({ where: { userId: user.id } }),
     prisma.goal.findMany({ where: { userId: user.id } }),
@@ -214,8 +214,9 @@ export const getClientOverviewData = async (user: User) => {
       include: { splits: true },
     }),
     prisma.category.findMany({ where: { userId: user.id } }),
-    prisma.plaidItem.findFirst({
-      where: { userId: user.id, status: "active" },
+    prisma.plaidItem.findMany({
+      where: { userId: user.id },
+      orderBy: { updatedAt: "desc" },
     }),
   ]);
   const latestReview = await prisma.coachReview.findFirst({
@@ -335,10 +336,12 @@ export const getClientOverviewData = async (user: User) => {
       clientId: user.id,
       snapshot,
       goals: (goals.length ? goals : mockGoals).map(serializeGoal),
-      accounts: mockAccounts.map((account) => ({
-        id: account.id,
-        name: account.name,
-        type: account.type,
+      plaidItems: [],
+    accounts: mockAccounts.map((account) => ({
+      id: account.id,
+      plaidItemId: undefined,
+      name: account.name,
+      type: account.type,
         mask: undefined,
         institutionName: "Demo Bank",
         balance: account.balance,
@@ -644,29 +647,49 @@ export const getClientOverviewData = async (user: User) => {
     }
   }
 
-  const connectionStatus =
-    activeItem && accounts.length > 0
-      ? { state: "connected" as const, title: "", description: "" }
-      : activeItem
-      ? {
-          state: "attention" as const,
-          title: "We’re having trouble syncing.",
-          description:
-            "Reconnect your bank to keep transactions and balances up to date.",
-        }
-      : {
-          state: "disconnected" as const,
-          title: "Bank connection needed.",
-          description: "Link your accounts to keep data fresh.",
-        };
+  const hasItems = plaidItems.length > 0;
+  const hasActive = plaidItems.some((item) => item.status === "active");
+  const hasAttention = plaidItems.some((item) => item.status === "attention");
+  const hasDisconnected = plaidItems.some(
+    (item) => item.status === "disconnected" || item.status === "inactive"
+  );
+
+  const connectionStatus = !hasItems
+    ? {
+        state: "disconnected" as const,
+        title: "Bank connection needed.",
+        description: "Link your accounts to keep data fresh.",
+      }
+    : hasDisconnected && !hasActive
+    ? {
+        state: "disconnected" as const,
+        title: "Bank connection lost.",
+        description: "Reconnect to restore data sync.",
+      }
+    : hasAttention
+    ? {
+        state: "attention" as const,
+        title: "Action required.",
+        description:
+          "Reconnect your bank to keep transactions and balances up to date.",
+      }
+    : { state: "connected" as const, title: "", description: "" };
 
   return {
     clientName: getDisplayName(user),
     clientId: user.id,
     snapshot,
     goals: (activeGoals.length ? activeGoals : mockGoals).map(serializeGoal),
+    plaidItems: plaidItems.map((item) => ({
+      id: item.id,
+      itemId: item.itemId,
+      institutionName: item.institutionName ?? undefined,
+      status: item.status,
+      updatedAt: item.updatedAt.toISOString(),
+    })),
     accounts: accounts.map((account) => ({
       id: account.id,
+      plaidItemId: account.plaidItemId ?? undefined,
       name: account.name,
       type: account.type,
       mask: account.mask ?? undefined,

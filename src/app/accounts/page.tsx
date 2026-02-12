@@ -9,6 +9,10 @@ export default async function AccountsPage() {
   const data = await getClientOverviewData(user);
 
   return (
-    <AccountsClient clientName={data.clientName} accounts={data.accounts} />
+    <AccountsClient
+      clientName={data.clientName}
+      accounts={data.accounts}
+      connections={data.plaidItems ?? []}
+    />
   );
 }

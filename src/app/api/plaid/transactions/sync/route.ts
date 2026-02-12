@@ -15,32 +15,40 @@ export async function POST() {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const item = await prisma.plaidItem.findFirst({
+  const items = await prisma.plaidItem.findMany({
     where: { userId: user.id, status: "active" },
   });
 
-  if (!item) {
+  if (items.length === 0) {
     return NextResponse.json({ error: "No linked item found." }, { status: 404 });
   }
 
-  let cursor = item.transactionsCursor ?? null;
   let added: PlaidTransaction[] = [];
   let modified: PlaidTransaction[] = [];
   let removed: RemovedTransaction[] = [];
-  let hasMore = true;
 
-  while (hasMore) {
-    const response = await plaidClient.transactionsSync({
-      access_token: item.accessToken,
-      cursor: cursor ?? undefined,
-      count: 100,
+  for (const item of items) {
+    let cursor = item.transactionsCursor ?? null;
+    let hasMore = true;
+
+    while (hasMore) {
+      const response = await plaidClient.transactionsSync({
+        access_token: item.accessToken,
+        cursor: cursor ?? undefined,
+        count: 100,
+      });
+
+      added = added.concat(response.data.added);
+      modified = modified.concat(response.data.modified);
+      removed = removed.concat(response.data.removed);
+      cursor = response.data.next_cursor;
+      hasMore = response.data.has_more;
+    }
+
+    await prisma.plaidItem.update({
+      where: { id: item.id },
+      data: { transactionsCursor: cursor ?? undefined },
     });
-
-    added = added.concat(response.data.added);
-    modified = modified.concat(response.data.modified);
-    removed = removed.concat(response.data.removed);
-    cursor = response.data.next_cursor;
-    hasMore = response.data.has_more;
   }
 
   const accounts = await prisma.account.findMany({ where: { userId: user.id } });
@@ -124,11 +132,6 @@ export async function POST() {
       where: { plaidTransactionId: removedTx.transaction_id, userId: user.id },
     });
   }
-
-  await prisma.plaidItem.update({
-    where: { id: item.id },
-    data: { transactionsCursor: cursor ?? undefined },
-  });
 
   const fortyFiveDaysAgo = new Date();
   fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
