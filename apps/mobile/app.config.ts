@@ -41,7 +41,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     web: {
       favicon: './assets/favicon.png',
     },
-    plugins: ['expo-secure-store', 'expo-web-browser'],
+    plugins: [
+      'expo-secure-store',
+      'expo-web-browser',
+      './plugins/with-path-safe-ios-scripts',
+    ],
     extra: {
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
