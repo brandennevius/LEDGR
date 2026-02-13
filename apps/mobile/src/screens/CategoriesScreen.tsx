@@ -85,6 +85,10 @@ export function CategoriesScreen() {
   const [newName, setNewName] = useState('');
   const [newBudget, setNewBudget] = useState('');
   const [newEssential, setNewEssential] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [groupCategories, setGroupCategories] = useState('');
+  const [groupBudget, setGroupBudget] = useState('');
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -174,6 +178,31 @@ export function CategoriesScreen() {
     }
   };
 
+  const createGroup = async () => {
+    if (!groupName.trim()) return;
+    setSaving(true);
+    try {
+      await apiRequest('/api/category-groups', {
+        method: 'POST',
+        body: {
+          name: groupName.trim(),
+          categories: groupCategories
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+          unassignedBudget: groupBudget ? Number(groupBudget) : null,
+        },
+      });
+      setGroupName('');
+      setGroupCategories('');
+      setGroupBudget('');
+      await load();
+    } finally {
+      setSaving(false);
+      setGroupOpen(false);
+    }
+  };
+
   return (
     <Screen title="Categories" subtitle="Budgets, pacing, and groups.">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -182,10 +211,42 @@ export function CategoriesScreen() {
             <Text style={styles.headerTitle}>Categories overview</Text>
             <Text style={styles.headerSubtitle}>Track budgets and compare to last month.</Text>
           </View>
-          <Pressable style={styles.primaryButton} onPress={() => setAddOpen(true)}>
-            <Text style={styles.primaryLabel}>Add</Text>
-          </Pressable>
+          <View style={styles.headerButtons}>
+            <Pressable style={styles.secondaryButton} onPress={() => setGroupOpen(true)}>
+              <Text style={styles.secondaryLabel}>Add group</Text>
+            </Pressable>
+            <Pressable style={styles.primaryButton} onPress={() => setAddOpen(true)}>
+              <Text style={styles.primaryLabel}>Add</Text>
+            </Pressable>
+          </View>
         </View>
+
+        {(overview?.groups ?? []).length > 0 ? (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Category groups</Text>
+            {(overview?.groups ?? []).map((group) => (
+              <View key={group.id} style={styles.groupRow}>
+                <View style={styles.groupHeader}>
+                  <Text style={styles.groupName}>{group.name}</Text>
+                  <Text style={styles.groupAmount}>{formatCurrency(group.spend)}</Text>
+                </View>
+                <Text style={styles.groupMeta}>
+                  {(group.categories ?? []).length > 0
+                    ? group.categories.join(', ')
+                    : 'No categories assigned'}
+                </Text>
+                <Text style={styles.groupMeta}>
+                  Budget {group.budget ? formatCurrency(group.budget) : '--'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Category groups</Text>
+            <Text style={styles.emptyText}>No groups yet. Create one to organize categories.</Text>
+          </View>
+        )}
 
         {loading ? (
           <View style={styles.loadingCard}>
@@ -341,6 +402,35 @@ export function CategoriesScreen() {
           <Text style={styles.primaryLabel}>{saving ? 'Saving...' : 'Create'}</Text>
         </Pressable>
       </ModalSheet>
+
+      <ModalSheet visible={groupOpen} onClose={() => setGroupOpen(false)}>
+        <Text style={styles.modalTitle}>Add category group</Text>
+        <TextInput
+          value={groupName}
+          onChangeText={setGroupName}
+          placeholder="Group name"
+          placeholderTextColor={colors.textMuted}
+          style={styles.input}
+        />
+        <TextInput
+          value={groupCategories}
+          onChangeText={setGroupCategories}
+          placeholder="Categories (comma separated)"
+          placeholderTextColor={colors.textMuted}
+          style={styles.input}
+        />
+        <TextInput
+          value={groupBudget}
+          onChangeText={setGroupBudget}
+          placeholder="Unassigned budget"
+          placeholderTextColor={colors.textMuted}
+          keyboardType="numeric"
+          style={styles.input}
+        />
+        <Pressable style={styles.primaryButton} onPress={createGroup} disabled={saving}>
+          <Text style={styles.primaryLabel}>{saving ? 'Saving...' : 'Create group'}</Text>
+        </Pressable>
+      </ModalSheet>
     </Screen>
   );
 }
@@ -354,6 +444,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
   },
   headerTitle: {
     color: colors.text,
@@ -428,6 +523,35 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 4,
+  },
+  groupRow: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  groupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  groupName: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  groupAmount: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  groupMeta: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
   },
   sectionCard: {
     backgroundColor: 'rgba(17, 22, 43, 0.7)',

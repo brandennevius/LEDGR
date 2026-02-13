@@ -2,7 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { NavigationContainer } from '@react-navigation/native';
+import { StyleSheet, View } from 'react-native';
 
+import { CoachChatFab } from '../components/CoachChatFab';
 import { AccountsScreen } from '../screens/AccountsScreen';
 import { CategoriesScreen } from '../screens/CategoriesScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
@@ -55,19 +57,28 @@ function MainTabs() {
 export function AppNavigator() {
   return (
     <NavigationContainer theme={navigationTheme}>
-      <Drawer.Navigator
-        screenOptions={{
-          headerShown: false,
-          drawerStyle: {
-            backgroundColor: colors.surface,
-          },
-          drawerActiveTintColor: colors.primary,
-          drawerInactiveTintColor: colors.textMuted,
-        }}
-      >
-        <Drawer.Screen name="Home" component={MainTabs} />
-        <Drawer.Screen name="Settings" component={SettingsScreen} />
-      </Drawer.Navigator>
+      <View style={styles.container}>
+        <Drawer.Navigator
+          screenOptions={{
+            headerShown: false,
+            drawerStyle: {
+              backgroundColor: colors.surface,
+            },
+            drawerActiveTintColor: colors.primary,
+            drawerInactiveTintColor: colors.textMuted,
+          }}
+        >
+          <Drawer.Screen name="Home" component={MainTabs} />
+          <Drawer.Screen name="Settings" component={SettingsScreen} />
+        </Drawer.Navigator>
+        <CoachChatFab />
+      </View>
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});

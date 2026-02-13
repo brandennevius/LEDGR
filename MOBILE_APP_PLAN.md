@@ -27,20 +27,20 @@
 ---
 
 ## Phase 0 — Foundation (1–2 days)
-- [ ] Create Expo app in `/apps/mobile` (TypeScript).
-- [ ] Add navigation (React Navigation).
-- [ ] Add env handling (Expo config + `.env`).
+- [x] Create Expo app in `/apps/mobile` (TypeScript).
+- [x] Add navigation (React Navigation).
+- [x] Add env handling (Expo config + `.env`).
 - [ ] Add shared package for types/utilities.
-- [ ] Establish API client (base URL, auth headers).
+- [x] Establish API client (base URL, auth headers).
 
 ---
 
 ## Phase 1 — Auth + Core Shell (2–3 days)
-- [ ] Supabase Auth (email/password).
-- [ ] OAuth providers: Google + Apple.
-- [ ] Auth session handling + secure storage.
-- [ ] App shell with bottom tabs + drawer (Dashboard, Transactions, Goals, Accounts, Categories, Settings).
-- [ ] Theme system (match current UI: dark gradients + glass).
+- [x] Supabase Auth (email/password).
+- [x] OAuth providers: Google + Apple.
+- [x] Auth session handling + secure storage.
+- [x] App shell with bottom tabs + drawer (Dashboard, Transactions, Goals, Accounts, Categories, Settings).
+- [x] Theme system (match current UI: dark gradients + glass).
 
 ### Phase 1 Progress (branch: `codex/phase-1-mobile`)
 - [x] Supabase Auth (email/password) wired with secure storage.
@@ -68,11 +68,11 @@
 ---
 
 ## Phase 2 — Dashboard (2–4 days)
-- [ ] Dashboard summary cards (spend, income, assets, debt).
-- [ ] Monthly spend chart.
-- [ ] Top categories panel.
-- [ ] Goals summary panel.
-- [ ] AI summary snippet.
+- [x] Dashboard summary cards (spend, income, assets, debt).
+- [x] Monthly spend chart.
+- [x] Top categories panel.
+- [x] Goals summary panel.
+- [x] AI summary snippet.
 
 ---
 
@@ -95,33 +95,42 @@
 ---
 
 ## Phase 4 — Goals (3–5 days)
-- [ ] Goals list + creation flow.
-- [ ] Goal types (Debt, Emergency Fund, Savings, etc.).
-- [ ] Goal progress tracking.
-- [ ] AI payoff plan + insights.
+- [x] Goals list + creation flow.
+- [x] Goal types (Debt, Emergency Fund, Savings, etc.).
+- [x] Goal progress tracking.
+- [x] AI payoff plan + insights.
+
+**Phase 4 notes**
+- Setup wizard currently focuses on Debt/Emergency/Savings and supports ranking.
+- Edit/delete/completed status are implemented.
 
 ---
 
 ## Phase 5 — Accounts + Plaid (3–5 days)
-- [ ] Plaid Link in RN (Plaid RN SDK).
-- [ ] Accounts page (connections + sync).
-- [ ] Reauth / update flow.
-- [ ] Connection status + error banners.
+- [x] Plaid Link in RN (Plaid RN SDK).
+- [x] Accounts page (connections + sync).
+- [x] Reauth / update flow.
+- [x] Connection status + error banners.
 
 ---
 
 ## Phase 6 — Categories + Distribution (4–6 days)
-- [ ] Categories page (groups + budgets).
-- [ ] Category detail with trends.
-- [ ] Distribution / Sankey view (mobile-friendly version).
+- [x] Categories page (groups + budgets).
+- [x] Category detail with trends.
+- [x] Distribution / Sankey view (mobile-friendly version).
 
 ---
 
 ## Phase 7 — AI Chat Coach (2–4 days)
-- [ ] Floating chat button.
-- [ ] Thread UI + streaming responses.
-- [ ] Context injection (spend patterns, categories, goals).
-- [ ] Query handling for general questions + insights.
+- [x] Floating chat button.
+- [x] Thread UI.
+- [ ] Streaming responses.
+- [x] Context injection (spend patterns, categories, goals).
+- [x] Query handling for general questions + insights.
+
+**Phase 7 notes**
+- Chat is now globally available from the floating button in authenticated app screens.
+- Responses are currently non-streaming (single response payload).
 
 ---
 

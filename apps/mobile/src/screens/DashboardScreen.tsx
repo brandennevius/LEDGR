@@ -5,12 +5,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 
-import ModalSheet from '../components/ModalSheet';
 import { Screen } from '../components/Screen';
 import { apiRequest } from '../lib/api';
 import { colors } from '../theme';
@@ -172,12 +170,6 @@ export function DashboardScreen() {
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatInput, setChatInput] = useState('');
-  const [chatLoading, setChatLoading] = useState(false);
-  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
-    { role: 'assistant', content: 'Ask me about your spending and I’ll surface insights.' },
-  ]);
   const [selectedBudgetName, setSelectedBudgetName] = useState('');
   const [sliderValue, setSliderValue] = useState(0);
 
@@ -328,37 +320,6 @@ export function DashboardScreen() {
   const monthsWith =
     debtRemaining > 0 && newPayment > 0 ? Math.ceil(debtRemaining / newPayment) : 0;
   const monthsDelta = monthsNow && monthsWith ? monthsNow - monthsWith : 0;
-
-  const sendMessage = async () => {
-    const trimmed = chatInput.trim();
-    if (!trimmed || chatLoading) return;
-    const nextMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [
-      ...messages,
-      { role: 'user', content: trimmed },
-    ];
-    setMessages(nextMessages);
-    setChatInput('');
-    setChatLoading(true);
-    try {
-      const response = await apiRequest<{ answer?: string }>('/api/insights/chat', {
-        method: 'POST',
-        body: {
-          messages: nextMessages.slice(-6),
-        },
-      });
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: response.answer ?? 'No insights available yet.' },
-      ]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: 'I couldn’t fetch insights right now.' },
-      ]);
-    } finally {
-      setChatLoading(false);
-    }
-  };
 
   return (
     <Screen title="Dashboard" subtitle="February snapshot and key wins.">
@@ -637,48 +598,11 @@ export function DashboardScreen() {
             <Text style={styles.aiTag}>Next step</Text>
             <Text style={styles.aiAction}>{aiSummary.action}</Text>
           </View>
-          <Pressable style={styles.chatButton} onPress={() => setChatOpen(true)}>
-            <Text style={styles.chatButtonLabel}>Open chat coach</Text>
-          </Pressable>
+          <Text style={styles.chatHint}>
+            Use the floating chat button to ask deeper questions.
+          </Text>
         </View>
       </ScrollView>
-
-      <ModalSheet visible={chatOpen} onClose={() => setChatOpen(false)}>
-        <Text style={styles.modalTitle}>AI spending insights</Text>
-        <View style={styles.chatList}>
-          {messages.map((message, index) => (
-            <View
-              key={`${message.role}-${index}`}
-              style={[
-                styles.chatBubble,
-                message.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.chatText,
-                  message.role === 'user' ? styles.chatTextUser : styles.chatTextAssistant,
-                ]}
-              >
-                {message.content}
-              </Text>
-            </View>
-          ))}
-          {chatLoading ? <Text style={styles.chatLoading}>Thinking…</Text> : null}
-        </View>
-        <View style={styles.chatInputRow}>
-          <TextInput
-            value={chatInput}
-            onChangeText={setChatInput}
-            placeholder="Ask about your spending..."
-            placeholderTextColor={colors.textMuted}
-            style={styles.chatInput}
-          />
-          <Pressable style={styles.chatSend} onPress={sendMessage} disabled={chatLoading}>
-            <Text style={styles.chatSendLabel}>{chatLoading ? '...' : 'Send'}</Text>
-          </Pressable>
-        </View>
-      </ModalSheet>
     </Screen>
   );
 }
@@ -970,18 +894,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
   },
-  chatButton: {
-    marginTop: 14,
-    borderRadius: 14,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  chatButtonLabel: {
-    color: colors.text,
+  chatHint: {
+    color: colors.textMuted,
     fontSize: 12,
-    fontWeight: '600',
+    marginTop: 12,
   },
   aiTag: {
     color: colors.accent,
@@ -1052,68 +968,5 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     lineHeight: 17,
-  },
-  modalTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  chatList: {
-    gap: 8,
-    maxHeight: 320,
-    marginBottom: 12,
-  },
-  chatBubble: {
-    borderRadius: 14,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    maxWidth: '85%',
-  },
-  chatBubbleUser: {
-    alignSelf: 'flex-end',
-    backgroundColor: colors.primary,
-  },
-  chatBubbleAssistant: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  chatText: {
-    fontSize: 12,
-  },
-  chatTextUser: {
-    color: colors.background,
-  },
-  chatTextAssistant: {
-    color: colors.text,
-  },
-  chatLoading: {
-    color: colors.textMuted,
-    fontSize: 12,
-  },
-  chatInputRow: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
-  chatInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    color: colors.text,
-    backgroundColor: 'rgba(9, 13, 27, 0.7)',
-  },
-  chatSend: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  chatSendLabel: {
-    color: colors.background,
-    fontWeight: '700',
   },
 });

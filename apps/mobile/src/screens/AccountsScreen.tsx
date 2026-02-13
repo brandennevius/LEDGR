@@ -59,6 +59,7 @@ export function AccountsScreen() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [repairingItemId, setRepairingItemId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removingAll, setRemovingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +174,35 @@ export function AccountsScreen() {
     }
   };
 
+  const repairConnection = async (itemId: string) => {
+    setRepairingItemId(itemId);
+    setError(null);
+    try {
+      const data = await apiRequest<LinkTokenResponse>('/api/plaid/link-token', {
+        method: 'POST',
+        body: { mode: 'update', itemId },
+      });
+      await destroyPlaidLink();
+      createPlaidLink({ token: data.link_token });
+      openPlaidLink({
+        onSuccess: async () => {
+          await apiRequest('/api/plaid/accounts/sync', { method: 'POST' });
+          await apiRequest('/api/plaid/transactions/sync', { method: 'POST' });
+          await load();
+        },
+        onExit: (exit: LinkExit) => {
+          if (exit.error?.displayMessage || exit.error?.errorMessage) {
+            setError(exit.error.displayMessage ?? exit.error.errorMessage);
+          }
+        },
+      });
+    } catch {
+      setError('Unable to update this connection right now.');
+    } finally {
+      setRepairingItemId(null);
+    }
+  };
+
   return (
     <Screen title="Accounts" subtitle="Manage connected banks and sync status.">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -212,7 +242,7 @@ export function AccountsScreen() {
           ) : (
             connections.map((connection) => (
               <View key={connection.id} style={styles.connectionRow}>
-                <View>
+                <View style={styles.connectionInfo}>
                   <Text style={styles.connectionName}>
                     {connection.institutionName ?? 'Bank connection'}
                   </Text>
@@ -220,9 +250,20 @@ export function AccountsScreen() {
                     Status: {connection.status} · {connectionCounts.get(connection.itemId) ?? 0} accounts
                   </Text>
                 </View>
-                <Text style={styles.connectionMeta}>
-                  Updated {new Date(connection.updatedAt).toLocaleDateString()}
-                </Text>
+                <View style={styles.connectionActions}>
+                  <Text style={styles.connectionMeta}>
+                    Updated {new Date(connection.updatedAt).toLocaleDateString()}
+                  </Text>
+                  <Pressable
+                    style={styles.repairButton}
+                    onPress={() => repairConnection(connection.itemId)}
+                    disabled={repairingItemId === connection.itemId || linking}
+                  >
+                    <Text style={styles.repairLabel}>
+                      {repairingItemId === connection.itemId ? 'Updating...' : 'Update login'}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
             ))
           )}
@@ -354,15 +395,35 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 12,
   },
+  connectionInfo: {
+    flex: 1,
+  },
   connectionName: {
     color: colors.text,
     fontSize: 14,
     fontWeight: '600',
   },
+  connectionActions: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
   connectionMeta: {
     color: colors.textMuted,
     fontSize: 11,
     marginTop: 4,
+  },
+  repairButton: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  repairLabel: {
+    color: colors.text,
+    fontSize: 11,
+    fontWeight: '600',
   },
   accountRow: {
     flexDirection: 'row',
