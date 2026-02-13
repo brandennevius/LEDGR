@@ -40,6 +40,7 @@ export async function POST(request: Request) {
 
   const body = (await request.json()) as {
     messages?: { role: "user" | "assistant"; content: string }[];
+    stream?: boolean;
   };
 
   const now = new Date();
@@ -104,10 +105,17 @@ export async function POST(request: Request) {
 
   const openai = getOpenAI();
   if (!openai) {
-    return NextResponse.json({
-      answer:
-        "AI insights are not configured yet. Add an OPENAI_API_KEY to enable chat.",
-    });
+    const fallback =
+      "AI insights are not configured yet. Add an OPENAI_API_KEY to enable chat.";
+    if (body.stream) {
+      return new Response(fallback, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+        },
+      });
+    }
+    return NextResponse.json({ answer: fallback });
   }
 
   const systemPrompt = [
@@ -119,21 +127,69 @@ export async function POST(request: Request) {
     "Avoid tax, legal, or investment advice.",
   ].join(" ");
 
+  const input = [
+    { role: "system" as const, content: systemPrompt },
+    {
+      role: "system" as const,
+      content: `Client data context (month-to-date): ${JSON.stringify(payload)}`,
+    },
+    ...(body.messages ?? []),
+  ];
+
+  if (body.stream) {
+    const stream = await openai.responses.create({
+      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+      input,
+      stream: true,
+    });
+
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          for await (const event of stream as AsyncIterable<any>) {
+            const delta = extractTextDelta(event);
+            if (delta) {
+              controller.enqueue(encoder.encode(delta));
+            }
+          }
+        } catch {
+          controller.enqueue(
+            encoder.encode(
+              "\n\nI hit a streaming issue. Please try your question again."
+            )
+          );
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
+    });
+  }
+
   const response = await openai.responses.create({
     model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-    input: [
-      { role: "system", content: systemPrompt },
-      {
-        role: "system",
-        content: `Client data context (month-to-date): ${JSON.stringify(
-          payload
-        )}`,
-      },
-      ...(body.messages ?? []),
-    ],
+    input,
   });
 
   return NextResponse.json({
     answer: response.output_text?.trim() ?? "No insights available yet.",
   });
 }
+
+const extractTextDelta = (event: any): string => {
+  if (!event || typeof event !== "object") return "";
+  if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+    return event.delta;
+  }
+  if (typeof event.delta === "string") return event.delta;
+  if (typeof event.text === "string") return event.text;
+  return "";
+};

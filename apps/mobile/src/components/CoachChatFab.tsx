@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ModalSheet from './ModalSheet';
-import { apiRequest } from '../lib/api';
+import { apiRequest, apiStreamRequest } from '../lib/api';
 import { colors } from '../theme';
 
 type ChatMessage = {
@@ -43,26 +43,89 @@ export function CoachChatFab() {
     setInput('');
     setLoading(true);
 
+    setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
+
     try {
-      const response = await apiRequest<{ answer?: string }>('/api/insights/chat', {
-        method: 'POST',
-        body: { messages: next.slice(-10) },
-      });
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: response.answer ?? 'No insight available yet.' },
-      ]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: "I couldn't fetch insights right now. Try again in a moment.",
+      await apiStreamRequest({
+        path: '/api/insights/chat',
+        body: { messages: next.slice(-10), stream: true },
+        onChunk: (chunk) => {
+          setMessages((prev) => {
+            const copy = [...prev];
+            const last = copy[copy.length - 1];
+            if (!last || last.role !== 'assistant') return prev;
+            copy[copy.length - 1] = {
+              ...last,
+              content: `${last.content}${chunk}`,
+            };
+            return copy;
+          });
         },
-      ]);
+      });
+    } catch {
+      // Fallback to non-streaming so the user still gets an answer.
+      try {
+        const response = await apiRequest<{ answer?: string }>('/api/insights/chat', {
+          method: 'POST',
+          body: { messages: next.slice(-10) },
+        });
+        setMessages((prev) => {
+          const copy = [...prev];
+          const last = copy[copy.length - 1];
+          if (!last || last.role !== 'assistant') {
+            return [
+              ...prev,
+              { role: 'assistant', content: response.answer ?? 'No insight available yet.' },
+            ];
+          }
+          copy[copy.length - 1] = {
+            ...last,
+            content: response.answer ?? 'No insight available yet.',
+          };
+          return copy;
+        });
+      } catch {
+        setMessages((prev) => {
+          const copy = [...prev];
+          const last = copy[copy.length - 1];
+          if (!last || last.role !== 'assistant') {
+            return [
+              ...prev,
+              {
+                role: 'assistant',
+                content: "I couldn't fetch insights right now. Try again in a moment.",
+              },
+            ];
+          }
+          copy[copy.length - 1] = {
+            ...last,
+            content: "I couldn't fetch insights right now. Try again in a moment.",
+          };
+          return copy;
+        });
+      }
     } finally {
       setLoading(false);
     }
+
+    // Remove accidental blank assistant bubble if no content was streamed.
+    setMessages((prev) =>
+      prev.filter((message, index) => {
+        if (message.role !== 'assistant') return true;
+        if (message.content.trim().length > 0) return true;
+        return index !== prev.length - 1;
+      })
+    );
+  };
+
+  const clearThread = () => {
+    setMessages([
+      {
+        role: 'assistant',
+        content:
+          "I'm your coach. Ask about spending patterns, categories, or where to cut this month.",
+      },
+    ]);
   };
 
   return (
@@ -75,8 +138,15 @@ export function CoachChatFab() {
       </Pressable>
 
       <ModalSheet visible={open} onClose={() => setOpen(false)}>
-        <Text style={styles.title}>AI Coach</Text>
-        <Text style={styles.subtitle}>Ask anything about your finances.</Text>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.title}>AI Coach</Text>
+            <Text style={styles.subtitle}>Ask anything about your finances.</Text>
+          </View>
+          <Pressable style={styles.clearButton} onPress={clearThread}>
+            <Text style={styles.clearLabel}>Clear</Text>
+          </Pressable>
+        </View>
 
         <ScrollView style={styles.messages} contentContainerStyle={styles.messagesContent}>
           {messages.map((message, index) => (
@@ -144,6 +214,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     marginBottom: 10,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  clearButton: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  clearLabel: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
   },
   messages: {
     maxHeight: 360,

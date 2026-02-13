@@ -63,3 +63,58 @@ export async function apiRequest<T>(path: string, options?: ApiRequestOptions): 
 
   return response.json() as Promise<T>;
 }
+
+type ApiStreamOptions = {
+  path: string;
+  body: unknown;
+  onChunk: (chunk: string) => void;
+};
+
+export async function apiStreamRequest({
+  path,
+  body,
+  onChunk,
+}: ApiStreamOptions): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    let processed = 0;
+
+    xhr.open('POST', `${baseUrl}${path}`);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    xhr.onprogress = () => {
+      const next = xhr.responseText.slice(processed);
+      if (!next) return;
+      processed = xhr.responseText.length;
+      onChunk(next);
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const next = xhr.responseText.slice(processed);
+        if (next) onChunk(next);
+        resolve();
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(xhr.responseText) as ApiError;
+        reject(parsed);
+      } catch {
+        reject({ error: 'Streaming request failed', status: xhr.status } as ApiError);
+      }
+    };
+
+    xhr.onerror = () => {
+      reject({ error: 'Network error during streaming request', status: 0 } as ApiError);
+    };
+
+    xhr.send(JSON.stringify(body));
+  });
+}
