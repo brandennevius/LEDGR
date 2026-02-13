@@ -7,6 +7,36 @@ type ChatMessage = {
   content: string;
 };
 
+type TextSegment = {
+  text: string;
+  bold: boolean;
+};
+
+function parseBoldSegments(text: string): TextSegment[] {
+  const segments: TextSegment[] = [];
+  const regex = /\*\*([\s\S]+?)\*\*/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ text: text.slice(lastIndex, match.index), bold: false });
+    }
+    segments.push({ text: match[1], bold: true });
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({ text: text.slice(lastIndex), bold: false });
+  }
+
+  if (segments.length === 0) {
+    segments.push({ text, bold: false });
+  }
+
+  return segments;
+}
+
 const starterPrompts = [
   "Where could I cut this month?",
   "What are my biggest non-essential spends?",
@@ -133,7 +163,16 @@ export default function InsightsChatClient({
                 : "bg-white text-[color:var(--ink)]"
             }`}
           >
-            {message.content}
+            <p className="whitespace-pre-wrap">
+              {parseBoldSegments(message.content).map((segment, segmentIndex) => (
+                <span
+                  key={`${index}-${segmentIndex}`}
+                  className={segment.bold ? "font-semibold" : undefined}
+                >
+                  {segment.text}
+                </span>
+              ))}
+            </p>
           </div>
         ))}
         {loading ? (

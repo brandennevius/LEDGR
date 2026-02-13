@@ -19,6 +19,36 @@ type ChatMessage = {
   content: string;
 };
 
+type TextSegment = {
+  text: string;
+  bold: boolean;
+};
+
+function parseBoldSegments(text: string): TextSegment[] {
+  const segments: TextSegment[] = [];
+  const regex = /\*\*([\s\S]+?)\*\*/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ text: text.slice(lastIndex, match.index), bold: false });
+    }
+    segments.push({ text: match[1], bold: true });
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({ text: text.slice(lastIndex), bold: false });
+  }
+
+  if (segments.length === 0) {
+    segments.push({ text, bold: false });
+  }
+
+  return segments;
+}
+
 export function CoachChatFab() {
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
@@ -163,7 +193,14 @@ export function CoachChatFab() {
                   message.role === 'user' ? styles.bubbleTextUser : styles.bubbleTextAssistant,
                 ]}
               >
-                {message.content}
+                {parseBoldSegments(message.content).map((segment, segmentIndex) => (
+                  <Text
+                    key={`${index}-${segmentIndex}`}
+                    style={segment.bold ? styles.bubbleTextBold : undefined}
+                  >
+                    {segment.text}
+                  </Text>
+                ))}
               </Text>
             </View>
           ))}
@@ -267,6 +304,9 @@ const styles = StyleSheet.create({
   },
   bubbleTextAssistant: {
     color: colors.text,
+  },
+  bubbleTextBold: {
+    fontWeight: '700',
   },
   loadingText: {
     color: colors.textMuted,
