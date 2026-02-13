@@ -186,10 +186,9 @@ export async function POST(request: Request) {
 
 const extractTextDelta = (event: any): string => {
   if (!event || typeof event !== "object") return "";
+  // Only consume token deltas; done/snapshot events can contain full text and cause duplicates.
   if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
     return event.delta;
   }
-  if (typeof event.delta === "string") return event.delta;
-  if (typeof event.text === "string") return event.text;
   return "";
 };
