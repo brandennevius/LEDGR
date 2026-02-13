@@ -29,6 +29,14 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 WebBrowser.maybeCompleteAuthSession();
 
+const parseFragmentParams = (hash?: string) => {
+  const fragment = hash?.startsWith('#') ? hash.slice(1) : hash;
+  if (!fragment) return {} as Record<string, string>;
+
+  const params = new URLSearchParams(fragment);
+  return Object.fromEntries(params.entries());
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
@@ -119,11 +127,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const parsed = Linking.parse(result.url);
-    const params = parsed.queryParams;
+    const parsedUrl = new URL(result.url);
+    const queryParams = Object.fromEntries(parsedUrl.searchParams.entries());
+    const fragmentParams = parseFragmentParams(parsedUrl.hash);
+    const params = {
+      ...fragmentParams,
+      ...queryParams,
+    };
     console.log('[auth] callback url parsed', {
       callbackUrl: result.url,
       path: parsed.path,
-      queryParams: params,
+      queryParams,
+      fragmentParams,
     });
 
     const code = typeof params?.code === 'string' ? params.code : null;
@@ -134,10 +149,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const errorCode = typeof params?.error === 'string' ? params.error : null;
 
     if (!code) {
+      const accessToken =
+        typeof params?.access_token === 'string' ? params.access_token : null;
+      const refreshToken =
+        typeof params?.refresh_token === 'string' ? params.refresh_token : null;
+
+      if (accessToken && refreshToken) {
+        const { error: setSessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+
+        if (!setSessionError) {
+          return null;
+        }
+
+        console.log('[auth] setSession from fragment failed', setSessionError);
+        return setSessionError.message;
+      }
+
       return (
         'Missing OAuth response code.' +
         (errorCode ? ` error=${errorCode}` : '') +
-        (errorDescription ? ` description=${errorDescription}` : '')
+        (errorDescription ? ` description=${errorDescription}` : '') +
+        ' Verify Supabase Redirect URLs include financialcoaching://auth/callback.'
       );
     }
 
