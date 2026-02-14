@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Svg, { G, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 import { Screen } from '../components/Screen';
 import { apiRequest } from '../lib/api';
@@ -37,9 +36,7 @@ type DistributionResponse = {
 };
 
 type LayoutNode = SankeyNode & {
-  x: number;
-  y: number;
-  height: number;
+  _unused?: never;
 };
 
 const formatCurrency = (value: number) =>
@@ -49,8 +46,15 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   });
 
-const truncateLabel = (value: string, max = 16) =>
-  value.length > max ? `${value.slice(0, max - 1)}...` : value;
+type FlowPath = {
+  id: string;
+  sourceLabel: string;
+  targetLabel: string;
+  value: number;
+  color: string;
+  sourceColumn: number;
+  targetColumn: number;
+};
 
 export function DistributionScreen() {
   const [data, setData] = useState<DistributionResponse | null>(null);
@@ -107,107 +111,62 @@ export function DistributionScreen() {
     return Math.max(...data.categories.map((item) => item.value), 1);
   }, [data]);
 
-  const chart = useMemo(() => {
+  const flowPaths = useMemo<FlowPath[]>(() => {
     const nodes = data?.nodes ?? [];
     const links = data?.links ?? [];
-    const width = 940;
-    const height = 540;
-    const nodeWidth = 18;
-    const padding = 12;
-    const topBottom = 20;
-
-    if (!nodes.length) {
-      return {
-        width,
-        height,
-        nodeWidth,
-        nodes: [] as LayoutNode[],
-        links: [] as Array<{ id: string; path: string; thickness: number; color: string }>,
-      };
+    if (!nodes.length || !links.length) {
+      return [];
     }
 
-    const columns = Array.from(new Set(nodes.map((node) => node.column))).sort((a, b) => a - b);
-    const leftMargin = 120;
-    const rightMargin = 180;
-    const usableWidth = Math.max(1, width - leftMargin - rightMargin);
-    const gap = columns.length > 1 ? usableWidth / (columns.length - 1) : 0;
-    const columnX = columns.map((_, index) => leftMargin + gap * index);
-
-    const columnNodes = columns.map((column) => nodes.filter((node) => node.column === column));
-    const columnTotals = columnNodes.map((group) => group.reduce((acc, node) => acc + node.value, 0));
-    const maxColumnTotal = Math.max(1, ...columnTotals);
-    const maxNodeCount = Math.max(1, ...columnNodes.map((group) => group.length));
-
-    const scale = (height - topBottom * 2 - padding * (maxNodeCount - 1)) / maxColumnTotal;
-
-    const layoutNodes: LayoutNode[] = [];
-
-    columnNodes.forEach((group, columnIndex) => {
-      const sorted = [...group].sort((a, b) => b.value - a.value);
-      const totalHeight =
-        sorted.reduce((acc, node) => acc + node.value * scale, 0) + padding * (sorted.length - 1);
-      let cursor = (height - totalHeight) / 2;
-
-      sorted.forEach((node) => {
-        const nodeHeight = Math.max(4, node.value * scale);
-        layoutNodes.push({
-          ...node,
-          x: columnX[columnIndex] ?? leftMargin,
-          y: cursor,
-          height: nodeHeight,
-        });
-        cursor += nodeHeight + padding;
-      });
-    });
-
-    const nodeMap = new Map(layoutNodes.map((node) => [node.id, node]));
-    const outgoing = new Map<string, number>();
-    const incoming = new Map<string, number>();
-
-    const layoutLinks = links
+    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+    return links
       .map((link) => {
         const source = nodeMap.get(link.source);
         const target = nodeMap.get(link.target);
-        if (!source || !target) {
-          return null;
-        }
-
-        const thickness = Math.max(1, link.value * scale);
-        const sourceOffset = outgoing.get(source.id) ?? 0;
-        const targetOffset = incoming.get(target.id) ?? 0;
-
-        const sourceY = source.y + sourceOffset + thickness / 2;
-        const targetY = target.y + targetOffset + thickness / 2;
-
-        outgoing.set(source.id, sourceOffset + thickness);
-        incoming.set(target.id, targetOffset + thickness);
-
-        const startX = source.x + nodeWidth;
-        const endX = target.x;
-        const dx = (endX - startX) * 0.45;
-        const path = `M ${startX} ${sourceY} C ${startX + dx} ${sourceY}, ${endX - dx} ${targetY}, ${endX} ${targetY}`;
-
+        if (!source || !target) return null;
         return {
           id: `${link.source}-${link.target}`,
-          path,
-          thickness,
+          sourceLabel: source.label,
+          targetLabel: target.label,
+          value: link.value,
           color: link.color,
+          sourceColumn: source.column,
+          targetColumn: target.column,
         };
       })
-      .filter((item): item is { id: string; path: string; thickness: number; color: string } =>
-        Boolean(item)
-      );
-
-    return {
-      width,
-      height,
-      nodeWidth,
-      nodes: layoutNodes,
-      links: layoutLinks,
-    };
+      .filter((item): item is FlowPath => Boolean(item))
+      .sort((a, b) => b.value - a.value);
   }, [data]);
 
-  const hasChartData = chart.nodes.length > 0;
+  const maxFlowPathValue = useMemo(
+    () => Math.max(1, ...flowPaths.map((path) => path.value), 1),
+    [flowPaths]
+  );
+
+  const visibleFlowPaths = useMemo(() => flowPaths.slice(0, 8), [flowPaths]);
+
+  const stageTotals = useMemo(() => {
+    const nodes = data?.nodes ?? [];
+    if (!nodes.length) {
+      return [];
+    }
+
+    const columns = Array.from(new Set(nodes.map((node) => node.column))).sort((a, b) => a - b);
+    const totals = columns.map((column, index) => {
+      const total = nodes
+        .filter((node) => node.column === column)
+        .reduce((sum, node) => sum + node.value, 0);
+
+      let label = `Stage ${index + 1}`;
+      if (index === 0) label = 'Sources';
+      if (index === columns.length - 1) label = 'Destinations';
+      if (columns.length > 2 && index > 0 && index < columns.length - 1) label = 'Allocation';
+
+      return { label, value: total };
+    });
+
+    return totals;
+  }, [data]);
 
   return (
     <Screen title="Distribution" subtitle="Flow of funds across this month.">
@@ -232,48 +191,48 @@ export function DistributionScreen() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Flow map</Text>
           <Text style={styles.sectionSubtitle}>{data?.rangeLabel ?? 'This month'}</Text>
-          <View style={styles.chartWrapper}>
-            {hasChartData ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <Svg width={chart.width} height={chart.height}>
-                  {chart.links.map((link) => (
-                    <Path
-                      key={link.id}
-                      d={link.path}
-                      fill="none"
-                      stroke={link.color}
-                      strokeWidth={Math.max(1.5, link.thickness)}
-                      strokeLinecap="round"
-                      opacity={0.7}
-                    />
-                  ))}
-                  {chart.nodes.map((node) => (
-                    <G key={node.id}>
-                      <Rect
-                        x={node.x}
-                        y={node.y}
-                        width={chart.nodeWidth}
-                        height={node.height}
-                        rx={5}
-                        fill={node.color}
-                      />
-                      <SvgText
-                        x={node.x + chart.nodeWidth + 6}
-                        y={node.y + 12}
-                        fill={colors.text}
-                        fontSize={10}
-                        fontWeight="600"
-                      >
-                        {truncateLabel(node.label)}
-                      </SvgText>
-                    </G>
-                  ))}
-                </Svg>
-              </ScrollView>
+          <View style={styles.flowMapWrapper}>
+            {visibleFlowPaths.length > 0 ? (
+              <View style={styles.flowList}>
+                {visibleFlowPaths.map((path) => {
+                  const widthPct = Math.max(10, Math.round((path.value / maxFlowPathValue) * 100));
+                  return (
+                    <View key={path.id} style={styles.pathRow}>
+                      <View style={styles.pathHeader}>
+                        <Text style={styles.pathRoute} numberOfLines={1}>
+                          {path.sourceLabel} {'->'} {path.targetLabel}
+                        </Text>
+                        <Text style={styles.pathAmount}>{formatCurrency(path.value)}</Text>
+                      </View>
+                      <View style={styles.pathBarTrack}>
+                        <View
+                          style={[
+                            styles.pathBarFill,
+                            {
+                              width: `${widthPct}%`,
+                              backgroundColor: path.color || colors.primary,
+                            },
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
             ) : (
               <Text style={styles.emptyText}>Connect accounts to see your distribution flow.</Text>
             )}
           </View>
+          {stageTotals.length > 0 ? (
+            <View style={styles.stageTotals}>
+              {stageTotals.map((stage) => (
+                <View key={stage.label} style={styles.stageCard}>
+                  <Text style={styles.stageLabel}>{stage.label}</Text>
+                  <Text style={styles.stageValue}>{formatCurrency(stage.value)}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.sectionCard}>
@@ -388,15 +347,73 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
-  chartWrapper: {
+  flowMapWrapper: {
     marginTop: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.cardBorder,
     backgroundColor: 'rgba(9, 13, 27, 0.45)',
+    minHeight: 120,
+    padding: 12,
+  },
+  flowList: {
+    gap: 12,
+  },
+  pathRow: {
+    gap: 7,
+  },
+  pathHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pathRoute: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  pathAmount: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  pathBarTrack: {
+    height: 10,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     overflow: 'hidden',
-    minHeight: 320,
-    paddingVertical: 8,
+  },
+  pathBarFill: {
+    height: '100%',
+    borderRadius: 6,
+    minWidth: 8,
+  },
+  stageTotals: {
+    marginTop: 12,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  stageCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  stageLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  stageValue: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 4,
   },
   flowRow: {
     flexDirection: 'row',
