@@ -1,21 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  LayoutChangeEvent,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
-import Slider from '@react-native-community/slider';
+import Svg, { Circle, Line, Polyline } from 'react-native-svg';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
+import Chip from '../components/Chip';
+import ModalSheet from '../components/ModalSheet';
 import { Screen } from '../components/Screen';
 import { apiRequest } from '../lib/api';
 import { colors } from '../theme';
 
 type OverviewResponse = {
-  assetsTotal?: number;
-  debtTotal?: number;
   monthDailySpend?: number[];
   monthDailyIncome?: number[];
   monthSpendTotal?: number;
@@ -28,30 +31,6 @@ type OverviewResponse = {
     variance: number;
     progress: number;
   };
-  categoryMonthSummary?: Array<{
-    name: string;
-    spend: number;
-    budget: number | null;
-  }>;
-  categorySummaryLabel?: string;
-  recentTransactions?: Array<{
-    id: string;
-    name: string;
-    category: string;
-    amount: number;
-    isIncome: boolean;
-    date: string;
-  }>;
-  budgetSnapshot?: {
-    essentialsSpend: number;
-    essentialsBudget: number;
-    flexibleSpend: number;
-    flexibleBudget: number;
-    totalBudget: number;
-    totalSpend: number;
-    overBudgetCategories: number;
-  };
-  budgetRecommendations?: string[];
   categoryBudgets?: Array<{
     name: string;
     essential: boolean;
@@ -61,268 +40,318 @@ type OverviewResponse = {
     remaining: number;
     status: 'ok' | 'risk' | 'over';
   }>;
-  debtProjection?: {
-    remaining: number;
-    basePayment: number;
-    monthsRemaining: number;
-  };
-  connectionStatus?: {
-    state: 'connected' | 'attention' | 'disconnected';
-    title: string;
-    description: string;
-  };
-  goals?: Array<{
-    id?: string;
-    name: string;
-    current: number;
-    target: number;
-  }>;
-  snapshot?: {
-    aiHighlights?: string[];
-    aiActions?: string[];
-  };
 };
 
-type SummaryMetric = {
-  label: string;
-  value: string;
-  delta: string;
-  tone: 'positive' | 'negative' | 'neutral';
-};
-
-type CategoryMetric = {
+type TransactionRow = {
+  id: string;
+  baseId?: string;
   name: string;
-  amount: string;
-  percent: number;
+  category: string;
+  amount: number;
+  isIncome: boolean;
+  needsReview?: boolean;
+  date: string;
 };
 
-type GoalMetric = {
+type TransactionsResponse = {
+  transactions: TransactionRow[];
+};
+
+type TransactionDetail = {
+  id: string;
   name: string;
-  progress: number;
-  amount: string;
-  target: string;
+  amount: number;
+  category: string;
+  transactionType?: 'INCOME' | 'INTERNAL_TRANSFER' | 'REGULAR';
+  date: string;
+  needsReview?: boolean;
+  account?: {
+    name?: string;
+    institutionName?: string;
+    mask?: string;
+    type?: string;
+  };
 };
 
-const fallbackSummary: SummaryMetric[] = [
-  { label: 'Spend', value: '$3,482', delta: '-6% vs Jan', tone: 'positive' },
-  { label: 'Income', value: '$7,940', delta: '+12% vs Jan', tone: 'positive' },
-  { label: 'Assets', value: '$128k', delta: '+2.1% MTD', tone: 'positive' },
-  { label: 'Debt', value: '$24.6k', delta: '-$620 paid', tone: 'positive' },
-];
+type ChartSeries = {
+  spend: number[];
+  income: number[];
+  expectedIncome: number[];
+  budget: number[];
+  daysInMonth: number;
+  daysElapsed: number;
+};
 
-const fallbackMonthlySpend = [
-  { month: 'Sep', value: 3120 },
-  { month: 'Oct', value: 3580 },
-  { month: 'Nov', value: 4010 },
-  { month: 'Dec', value: 4380 },
-  { month: 'Jan', value: 3725 },
-  { month: 'Feb', value: 3482 },
-];
-
-const fallbackCategories: CategoryMetric[] = [
-  { name: 'Groceries', amount: '$612', percent: 72 },
-  { name: 'Dining', amount: '$428', percent: 54 },
-  { name: 'Travel', amount: '$382', percent: 46 },
-  { name: 'Subscriptions', amount: '$214', percent: 28 },
-];
-
-const fallbackGoals: GoalMetric[] = [
-  { name: 'Emergency Fund', progress: 68, amount: '$8,150', target: '$12,000' },
-  { name: 'Car Payoff', progress: 42, amount: '$5,040', target: '$12,000' },
-  { name: 'Home Down Payment', progress: 24, amount: '$9,600', target: '$40,000' },
-];
-
-const formatCurrency = (value: number, compact = false) =>
+const formatCurrency = (value: number, fractionDigits = 0) =>
   value.toLocaleString('en-US', {
     style: 'currency',
     currency: 'USD',
-    maximumFractionDigits: 0,
-    notation: compact ? 'compact' : 'standard',
+    maximumFractionDigits: fractionDigits,
+    minimumFractionDigits: fractionDigits,
   });
 
-const formatDelta = (value: number) => {
-  if (value === 0) return '0% vs expected';
-  const sign = value > 0 ? '+' : '-';
-  const pct = Math.abs(value).toFixed(0);
-  return `${sign}${pct}% vs expected`;
+const buildSeries = (overview: OverviewResponse | null): ChartSeries => {
+  const spend = overview?.monthDailySpend ?? [];
+  const income = overview?.monthDailyIncome ?? [];
+  const daysInMonth = Math.max(spend.length, income.length, 28);
+  const daysElapsed = Math.max(1, Math.min(overview?.monthDaysElapsed ?? spend.length, daysInMonth));
+  const expectedIncomeTotal = Math.max(overview?.incomeSummary?.expected ?? 0, 0);
+  const budgetTotal = Math.max(overview?.monthBudgetTotal ?? 0, 0);
+
+  const expectedIncome = Array.from({ length: daysInMonth }, (_, index) =>
+    (expectedIncomeTotal / daysInMonth) * (index + 1)
+  );
+  const budget = Array.from({ length: daysInMonth }, (_, index) =>
+    (budgetTotal / daysInMonth) * (index + 1)
+  );
+
+  return {
+    spend: spend.slice(0, daysElapsed),
+    income: income.slice(0, daysElapsed),
+    expectedIncome,
+    budget,
+    daysInMonth,
+    daysElapsed,
+  };
 };
 
-const buildMonthlySpend = (dailySpend: number[] | undefined) => {
-  if (!dailySpend || dailySpend.length === 0) {
-    return fallbackMonthlySpend;
+const toPolylinePoints = (values: number[], totalPoints: number, width: number, height: number, maxValue: number) => {
+  if (values.length === 0 || width <= 0 || height <= 0 || maxValue <= 0) return '';
+  if (values.length === 1) {
+    const y = height - (values[0] / maxValue) * height;
+    return `0,${y.toFixed(2)}`;
   }
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const now = new Date();
-  const month = now.getMonth();
-  const total = dailySpend.reduce((acc, value) => acc + value, 0);
-  const points = [5, 4, 3, 2, 1, 0].map((offset) => {
-    const idx = (month - offset + 12) % 12;
-    const scale = offset === 0 ? 1 : Math.max(0.65, 1 - offset * 0.08);
-    return {
-      month: monthNames[idx],
-      value: Math.round(total * scale),
-    };
-  });
-  return points;
+  const stepX = width / Math.max(totalPoints - 1, 1);
+  return values
+    .map((value, index) => {
+      const x = index * stepX;
+      const y = height - (value / maxValue) * height;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(' ');
+};
+
+const initials = (label: string) => {
+  const trimmed = label.trim();
+  if (!trimmed) return '?';
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
 };
 
 export function DashboardScreen() {
+  const navigation = useNavigation<any>();
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
+  const [reviewRows, setReviewRows] = useState<TransactionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedBudgetName, setSelectedBudgetName] = useState('');
-  const [sliderValue, setSliderValue] = useState(0);
+  const [chartWidth, setChartWidth] = useState(0);
 
-  useEffect(() => {
-    let isMounted = true;
-    const load = async () => {
-      try {
-        const data = await apiRequest<OverviewResponse>('/api/client/overview');
-        if (isMounted) {
-          setOverview(data);
-          setError(null);
-        }
-      } catch (err) {
-        if (isMounted) {
-          const message =
-            typeof err === 'object' && err && 'error' in err
-              ? String((err as { error?: string }).error)
-              : 'Unable to load dashboard.';
-          setError(message);
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [savingDetail, setSavingDetail] = useState(false);
+  const [selected, setSelected] = useState<TransactionDetail | null>(null);
+  const [categoryInput, setCategoryInput] = useState('');
+  const [transactionTypeInput, setTransactionTypeInput] = useState<'INCOME' | 'INTERNAL_TRANSFER' | 'REGULAR'>('REGULAR');
+  const [applyToSimilar, setApplyToSimilar] = useState(false);
+  const [applyToCategory, setApplyToCategory] = useState(false);
+  const [createRule, setCreateRule] = useState(false);
+  const [ruleMatchType, setRuleMatchType] = useState<'EXACT' | 'PARTIAL'>('EXACT');
+  const [ruleMatchValue, setRuleMatchValue] = useState('');
 
-    load();
-    return () => {
-      isMounted = false;
-    };
+  const loadDashboard = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [overviewData, reviewData] = await Promise.all([
+        apiRequest<OverviewResponse>('/api/client/overview'),
+        apiRequest<TransactionsResponse>('/api/transactions?days=60&needsReview=true'),
+      ]);
+      setOverview(overviewData);
+      setReviewRows(reviewData.transactions ?? []);
+      setError(null);
+    } catch (err) {
+      const message =
+        typeof err === 'object' && err && 'error' in err
+          ? String((err as { error?: string }).error)
+          : 'Unable to load dashboard.';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const summaryMetrics = useMemo(() => {
-    if (!overview) return fallbackSummary;
-    const spend = overview.monthSpendTotal ?? 0;
-    const income = overview.incomeSummary?.expected ?? overview.incomeSummary?.actual ?? 0;
-    const incomeVariance = overview.incomeSummary?.variance ?? 0;
-    const variancePct = income > 0 ? (incomeVariance / income) * 100 : 0;
-    const assets = overview.assetsTotal ?? 0;
-    const debt = overview.debtTotal ?? 0;
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard();
+    }, [loadDashboard])
+  );
 
-    return [
-      {
-        label: 'Spend',
-        value: formatCurrency(spend, true),
-        delta: `${overview.monthDaysElapsed ?? 0} days tracked`,
-        tone: 'neutral',
-      },
-      {
-        label: 'Income',
-        value: formatCurrency(income, true),
-        delta: formatDelta(variancePct),
-        tone: variancePct >= 0 ? 'positive' : 'negative',
-      },
-      {
-        label: 'Assets',
-        value: formatCurrency(assets, true),
-        delta: assets > 0 ? 'Net worth to date' : 'Connect accounts',
-        tone: assets > 0 ? 'positive' : 'neutral',
-      },
-      {
-        label: 'Debt',
-        value: formatCurrency(debt, true),
-        delta: debt > 0 ? 'Total outstanding' : 'No debt tracked',
-        tone: debt > 0 ? 'neutral' : 'positive',
-      },
-    ] as SummaryMetric[];
-  }, [overview]);
+  const chartSeries = useMemo(() => buildSeries(overview), [overview]);
+  const chartHeight = 172;
+  const maxChartValue = useMemo(() => {
+    const spendPeak = Math.max(...chartSeries.spend, 0);
+    const incomePeak = Math.max(...chartSeries.income, 0);
+    const expectedPeak = Math.max(...chartSeries.expectedIncome, 0);
+    const budgetPeak = Math.max(...chartSeries.budget, 0);
+    return Math.max(spendPeak, incomePeak, expectedPeak, budgetPeak, 1);
+  }, [chartSeries]);
 
-  const monthlySpend = useMemo(() => buildMonthlySpend(overview?.monthDailySpend), [overview]);
-
-  const topCategories = useMemo(() => {
-    if (!overview?.categoryMonthSummary?.length) {
-      return fallbackCategories;
-    }
-    const max = Math.max(...overview.categoryMonthSummary.map((item) => item.spend), 1);
-    return overview.categoryMonthSummary.slice(0, 4).map((item) => ({
-      name: item.name,
-      amount: formatCurrency(item.spend),
-      percent: Math.round((item.spend / max) * 100),
-    }));
-  }, [overview]);
-
-  const goals = useMemo(() => {
-    if (!overview?.goals?.length) {
-      return fallbackGoals;
-    }
-    return overview.goals.slice(0, 3).map((goal) => {
-      const progress = goal.target > 0 ? Math.min(100, Math.round((goal.current / goal.target) * 100)) : 0;
-      return {
-        name: goal.name,
-        progress,
-        amount: formatCurrency(goal.current),
-        target: formatCurrency(goal.target),
-      };
-    });
-  }, [overview]);
-
-  const aiSummary = useMemo(() => {
-    if (!overview?.snapshot?.aiHighlights?.length) {
-      return {
-        highlight: 'Spend trends will show once accounts sync.',
-        action: 'Connect a bank to unlock AI summaries.',
-      };
-    }
-    return {
-      highlight: overview.snapshot.aiHighlights[0],
-      action: overview.snapshot.aiActions?.[0] ?? 'Review your latest insights.',
-    };
-  }, [overview]);
-
-  const flexibleBudgets = useMemo(
+  const spendPoints = useMemo(
     () =>
-      (overview?.categoryBudgets ?? []).filter(
-        (item) => !item.essential && (item.budget > 0 || item.spend > 0)
+      toPolylinePoints(
+        chartSeries.spend,
+        chartSeries.daysInMonth,
+        chartWidth,
+        chartHeight,
+        maxChartValue
       ),
+    [chartSeries, chartHeight, chartWidth, maxChartValue]
+  );
+  const incomePoints = useMemo(
+    () =>
+      toPolylinePoints(
+        chartSeries.income,
+        chartSeries.daysInMonth,
+        chartWidth,
+        chartHeight,
+        maxChartValue
+      ),
+    [chartSeries, chartHeight, chartWidth, maxChartValue]
+  );
+  const expectedIncomePoints = useMemo(
+    () =>
+      toPolylinePoints(
+        chartSeries.expectedIncome,
+        chartSeries.daysInMonth,
+        chartWidth,
+        chartHeight,
+        maxChartValue
+      ),
+    [chartSeries, chartHeight, chartWidth, maxChartValue]
+  );
+  const budgetPoints = useMemo(
+    () =>
+      toPolylinePoints(
+        chartSeries.budget,
+        chartSeries.daysInMonth,
+        chartWidth,
+        chartHeight,
+        maxChartValue
+      ),
+    [chartSeries, chartHeight, chartWidth, maxChartValue]
+  );
+
+  const groupedReviewRows = useMemo(() => {
+    const deduped: TransactionRow[] = [];
+    const seen = new Set<string>();
+    reviewRows.forEach((row) => {
+      const key = row.baseId ?? row.id;
+      if (seen.has(key)) return;
+      seen.add(key);
+      deduped.push({ ...row, id: key });
+    });
+
+    const map = new Map<string, TransactionRow[]>();
+    deduped.forEach((row) => {
+      const key = row.date;
+      const list = map.get(key) ?? [];
+      list.push(row);
+      map.set(key, list);
+    });
+
+    return Array.from(map.entries()).map(([day, items]) => ({
+      day,
+      items,
+    }));
+  }, [reviewRows]);
+
+  const budgetItems = useMemo(
+    () =>
+      (overview?.categoryBudgets ?? [])
+        .filter((item) => item.budget > 0)
+        .sort((a, b) => {
+          const aOver = a.spend - a.budget;
+          const bOver = b.spend - b.budget;
+          if (aOver > 0 && bOver <= 0) return -1;
+          if (bOver > 0 && aOver <= 0) return 1;
+          return b.spend - a.spend;
+        })
+        .slice(0, 8),
     [overview]
   );
 
-  useEffect(() => {
-    if (!flexibleBudgets.length) return;
-    if (!selectedBudgetName) {
-      const first = flexibleBudgets[0];
-      setSelectedBudgetName(first.name);
-      setSliderValue(first.budget || first.spend || 0);
-      return;
+  const openDetail = async (id: string) => {
+    setDetailOpen(true);
+    setDetailLoading(true);
+    try {
+      const detail = await apiRequest<TransactionDetail>(`/api/transactions/${id}`);
+      setSelected(detail);
+      setCategoryInput(detail.category ?? '');
+      setTransactionTypeInput(detail.transactionType ?? 'REGULAR');
+      setApplyToSimilar(false);
+      setApplyToCategory(false);
+      setCreateRule(false);
+      setRuleMatchType('EXACT');
+      setRuleMatchValue('');
+    } finally {
+      setDetailLoading(false);
     }
-    const match = flexibleBudgets.find((item) => item.name === selectedBudgetName);
-    if (!match) {
-      const first = flexibleBudgets[0];
-      setSelectedBudgetName(first.name);
-      setSliderValue(first.budget || first.spend || 0);
-    }
-  }, [flexibleBudgets, selectedBudgetName]);
+  };
 
-  const selectedBudget = flexibleBudgets.find((item) => item.name === selectedBudgetName);
-  const sliderMax = selectedBudget
-    ? Math.max(selectedBudget.spend, selectedBudget.budget || 0, 100) * 1.5
-    : 0;
-  const sliderMin = 0;
-  const baselineSpend = selectedBudget?.spend ?? 0;
-  const changeAmount = baselineSpend - sliderValue;
-  const basePayment = overview?.debtProjection?.basePayment ?? 0;
-  const debtRemaining = overview?.debtProjection?.remaining ?? 0;
-  const monthsNow = overview?.debtProjection?.monthsRemaining ?? 0;
-  const newPayment = basePayment + changeAmount;
-  const monthsWith =
-    debtRemaining > 0 && newPayment > 0 ? Math.ceil(debtRemaining / newPayment) : 0;
-  const monthsDelta = monthsNow && monthsWith ? monthsNow - monthsWith : 0;
+  const saveDetail = async () => {
+    if (!selected) return;
+    setSavingDetail(true);
+    try {
+      await apiRequest(`/api/transactions/${selected.id}`, {
+        method: 'PATCH',
+        body: {
+          category: categoryInput,
+          transactionType: transactionTypeInput,
+          applyToSimilar,
+          applyToCategory,
+          createRule,
+          ruleMatchType,
+          ruleMatchValue,
+        },
+      });
+      setDetailOpen(false);
+      await loadDashboard();
+    } finally {
+      setSavingDetail(false);
+    }
+  };
+
+  const markReviewed = async (id: string, category?: string) => {
+    await apiRequest('/api/transactions/review', {
+      method: 'POST',
+      body: { id, category },
+    });
+    await loadDashboard();
+  };
+
+  const markGroupReviewed = async (items: TransactionRow[]) => {
+    await Promise.all(
+      items.map((item) =>
+        apiRequest('/api/transactions/review', {
+          method: 'POST',
+          body: { id: item.id, category: item.category },
+        })
+      )
+    );
+    await loadDashboard();
+  };
+
+  const onChartLayout = (event: LayoutChangeEvent) => {
+    const width = Math.max(0, event.nativeEvent.layout.width - 8);
+    if (width !== chartWidth) setChartWidth(width);
+  };
+
+  const spent = overview?.monthSpendTotal ?? 0;
+  const budget = overview?.monthBudgetTotal ?? 0;
+  const budgetDiff = budget - spent;
 
   return (
-    <Screen title="Dashboard" subtitle="February snapshot and key wins.">
+    <Screen title="Dashboard" subtitle="Live overview from linked accounts.">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingCard}>
@@ -331,286 +360,316 @@ export function DashboardScreen() {
           </View>
         ) : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        <View style={styles.summaryGrid}>
-          {summaryMetrics.map((metric) => (
-            <View key={metric.label} style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>{metric.label}</Text>
-              <Text style={styles.summaryValue}>{metric.value}</Text>
-              <Text
-                style={[
-                  styles.summaryDelta,
-                  metric.tone === 'positive'
-                    ? styles.positive
-                    : metric.tone === 'negative'
-                      ? styles.negative
-                      : styles.neutral,
-                ]}
-              >
-                {metric.delta}
-              </Text>
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>Monthly spend</Text>
+              <Text style={styles.sectionSubtitle}>Expected income vs spend and budget pace</Text>
             </View>
-          ))}
-        </View>
+            <Pressable onPress={() => navigation.navigate('Transactions')}>
+              <Text style={styles.linkText}>Transactions</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.heroValue}>{formatCurrency(spent)}</Text>
+          <Text style={styles.heroMeta}>
+            {budget > 0
+              ? budgetDiff >= 0
+                ? `${formatCurrency(budgetDiff)} left of ${formatCurrency(budget)} budget`
+                : `${formatCurrency(Math.abs(budgetDiff))} over ${formatCurrency(budget)} budget`
+              : 'No monthly budget set yet'}
+          </Text>
+          <View style={styles.chartFrame} onLayout={onChartLayout}>
+            {chartWidth > 20 ? (
+              <Svg width={chartWidth} height={chartHeight + 18}>
+                {[0.25, 0.5, 0.75, 1].map((ratio) => {
+                  const y = chartHeight - ratio * chartHeight;
+                  return (
+                    <Line
+                      key={`grid-${ratio}`}
+                      x1={0}
+                      y1={y}
+                      x2={chartWidth}
+                      y2={y}
+                      stroke="rgba(255,255,255,0.08)"
+                      strokeWidth={1}
+                    />
+                  );
+                })}
 
-        {overview?.connectionStatus && overview.connectionStatus.state !== 'connected' ? (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>{overview.connectionStatus.title}</Text>
-            <Text style={styles.sectionSubtitle}>{overview.connectionStatus.description}</Text>
-          </View>
-        ) : null}
+                {budget > 0 ? (
+                  <Polyline
+                    points={budgetPoints}
+                    fill="none"
+                    stroke="rgba(99, 102, 241, 0.95)"
+                    strokeWidth={2}
+                    strokeDasharray="4,5"
+                  />
+                ) : null}
 
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Monthly spend</Text>
-            <Text style={styles.sectionSubtitle}>6-month trend</Text>
+                {(overview?.incomeSummary?.expected ?? 0) > 0 ? (
+                  <Polyline
+                    points={expectedIncomePoints}
+                    fill="none"
+                    stroke="rgba(56, 189, 248, 0.95)"
+                    strokeWidth={2}
+                    strokeDasharray="8,6"
+                  />
+                ) : null}
+
+                {incomePoints ? (
+                  <Polyline
+                    points={incomePoints}
+                    fill="none"
+                    stroke={colors.success}
+                    strokeWidth={3}
+                  />
+                ) : null}
+                {spendPoints ? (
+                  <Polyline
+                    points={spendPoints}
+                    fill="none"
+                    stroke="#fb7185"
+                    strokeWidth={3}
+                  />
+                ) : null}
+              </Svg>
+            ) : null}
           </View>
-          <View style={styles.chart}>
-            {monthlySpend.map((item) => {
-              const maxSpend = Math.max(...monthlySpend.map((entry) => entry.value), 1);
-              const height = Math.round((item.value / maxSpend) * 110) + 10;
-              return (
-                <View key={item.month} style={styles.chartItem}>
-                  <View style={[styles.chartBar, { height }]} />
-                  <Text style={styles.chartLabel}>{item.month}</Text>
-                </View>
-              );
-            })}
-          </View>
-          <View style={styles.chartFooter}>
-            <Text style={styles.chartValue}>
-              {formatCurrency(overview?.monthSpendTotal ?? 3482)}
+          <View style={styles.legendRow}>
+            <Text style={styles.legendText}>
+              <Text style={styles.legendSpend}>●</Text> Spend
             </Text>
-            <Text style={styles.chartHint}>{overview?.categorySummaryLabel ?? 'Projected to finish 8% under budget.'}</Text>
+            <Text style={styles.legendText}>
+              <Text style={styles.legendIncome}>●</Text> Income
+            </Text>
+            <Text style={styles.legendText}>
+              <Text style={styles.legendExpected}>●</Text> Expected income
+            </Text>
+            <Text style={styles.legendText}>
+              <Text style={styles.legendBudget}>●</Text> Budget pace
+            </Text>
           </View>
         </View>
 
         <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Transactions snapshot</Text>
-            <Text style={styles.sectionSubtitle}>Recent activity</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>To review</Text>
+            <Pressable onPress={() => navigation.navigate('Transactions')}>
+              <Text style={styles.linkText}>View all</Text>
+            </Pressable>
           </View>
-          {(overview?.recentTransactions ?? []).length === 0 ? (
-            <Text style={styles.emptyText}>No recent transactions yet.</Text>
+
+          {groupedReviewRows.length === 0 ? (
+            <Text style={styles.emptyText}>No transactions need review right now.</Text>
           ) : (
-            overview?.recentTransactions?.map((tx) => (
-              <View key={tx.id} style={styles.snapshotRow}>
-                <View>
-                  <Text style={styles.snapshotName}>{tx.name}</Text>
-                  <Text style={styles.snapshotMeta}>{tx.category} · {tx.date}</Text>
-                </View>
-                <Text style={[styles.snapshotAmount, tx.isIncome ? styles.positive : styles.negative]}>
-                  {tx.isIncome ? '+' : '-'}{formatCurrency(tx.amount)}
-                </Text>
+            groupedReviewRows.map((group) => (
+              <View key={group.day} style={styles.reviewDayCard}>
+                <Text style={styles.reviewDay}>{group.day}</Text>
+                {group.items.map((item) => (
+                  <View key={item.id} style={styles.reviewItemWrap}>
+                    <Pressable onPress={() => openDetail(item.id)} style={styles.reviewRow}>
+                      <View style={styles.reviewMeta}>
+                        <Text style={styles.reviewName} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <View style={styles.categoryChip}>
+                          <Text style={styles.categoryChipText} numberOfLines={1}>
+                            {item.category}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.reviewAmount, item.isIncome ? styles.positive : styles.negative]}>
+                        {item.isIncome ? '+' : '-'}
+                        {formatCurrency(item.amount, 2)}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.reviewButton}
+                      onPress={() => markReviewed(item.id, item.category)}
+                    >
+                      <Text style={styles.reviewButtonLabel}>Mark as reviewed</Text>
+                    </Pressable>
+                  </View>
+                ))}
+                {group.items.length > 1 ? (
+                  <Pressable style={styles.groupReviewButton} onPress={() => markGroupReviewed(group.items)}>
+                    <Text style={styles.groupReviewLabel}>Mark day as reviewed</Text>
+                  </Pressable>
+                ) : null}
               </View>
             ))
           )}
         </View>
 
         <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Income forecast</Text>
-            <Text style={styles.sectionSubtitle}>Month-to-date income</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Budgets</Text>
+            <Pressable onPress={() => navigation.navigate('Categories')}>
+              <Text style={styles.linkText}>View all</Text>
+            </Pressable>
           </View>
-          <View style={styles.forecastRow}>
-            <Text style={styles.forecastValue}>{formatCurrency(overview?.incomeSummary?.actual ?? 0)}</Text>
-            <Text style={styles.forecastMeta}>
-              of {formatCurrency(overview?.incomeSummary?.expected ?? 0)} expected
-            </Text>
-          </View>
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${Math.min(100, Math.round((overview?.incomeSummary?.progress ?? 0) * 100))}%`,
-                },
-              ]}
-            />
-          </View>
-          <Text style={styles.forecastMeta}>
-            {(overview?.incomeSummary?.expected ?? 0) > 0
-              ? `${(overview?.incomeSummary?.variance ?? 0) >= 0 ? '+' : '-'}${formatCurrency(
-                  Math.abs(overview?.incomeSummary?.variance ?? 0)
-                )} vs expected`
-              : 'No forecast yet'}
-          </Text>
-        </View>
+          {budgetItems.length === 0 ? (
+            <Text style={styles.emptyText}>Set category budgets to track month-to-date pacing.</Text>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.budgetScroll}>
+              {budgetItems.map((item) => {
+                const ratio = item.budget > 0 ? item.spend / item.budget : 0;
+                const progress = Math.max(0, Math.min(1, ratio));
+                const over = item.spend > item.budget;
+                const ringColor = over ? '#ef4444' : '#22c55e';
+                const overUnderAmount = Math.abs(item.spend - item.budget);
+                const center = 45;
+                const radius = 32;
+                const circumference = 2 * Math.PI * radius;
+                const dashoffset = circumference * (1 - progress);
 
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Assets & debt</Text>
-            <Text style={styles.sectionSubtitle}>Across linked accounts</Text>
-          </View>
-          <View style={styles.assetRow}>
-            <View style={styles.assetCard}>
-              <Text style={styles.assetLabel}>Assets</Text>
-              <Text style={styles.assetValue}>{formatCurrency(overview?.assetsTotal ?? 0)}</Text>
-            </View>
-            <View style={styles.assetCard}>
-              <Text style={styles.assetLabel}>Debt</Text>
-              <Text style={styles.assetValue}>{formatCurrency(overview?.debtTotal ?? 0)}</Text>
-            </View>
-          </View>
-        </View>
-
-        {overview?.budgetSnapshot ? (
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Budget snapshot</Text>
-              <Text style={styles.sectionSubtitle}>Essentials vs flexible</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Essentials</Text>
-              <Text style={styles.detailValue}>
-                {formatCurrency(overview.budgetSnapshot.essentialsSpend)} / {formatCurrency(overview.budgetSnapshot.essentialsBudget)}
-              </Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Flexible</Text>
-              <Text style={styles.detailValue}>
-                {formatCurrency(overview.budgetSnapshot.flexibleSpend)} / {formatCurrency(overview.budgetSnapshot.flexibleBudget)}
-              </Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Total</Text>
-              <Text style={styles.detailValue}>
-                {formatCurrency(overview.budgetSnapshot.totalSpend)} / {formatCurrency(overview.budgetSnapshot.totalBudget)}
-              </Text>
-            </View>
-          </View>
-        ) : null}
-
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Top categories</Text>
-            <Text style={styles.sectionSubtitle}>Most active this month</Text>
-          </View>
-          {topCategories.map((category) => (
-            <View key={category.name} style={styles.categoryRow}>
-              <View style={styles.categoryMeta}>
-                <Text style={styles.categoryName}>{category.name}</Text>
-                <Text style={styles.categoryAmount}>{category.amount}</Text>
-              </View>
-              <View style={styles.categoryBarTrack}>
-                <View style={[styles.categoryBarFill, { width: `${category.percent}%` }]} />
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {overview?.budgetRecommendations && overview.budgetRecommendations.length > 0 ? (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Budget recommendations</Text>
-            {overview.budgetRecommendations.map((item) => (
-              <Text key={item} style={styles.recommendationText}>{item}</Text>
-            ))}
-          </View>
-        ) : null}
-
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Budget tuning</Text>
-            <Text style={styles.sectionSubtitle}>
-              Adjust a flexible category and see payoff timing change.
-            </Text>
-          </View>
-          {flexibleBudgets.length > 0 ? (
-            <View style={styles.tuningCard}>
-              <View style={styles.filterRow}>
-                {flexibleBudgets.slice(0, 4).map((item) => (
-                  <Pressable
-                    key={item.name}
-                    style={[
-                      styles.tuningChip,
-                      selectedBudgetName === item.name && styles.tuningChipActive,
-                    ]}
-                    onPress={() => {
-                      setSelectedBudgetName(item.name);
-                      setSliderValue(item.budget || item.spend || 0);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.tuningChipLabel,
-                        selectedBudgetName === item.name && styles.tuningChipLabelActive,
-                      ]}
-                    >
+                return (
+                  <View key={item.name} style={styles.budgetCard}>
+                    <Svg width={90} height={90}>
+                      <Circle
+                        cx={center}
+                        cy={center}
+                        r={radius}
+                        stroke="rgba(255,255,255,0.18)"
+                        strokeWidth={8}
+                        fill="transparent"
+                      />
+                      <Circle
+                        cx={center}
+                        cy={center}
+                        r={radius}
+                        stroke={ringColor}
+                        strokeWidth={8}
+                        fill="transparent"
+                        strokeDasharray={`${circumference} ${circumference}`}
+                        strokeDashoffset={dashoffset}
+                        strokeLinecap="round"
+                        transform={`rotate(-90 ${center} ${center})`}
+                      />
+                    </Svg>
+                    <View style={styles.budgetInitialBadge}>
+                      <Text style={styles.budgetInitialText}>{initials(item.name)}</Text>
+                    </View>
+                    <Text numberOfLines={1} style={styles.budgetName}>
                       {item.name}
                     </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={styles.tuningScaleRow}>
-                <Text style={styles.tuningScaleLabel}>{formatCurrency(sliderMin)}</Text>
-                <Text style={styles.tuningScaleValue}>{formatCurrency(sliderValue)}</Text>
-                <Text style={styles.tuningScaleLabel}>{formatCurrency(Math.round(sliderMax))}</Text>
-              </View>
-              <Slider
-                minimumValue={sliderMin}
-                maximumValue={sliderMax || 1}
-                value={sliderValue}
-                onValueChange={setSliderValue}
-                step={10}
-                minimumTrackTintColor={colors.primary}
-                maximumTrackTintColor={colors.cardBorder}
-                thumbTintColor={colors.primary}
-              />
-              <Text style={styles.tuningSummary}>
-                {debtRemaining <= 0
-                  ? 'Add a debt payoff goal to see projections.'
-                  : newPayment <= 0
-                  ? 'Lowering this too much removes your debt payoff signal.'
-                  : monthsDelta > 0
-                  ? `With ${formatCurrency(Math.abs(changeAmount))} freed up monthly, you finish about ${monthsDelta} months sooner.`
-                  : monthsDelta < 0
-                  ? `With ${formatCurrency(Math.abs(changeAmount))} added monthly spend, payoff moves about ${Math.abs(monthsDelta)} months later.`
-                  : 'This setting keeps your debt payoff pace unchanged.'}
-              </Text>
-            </View>
-          ) : (
-            <Text style={styles.emptyText}>Add flexible budgets to enable payoff tuning.</Text>
+                    <Text style={[styles.budgetDelta, over ? styles.negative : styles.positive]}>
+                      {formatCurrency(overUnderAmount)}
+                    </Text>
+                    <Text style={styles.budgetState}>{over ? 'over' : 'under'}</Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
           )}
         </View>
-
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Goals progress</Text>
-            <Text style={styles.sectionSubtitle}>Keep the momentum going</Text>
-          </View>
-          {goals.map((goal) => (
-            <View key={goal.name} style={styles.goalRow}>
-              <View style={styles.goalHeader}>
-                <Text style={styles.goalName}>{goal.name}</Text>
-                <Text style={styles.goalAmount}>{goal.amount} / {goal.target}</Text>
-              </View>
-              <View style={styles.goalBarTrack}>
-                <View style={[styles.goalBarFill, { width: `${goal.progress}%` }]} />
-              </View>
-              <Text style={styles.goalProgress}>{goal.progress}% complete</Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={[styles.sectionCard, styles.aiCard]}>
-          <Text style={styles.aiTitle}>AI coach summary</Text>
-          <Text style={styles.aiBody}>{aiSummary.highlight}</Text>
-          <View style={styles.aiFooter}>
-            <Text style={styles.aiTag}>Next step</Text>
-            <Text style={styles.aiAction}>{aiSummary.action}</Text>
-          </View>
-          <Text style={styles.chatHint}>
-            Use the floating chat button to ask deeper questions.
-          </Text>
-        </View>
       </ScrollView>
+
+      <ModalSheet visible={detailOpen} onClose={() => setDetailOpen(false)}>
+        {detailLoading || !selected ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={styles.loadingText}>Loading details...</Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.detailContent}>
+            <Text style={styles.detailHeader}>Transaction to review</Text>
+            <Text style={styles.detailDate}>{new Date(selected.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</Text>
+            <Text style={styles.detailTitle}>{selected.name}</Text>
+            <Text style={styles.detailAmount}>
+              {selected.amount < 0 ? '+' : '-'}
+              {formatCurrency(Math.abs(selected.amount), 2)}
+            </Text>
+            <Text style={styles.detailAccount}>
+              {selected.account?.institutionName ?? 'Account'} · {selected.account?.name ?? 'Linked account'}
+            </Text>
+
+            <Text style={styles.detailSectionTitle}>Category</Text>
+            <TextInput
+              value={categoryInput}
+              onChangeText={setCategoryInput}
+              placeholder="Category"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+            />
+
+            <Text style={styles.detailSectionTitle}>Transaction type</Text>
+            <View style={styles.filterRow}>
+              {(['REGULAR', 'INCOME', 'INTERNAL_TRANSFER'] as const).map((type) => (
+                <Chip
+                  key={type}
+                  label={type.replace('_', ' ')}
+                  active={transactionTypeInput === type}
+                  onPress={() => setTransactionTypeInput(type)}
+                />
+              ))}
+            </View>
+
+            <View style={styles.filterRow}>
+              <Chip
+                label={applyToSimilar ? 'Apply similar ✓' : 'Apply similar'}
+                active={applyToSimilar}
+                onPress={() => setApplyToSimilar((prev) => !prev)}
+              />
+              <Chip
+                label={applyToCategory ? 'Apply category ✓' : 'Apply category'}
+                active={applyToCategory}
+                onPress={() => setApplyToCategory((prev) => !prev)}
+              />
+              <Chip
+                label={createRule ? 'Create rule ✓' : 'Create rule'}
+                active={createRule}
+                onPress={() => setCreateRule((prev) => !prev)}
+              />
+            </View>
+
+            {createRule ? (
+              <View style={styles.ruleWrap}>
+                <View style={styles.filterRow}>
+                  <Chip
+                    label="Exact"
+                    active={ruleMatchType === 'EXACT'}
+                    onPress={() => setRuleMatchType('EXACT')}
+                  />
+                  <Chip
+                    label="Partial"
+                    active={ruleMatchType === 'PARTIAL'}
+                    onPress={() => setRuleMatchType('PARTIAL')}
+                  />
+                </View>
+                <TextInput
+                  value={ruleMatchValue}
+                  onChangeText={setRuleMatchValue}
+                  placeholder="Rule match text"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
+                />
+              </View>
+            ) : null}
+
+            <View style={styles.detailActionRow}>
+              <Pressable
+                style={styles.secondaryButton}
+                onPress={() => markReviewed(selected.id, categoryInput || selected.category)}
+              >
+                <Text style={styles.secondaryLabel}>Mark reviewed</Text>
+              </Pressable>
+              <Pressable style={styles.primaryButton} onPress={saveDetail} disabled={savingDetail}>
+                <Text style={styles.primaryLabel}>{savingDetail ? 'Saving...' : 'Save changes'}</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        )}
+      </ModalSheet>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: 28,
-    gap: 18,
+    paddingBottom: 26,
+    gap: 14,
   },
   loadingCard: {
     flexDirection: 'row',
@@ -631,34 +690,200 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 12,
   },
-  summaryGrid: {
+  sectionCard: {
+    backgroundColor: 'rgba(17, 22, 43, 0.72)',
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    gap: 10,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  sectionSubtitle: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  linkText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  heroValue: {
+    color: colors.text,
+    fontSize: 34,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  heroMeta: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  chartFrame: {
+    marginTop: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(5, 10, 24, 0.6)',
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+  },
+  legendRow: {
+    marginTop: 4,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
   },
-  summaryCard: {
-    width: '48%',
-    padding: 14,
+  legendText: {
+    color: colors.textMuted,
+    fontSize: 11,
+  },
+  legendSpend: {
+    color: '#fb7185',
+  },
+  legendIncome: {
+    color: colors.success,
+  },
+  legendExpected: {
+    color: '#38BDF8',
+  },
+  legendBudget: {
+    color: '#6366f1',
+  },
+  emptyText: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  reviewDayCard: {
     borderRadius: 18,
-    backgroundColor: 'rgba(18, 24, 46, 0.7)',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(9, 14, 30, 0.56)',
+    padding: 12,
+    gap: 10,
+  },
+  reviewDay: {
+    color: colors.textMuted,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  reviewItemWrap: {
+    gap: 8,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  reviewMeta: {
+    flex: 1,
+    gap: 6,
+  },
+  reviewName: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  categoryChip: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(110, 120, 255, 0.18)',
+    maxWidth: '92%',
+  },
+  categoryChipText: {
+    color: '#d3d8ff',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  reviewAmount: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  reviewButton: {
+    borderRadius: 12,
+    paddingVertical: 9,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  reviewButtonLabel: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: 12,
+    textTransform: 'uppercase',
+  },
+  groupReviewButton: {
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: 'rgba(56, 189, 248, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.5)',
+  },
+  groupReviewLabel: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  budgetScroll: {
+    gap: 12,
+    paddingRight: 8,
+  },
+  budgetCard: {
+    width: 108,
+    alignItems: 'center',
+    gap: 4,
+  },
+  budgetInitialBadge: {
+    marginTop: -62,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  summaryLabel: {
+  budgetInitialText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  budgetName: {
+    color: colors.textMuted,
+    marginTop: 24,
+    fontSize: 11,
+    width: '100%',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  budgetDelta: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  budgetState: {
     color: colors.textMuted,
     fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  summaryValue: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '700',
-    marginTop: 8,
-  },
-  summaryDelta: {
-    fontSize: 12,
-    marginTop: 6,
+    textTransform: 'lowercase',
   },
   positive: {
     color: colors.success,
@@ -666,307 +891,89 @@ const styles = StyleSheet.create({
   negative: {
     color: colors.danger,
   },
-  neutral: {
-    color: colors.textMuted,
-  },
-  sectionCard: {
-    backgroundColor: 'rgba(17, 22, 43, 0.7)',
-    borderRadius: 22,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  sectionHeader: {
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  sectionSubtitle: {
-    color: colors.textMuted,
-    fontSize: 12,
-    marginTop: 4,
-  },
-  emptyText: {
-    color: colors.textMuted,
-    fontSize: 12,
-  },
-  snapshotRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  snapshotName: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  snapshotMeta: {
-    color: colors.textMuted,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  snapshotAmount: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  forecastRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginBottom: 8,
-  },
-  forecastValue: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  forecastMeta: {
-    color: colors.textMuted,
-    fontSize: 12,
-  },
-  progressTrack: {
-    height: 8,
-    borderRadius: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    overflow: 'hidden',
-    marginBottom: 6,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.primary,
-  },
-  assetRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  assetCard: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: 14,
-    padding: 12,
-  },
-  assetLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  assetValue: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 6,
-  },
-  detailLabel: {
-    color: colors.textMuted,
-    fontSize: 12,
-  },
-  detailValue: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  chart: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    height: 140,
-    marginBottom: 12,
-  },
-  chartItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  chartBar: {
-    width: 18,
-    borderRadius: 10,
-    backgroundColor: colors.primary,
-    marginBottom: 8,
-  },
-  chartLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-  },
-  chartFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  detailContent: {
     gap: 10,
+    paddingBottom: 20,
   },
-  chartValue: {
-    color: colors.text,
-    fontSize: 16,
+  detailHeader: {
+    color: colors.primary,
+    fontSize: 12,
     fontWeight: '700',
-  },
-  chartHint: {
-    color: colors.textMuted,
-    fontSize: 12,
-    flex: 1,
-    textAlign: 'right',
-  },
-  categoryRow: {
-    marginBottom: 12,
-  },
-  categoryMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  categoryName: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  categoryAmount: {
-    color: colors.textMuted,
-    fontSize: 13,
-  },
-  categoryBarTrack: {
-    marginTop: 6,
-    height: 8,
-    borderRadius: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    overflow: 'hidden',
-  },
-  categoryBarFill: {
-    height: '100%',
-    backgroundColor: colors.accent,
-    borderRadius: 6,
-  },
-  goalRow: {
-    marginBottom: 16,
-  },
-  goalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  goalName: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  goalAmount: {
-    color: colors.textMuted,
-    fontSize: 12,
-  },
-  goalBarTrack: {
-    marginTop: 8,
-    height: 10,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    overflow: 'hidden',
-  },
-  goalBarFill: {
-    height: '100%',
-    backgroundColor: colors.success,
-    borderRadius: 8,
-  },
-  goalProgress: {
-    color: colors.textMuted,
-    fontSize: 12,
-    marginTop: 6,
-  },
-  aiCard: {
-    backgroundColor: 'rgba(20, 28, 54, 0.85)',
-  },
-  aiTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 10,
-  },
-  aiBody: {
-    color: colors.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  aiFooter: {
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.cardBorder,
-  },
-  chatHint: {
-    color: colors.textMuted,
-    fontSize: 12,
-    marginTop: 12,
-  },
-  aiTag: {
-    color: colors.accent,
-    fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
-  aiAction: {
+  detailDate: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  detailTitle: {
+    color: colors.text,
+    fontSize: 36,
+    fontWeight: '800',
+    lineHeight: 40,
+  },
+  detailAmount: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  detailAccount: {
+    color: colors.textMuted,
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  detailSectionTitle: {
     color: colors.text,
     fontSize: 14,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  recommendationText: {
-    color: colors.textMuted,
-    fontSize: 12,
+    fontWeight: '700',
     marginTop: 6,
   },
-  tuningCard: {
-    borderRadius: 16,
-    padding: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  input: {
     borderWidth: 1,
     borderColor: colors.cardBorder,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: colors.text,
+    backgroundColor: 'rgba(9, 13, 27, 0.7)',
   },
   filterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  tuningChip: {
-    borderRadius: 12,
+  ruleWrap: {
+    gap: 8,
+  },
+  detailActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  primaryButton: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: 11,
+    alignItems: 'center',
+  },
+  primaryLabel: {
+    color: colors.background,
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  secondaryButton: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 11,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    backgroundColor: 'rgba(255,255,255,0.03)',
   },
-  tuningChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  tuningChipLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  tuningChipLabelActive: {
-    color: colors.background,
-  },
-  tuningScaleRow: {
-    marginTop: 10,
-    marginBottom: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  tuningScaleLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-  },
-  tuningScaleValue: {
+  secondaryLabel: {
     color: colors.text,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  tuningSummary: {
-    marginTop: 10,
-    color: colors.textMuted,
+    fontWeight: '600',
     fontSize: 12,
-    lineHeight: 17,
   },
 });
