@@ -1,9 +1,6 @@
 import { prisma } from "@/lib/db";
 import {
-  asOfDate,
-  mockAccounts,
   mockClient,
-  mockGoals,
   mockTransactions,
 } from "@/data/mockData";
 import { buildClientSnapshot } from "@/utils/trends";
@@ -232,120 +229,27 @@ export const getClientOverviewData = async (user: User) => {
     };
 
   if (transactions.length === 0 || accounts.length === 0) {
-    const cashOnHand = mockAccounts.reduce((acc, account) => {
-      if (account.type === "credit") return acc - account.balance;
-      return acc + account.balance;
-    }, 0);
-    const snapshot = buildClientSnapshot({
-      asOf: asOfDate,
-      transactions: mockTransactions,
-      cashOnHand,
-    });
-    const now = new Date(asOfDate);
+    const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const daysInMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0
-    ).getDate();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const daysElapsed = Math.max(
       1,
       Math.floor((now.getTime() - monthStart.getTime()) / 86400000) + 1
     );
-    const monthDaily = Array.from({ length: daysInMonth }, () => 0);
-    const monthDailyIncome = Array.from({ length: daysInMonth }, () => 0);
-    const monthCategories = new Map<string, number>();
-    const recentTransactions = mockTransactions
-      .slice(0, 8)
-      .map((tx) => ({
-        id: tx.id,
-        name: tx.merchant,
-        category: tx.category,
-        amount: Math.abs(tx.amount),
-        isIncome: tx.amount > 0,
-        date: new Date(tx.date).toLocaleDateString("en-US", {
-          month: "short",
-          day: "2-digit",
-        }),
-      }));
-
-    mockTransactions.forEach((tx) => {
-      const date = new Date(tx.date);
-      if (date < monthStart) return;
-      if (tx.amount < 0) {
-        const dayIndex = date.getDate() - 1;
-        monthDaily[dayIndex] += Math.abs(tx.amount);
-        monthCategories.set(
-          tx.category,
-          (monthCategories.get(tx.category) ?? 0) + Math.abs(tx.amount)
-        );
-      }
-      if (isIncomeTransaction(tx) && !isTransferTransaction(tx)) {
-        const dayIndex = date.getDate() - 1;
-        monthDailyIncome[dayIndex] += Math.abs(tx.amount);
-      }
-    });
-
-    const monthCumulative = monthDaily.reduce<number[]>((acc, value, index) => {
-      acc[index] = value + (acc[index - 1] ?? 0);
-      return acc;
-    }, []);
-    const monthIncomeCumulative = monthDailyIncome.reduce<number[]>(
-      (acc, value, index) => {
-        acc[index] = value + (acc[index - 1] ?? 0);
-        return acc;
-      },
-      []
-    );
-    const monthSpendTotal = monthDaily.reduce((acc, value) => acc + value, 0);
-    const categoryMonthSummary = Array.from(monthCategories.entries())
-      .map(([name, spend]) => ({
-        name,
-        spend,
-        budget: null as number | null,
-      }))
-      .sort((a, b) => b.spend - a.spend)
-      .slice(0, 6);
-    const assetsTotal = mockAccounts
-      .filter((account) => account.type !== "credit")
-      .reduce((acc, account) => acc + account.balance, 0);
-    const debtTotal = mockAccounts
-      .filter((account) => account.type === "credit")
-      .reduce((acc, account) => acc + Math.abs(account.balance), 0);
-    const mockDebtGoal = mockGoals.find((goal) => goal.type === "DEBT");
-    const mockDebtRemaining = mockDebtGoal
-      ? Math.max(0, mockDebtGoal.target - mockDebtGoal.current)
-      : 0;
-    const mockBasePayment = mockDebtRemaining > 0 ? 300 : 0;
-    const mockMonthsRemaining =
-      mockDebtRemaining > 0 && mockBasePayment > 0
-        ? Math.ceil(mockDebtRemaining / mockBasePayment)
-        : 0;
-    const incomeSummary = computeIncomeForecast(
-      mockTransactions.map((tx) => ({
-        amount: tx.amount,
-        date: new Date(tx.date),
-        category: tx.category,
-        name: tx.merchant,
-      })),
-      user.monthlyIncomeOverride
-    );
+    const emptyCumulative = Array.from({ length: daysInMonth }, () => 0);
 
     return {
-      clientName: getDisplayName(user) ?? mockClient.name,
+      clientName: getDisplayName(user),
       clientId: user.id,
-      snapshot,
-      goals: (goals.length ? goals : mockGoals).map(serializeGoal),
+      snapshot: buildClientSnapshot({
+        asOf: now,
+        transactions: [],
+        cashOnHand: 0,
+        spendIsPositive: true,
+      }),
+      goals: goals.map(serializeGoal),
       plaidItems: [],
-    accounts: mockAccounts.map((account) => ({
-      id: account.id,
-      plaidItemId: undefined,
-      name: account.name,
-      type: account.type,
-        mask: undefined,
-        institutionName: "Demo Bank",
-        balance: account.balance,
-      })),
+      accounts: [],
       review,
       budgetSnapshot: {
         essentialsSpend: 0,
@@ -357,22 +261,28 @@ export const getClientOverviewData = async (user: User) => {
         overBudgetCategories: 0,
       },
       categoryBudgets: [],
-      categoryMonthSummary,
-      recentTransactions,
-      assetsTotal,
-      debtTotal,
-      monthDailySpend: monthCumulative,
-      monthDailyIncome: monthIncomeCumulative,
-      monthSpendTotal,
+      categoryMonthSummary: [],
+      recentTransactions: [],
+      assetsTotal: 0,
+      debtTotal: 0,
+      monthDailySpend: emptyCumulative,
+      monthDailyIncome: emptyCumulative,
+      monthSpendTotal: 0,
       monthBudgetTotal: 0,
       monthDaysElapsed: daysElapsed,
       debtProjection: {
-        remaining: mockDebtRemaining,
-        basePayment: mockBasePayment,
-        monthsRemaining: mockMonthsRemaining,
+        remaining: 0,
+        basePayment: 0,
+        monthsRemaining: 0,
       },
       budgetRecommendations: [],
-      incomeSummary,
+      incomeSummary: {
+        actual: 0,
+        expected: user.monthlyIncomeOverride ? Math.max(0, Math.round(user.monthlyIncomeOverride)) : 0,
+        remaining: user.monthlyIncomeOverride ? Math.max(0, Math.round(user.monthlyIncomeOverride)) : 0,
+        variance: user.monthlyIncomeOverride ? -Math.max(0, Math.round(user.monthlyIncomeOverride)) : 0,
+        progress: 0,
+      },
       connectionStatus: {
         state: "disconnected" as const,
         title: "Connect a bank to unlock live data.",
@@ -679,7 +589,7 @@ export const getClientOverviewData = async (user: User) => {
     clientName: getDisplayName(user),
     clientId: user.id,
     snapshot,
-    goals: (activeGoals.length ? activeGoals : mockGoals).map(serializeGoal),
+    goals: activeGoals.map(serializeGoal),
     plaidItems: plaidItems.map((item) => ({
       id: item.id,
       itemId: item.itemId,
