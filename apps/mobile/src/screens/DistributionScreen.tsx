@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 
 import { Screen } from '../components/Screen';
 import { apiRequest } from '../lib/api';
@@ -35,10 +43,6 @@ type DistributionResponse = {
   links: SankeyLink[];
 };
 
-type LayoutNode = SankeyNode & {
-  _unused?: never;
-};
-
 const formatCurrency = (value: number) =>
   value.toLocaleString('en-US', {
     style: 'currency',
@@ -60,6 +64,9 @@ export function DistributionScreen() {
   const [data, setData] = useState<DistributionResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [flowLimit, setFlowLimit] = useState<5 | 8>(5);
+  const { width } = useWindowDimensions();
+  const isCompact = width < 390;
 
   useEffect(() => {
     let isMounted = true;
@@ -143,7 +150,7 @@ export function DistributionScreen() {
     [flowPaths]
   );
 
-  const visibleFlowPaths = useMemo(() => flowPaths.slice(0, 8), [flowPaths]);
+  const visibleFlowPaths = useMemo(() => flowPaths.slice(0, flowLimit), [flowLimit, flowPaths]);
 
   const stageTotals = useMemo(() => {
     const nodes = data?.nodes ?? [];
@@ -189,8 +196,54 @@ export function DistributionScreen() {
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Flow map</Text>
-          <Text style={styles.sectionSubtitle}>{data?.rangeLabel ?? 'This month'}</Text>
+          <View style={styles.flowHeaderRow}>
+            <View>
+              <Text style={[styles.sectionTitle, isCompact && styles.sectionTitleCompact]}>Flow map</Text>
+              <Text style={[styles.sectionSubtitle, isCompact && styles.sectionSubtitleCompact]}>
+                {data?.rangeLabel ?? 'This month'}
+              </Text>
+            </View>
+            {flowPaths.length > 5 ? (
+              <View style={styles.toggleRow}>
+                <Pressable
+                  onPress={() => setFlowLimit(5)}
+                  style={[
+                    styles.toggleButton,
+                    flowLimit === 5 && styles.toggleButtonActive,
+                    isCompact && styles.toggleButtonCompact,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.toggleLabel,
+                      flowLimit === 5 && styles.toggleLabelActive,
+                      isCompact && styles.toggleLabelCompact,
+                    ]}
+                  >
+                    Top 5
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setFlowLimit(8)}
+                  style={[
+                    styles.toggleButton,
+                    flowLimit === 8 && styles.toggleButtonActive,
+                    isCompact && styles.toggleButtonCompact,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.toggleLabel,
+                      flowLimit === 8 && styles.toggleLabelActive,
+                      isCompact && styles.toggleLabelCompact,
+                    ]}
+                  >
+                    Top 8
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
           <View style={styles.flowMapWrapper}>
             {visibleFlowPaths.length > 0 ? (
               <View style={styles.flowList}>
@@ -202,7 +255,9 @@ export function DistributionScreen() {
                         <Text style={styles.pathRoute} numberOfLines={1}>
                           {path.sourceLabel} {'->'} {path.targetLabel}
                         </Text>
-                        <Text style={styles.pathAmount}>{formatCurrency(path.value)}</Text>
+                        <Text style={[styles.pathAmount, isCompact && styles.pathAmountCompact]}>
+                          {formatCurrency(path.value)}
+                        </Text>
                       </View>
                       <View style={styles.pathBarTrack}>
                         <View
@@ -227,8 +282,10 @@ export function DistributionScreen() {
             <View style={styles.stageTotals}>
               {stageTotals.map((stage) => (
                 <View key={stage.label} style={styles.stageCard}>
-                  <Text style={styles.stageLabel}>{stage.label}</Text>
-                  <Text style={styles.stageValue}>{formatCurrency(stage.value)}</Text>
+                  <Text style={[styles.stageLabel, isCompact && styles.stageLabelCompact]}>{stage.label}</Text>
+                  <Text style={[styles.stageValue, isCompact && styles.stageValueCompact]}>
+                    {formatCurrency(stage.value)}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -342,10 +399,55 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  sectionTitleCompact: {
+    fontSize: 15,
+  },
   sectionSubtitle: {
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 4,
+  },
+  sectionSubtitleCompact: {
+    fontSize: 11,
+  },
+  flowHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  toggleButton: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  toggleButtonCompact: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  toggleButtonActive: {
+    backgroundColor: 'rgba(56, 189, 248, 0.18)',
+    borderColor: colors.primary,
+  },
+  toggleLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  toggleLabelCompact: {
+    fontSize: 10,
+  },
+  toggleLabelActive: {
+    color: colors.text,
   },
   flowMapWrapper: {
     marginTop: 12,
@@ -379,6 +481,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  pathAmountCompact: {
+    fontSize: 11,
+  },
   pathBarTrack: {
     height: 10,
     borderRadius: 6,
@@ -409,11 +514,17 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  stageLabelCompact: {
+    fontSize: 9,
+  },
   stageValue: {
     color: colors.text,
     fontSize: 13,
     fontWeight: '700',
     marginTop: 4,
+  },
+  stageValueCompact: {
+    fontSize: 12,
   },
   flowRow: {
     flexDirection: 'row',
