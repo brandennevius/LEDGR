@@ -42,6 +42,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       favicon: './assets/favicon.png',
     },
     plugins: [
+      'expo-font',
       'expo-secure-store',
       'expo-web-browser',
       './plugins/with-path-safe-ios-scripts',
