@@ -73,6 +73,9 @@ const formatCurrencyDetailed = (value: number) =>
 const formatDayLabel = (value: string) =>
   new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
+const formatMonthLabel = (value: string) =>
+  new Date(value).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
 export function CategoriesScreen() {
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [selected, setSelected] = useState<string>('');
@@ -128,8 +131,69 @@ export function CategoriesScreen() {
     if (!selectedRow || !overview?.transactions) return [];
     return overview.transactions
       .filter((tx) => tx.category === selectedRow.name && tx.amount > 0)
-      .slice(0, 8);
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [overview, selectedRow]);
+
+  const monthlySeries = useMemo(() => {
+    const now = new Date();
+    const months = Array.from({ length: 12 }).map((_, index) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (11 - index), 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      return {
+        key,
+        label: d.toLocaleDateString('en-US', { month: 'short' }),
+        value: 0,
+      };
+    });
+
+    const monthIndex = new Map(months.map((month, index) => [month.key, index]));
+    filteredTransactions.forEach((tx) => {
+      const d = new Date(tx.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const index = monthIndex.get(key);
+      if (index !== undefined) {
+        months[index].value += Math.abs(tx.amount);
+      }
+    });
+
+    return months;
+  }, [filteredTransactions]);
+
+  const chartMax = useMemo(() => Math.max(1, ...monthlySeries.map((month) => month.value), 1), [monthlySeries]);
+
+  const yearlyMetrics = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const monthIndex = now.getMonth() + 1;
+    const totalSpend = filteredTransactions
+      .filter((tx) => new Date(tx.date).getFullYear() === year)
+      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+
+    return {
+      year,
+      totalSpend,
+      averagePerMonth: totalSpend / Math.max(monthIndex, 1),
+    };
+  }, [filteredTransactions]);
+
+  const transactionsByMonth = useMemo(() => {
+    const map = new Map<string, TransactionRow[]>();
+    filteredTransactions.forEach((tx) => {
+      const d = new Date(tx.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const list = map.get(key) ?? [];
+      list.push(tx);
+      map.set(key, list);
+    });
+
+    return Array.from(map.entries())
+      .sort(([a], [b]) => (a < b ? 1 : -1))
+      .map(([key, items]) => ({
+        key,
+        label: formatMonthLabel(items[0].date),
+        items: items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+      }));
+  }, [filteredTransactions]);
 
   const openEdit = () => {
     if (!selectedRow) return;
@@ -321,35 +385,57 @@ export function CategoriesScreen() {
               </Pressable>
             </View>
 
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Spend</Text>
-              <Text style={styles.detailValue}>{formatCurrency(selectedRow.spend)}</Text>
+            <Text style={styles.sheetSectionTitle}>By month</Text>
+            <View style={styles.chartCard}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chartRow}>
+                {monthlySeries.map((month) => {
+                  const height = Math.max(4, (month.value / chartMax) * 96);
+                  return (
+                    <View key={month.key} style={styles.barColumn}>
+                      <View style={styles.barTrack}>
+                        <View style={[styles.barFill, { height }]} />
+                      </View>
+                      <Text style={styles.barLabel}>{month.label[0]}</Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
             </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Budget</Text>
-              <Text style={styles.detailValue}>
-                {selectedRow.budget ? formatCurrency(selectedRow.budget) : '--'}
-              </Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Projected</Text>
-              <Text style={styles.detailValue}>{formatCurrency(selectedRow.projected)}</Text>
+
+            <View style={styles.metricsCard}>
+              <View style={styles.metricsHeader}>
+                <Text style={styles.sheetSectionTitle}>Key metrics</Text>
+                <Text style={styles.metricsYear}>{yearlyMetrics.year}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Total spend this year</Text>
+                <Text style={styles.detailValue}>-{formatCurrencyDetailed(yearlyMetrics.totalSpend)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Average per month this year</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(yearlyMetrics.averagePerMonth)}</Text>
+              </View>
             </View>
 
             <View style={styles.transactionsBlock}>
-              <Text style={styles.sectionSubtitle}>Recent transactions</Text>
-              {filteredTransactions.length === 0 ? (
+              <Text style={styles.sheetSectionTitle}>Transactions</Text>
+              {transactionsByMonth.length === 0 ? (
                 <Text style={styles.emptyText}>No transactions yet.</Text>
               ) : (
-                filteredTransactions.map((tx) => (
-                  <View key={tx.id} style={styles.transactionRow}>
-                    <View>
-                      <Text style={styles.transactionName}>{tx.name}</Text>
-                      <Text style={styles.transactionMeta}>{formatDayLabel(tx.date)}</Text>
-                    </View>
-                    <Text style={styles.transactionAmount}>
-                      -{formatCurrencyDetailed(Math.abs(tx.amount))}
-                    </Text>
+                transactionsByMonth.map((group) => (
+                  <View key={group.key} style={styles.monthGroup}>
+                    <Text style={styles.monthTitle}>{group.label}</Text>
+                    {group.items.map((tx) => (
+                      <View key={tx.id} style={styles.transactionRow}>
+                        <View style={styles.transactionLeft}>
+                          <Text style={styles.transactionMeta}>{formatDayLabel(tx.date)}</Text>
+                          <Text style={styles.transactionName}>{tx.name}</Text>
+                        </View>
+                        <Text style={styles.transactionAmount}>
+                          -{formatCurrencyDetailed(Math.abs(tx.amount))}
+                        </Text>
+                      </View>
+                    ))}
                   </View>
                 ))
               )}
@@ -628,6 +714,66 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 8,
   },
+  sheetSectionTitle: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  chartCard: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  chartRow: {
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  barColumn: {
+    width: 24,
+    alignItems: 'center',
+    gap: 5,
+  },
+  barTrack: {
+    width: '100%',
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  barFill: {
+    width: '100%',
+    borderRadius: 8,
+    backgroundColor: colors.danger,
+  },
+  barLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  metricsCard: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    padding: 12,
+    gap: 8,
+  },
+  metricsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  metricsYear: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -645,11 +791,30 @@ const styles = StyleSheet.create({
     marginTop: 8,
     gap: 8,
   },
+  monthGroup: {
+    gap: 4,
+    marginTop: 6,
+  },
+  monthTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
   transactionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.cardBorder,
+  },
+  transactionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    marginRight: 8,
   },
   transactionName: {
     color: colors.text,
@@ -658,7 +823,6 @@ const styles = StyleSheet.create({
   transactionMeta: {
     color: colors.textMuted,
     fontSize: 11,
-    marginTop: 2,
   },
   transactionAmount: {
     color: colors.text,
