@@ -19,6 +19,7 @@ type CategoryRow = {
   spend: number;
   prevSpend: number;
   budget: number | null;
+  color?: string | null;
   essential: boolean;
   projected: number;
   remaining: number | null;
@@ -76,6 +77,40 @@ const formatDayLabel = (value: string) =>
 const formatMonthLabel = (value: string) =>
   new Date(value).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
+const CATEGORY_PALETTE = [
+  '#14b8a6',
+  '#0ea5e9',
+  '#22c55e',
+  '#f97316',
+  '#f43f5e',
+  '#a855f7',
+  '#f59e0b',
+  '#06b6d4',
+];
+
+const normalizeHex = (value: string) => {
+  const color = value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(color)) return color;
+  if (/^#[0-9a-fA-F]{3}$/.test(color)) {
+    const [, r, g, b] = color;
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  return null;
+};
+
+const fallbackCategoryColor = (name: string) => {
+  const key = name.trim().toLowerCase();
+  if (!key) return CATEGORY_PALETTE[0];
+  let hash = 0;
+  for (let index = 0; index < key.length; index += 1) {
+    hash = (hash * 31 + key.charCodeAt(index)) >>> 0;
+  }
+  return CATEGORY_PALETTE[hash % CATEGORY_PALETTE.length];
+};
+
+const resolveCategoryColor = (row: Pick<CategoryRow, 'name' | 'color'>) =>
+  normalizeHex(row.color ?? '') ?? fallbackCategoryColor(row.name);
+
 export function CategoriesScreen() {
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [selected, setSelected] = useState<string>('');
@@ -121,6 +156,10 @@ export function CategoriesScreen() {
   const selectedRow = useMemo(() => {
     return overview?.categories.find((row) => row.name === selected) ?? null;
   }, [overview, selected]);
+  const selectedCategoryColor = useMemo(
+    () => (selectedRow ? resolveCategoryColor(selectedRow) : colors.accent),
+    [selectedRow]
+  );
 
   const maxSpend = useMemo(() => {
     if (!overview?.categories?.length) return 1;
@@ -346,6 +385,7 @@ export function CategoriesScreen() {
               const progress = row.budget
                 ? Math.min(100, (row.spend / row.budget) * 100)
                 : Math.min(100, (row.spend / maxSpend) * 100);
+              const categoryColor = resolveCategoryColor(row);
               return (
                 <Pressable
                   key={row.name}
@@ -353,14 +393,26 @@ export function CategoriesScreen() {
                     setSelected(row.name);
                     setCategoryDetailOpen(true);
                   }}
-                  style={[styles.categoryRow, selected === row.name && styles.categoryRowActive]}
+                  style={[
+                    styles.categoryRow,
+                    selected === row.name && styles.categoryRowActive,
+                    selected === row.name && { borderColor: categoryColor },
+                  ]}
                 >
                   <View style={styles.categoryHeader}>
                     <Text style={styles.categoryName}>{row.name}</Text>
                     <Text style={styles.categoryAmount}>{formatCurrency(row.spend)}</Text>
                   </View>
                   <View style={styles.categoryBarTrack}>
-                    <View style={[styles.categoryBarFill, { width: `${progress}%` }]} />
+                    <View
+                      style={[
+                        styles.categoryBarFill,
+                        {
+                          width: `${progress}%`,
+                          backgroundColor: categoryColor,
+                        },
+                      ]}
+                    />
                   </View>
                 </Pressable>
               );
@@ -375,7 +427,7 @@ export function CategoriesScreen() {
           <ScrollView contentContainerStyle={styles.categoryDetailContent} showsVerticalScrollIndicator={false}>
             <View style={styles.detailHeader}>
               <View>
-                <Text style={styles.sectionTitle}>{selectedRow.name}</Text>
+                <Text style={[styles.sectionTitle, { color: selectedCategoryColor }]}>{selectedRow.name}</Text>
                 <Text style={styles.sectionSubtitle}>
                   {selectedRow.essential ? 'Essential' : 'Flexible'} · {selectedRow.status}
                 </Text>
@@ -393,7 +445,15 @@ export function CategoriesScreen() {
                   return (
                     <View key={month.key} style={styles.barColumn}>
                       <View style={styles.barTrack}>
-                        <View style={[styles.barFill, { height }]} />
+                        <View
+                          style={[
+                            styles.barFill,
+                            {
+                              height,
+                              backgroundColor: selectedCategoryColor,
+                            },
+                          ]}
+                        />
                       </View>
                       <Text style={styles.barLabel}>{month.label[0]}</Text>
                     </View>
