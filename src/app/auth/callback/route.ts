@@ -12,7 +12,8 @@ export async function GET(request: NextRequest) {
 
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/client";
+  const requestedNext = searchParams.get("next") ?? "/client";
+  const next = requestedNext.startsWith("/") ? requestedNext : "/client";
 
   if (code) {
     const response = NextResponse.redirect(new URL(next, origin));

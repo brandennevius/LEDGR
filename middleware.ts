@@ -23,6 +23,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Some OAuth provider/Supabase fallback setups may return to "/" with ?code=...
+  // Normalize that into the dedicated callback route so session exchange always runs.
+  if (
+    request.nextUrl.pathname === "/" &&
+    request.nextUrl.searchParams.has("code")
+  ) {
+    const callbackUrl = request.nextUrl.clone();
+    callbackUrl.pathname = "/auth/callback";
+    return NextResponse.redirect(callbackUrl);
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,

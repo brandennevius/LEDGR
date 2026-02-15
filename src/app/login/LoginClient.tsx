@@ -20,13 +20,22 @@ export default function LoginClient() {
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const getSafeNextPath = () =>
+    nextPath.startsWith("/") ? nextPath : "/client";
+
+  const getCallbackUrl = () => {
+    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    callbackUrl.searchParams.set("next", getSafeNextPath());
+    return callbackUrl.toString();
+  };
+
   const handleEmailAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setStatus(null);
     setLoading(true);
 
-    const redirectTo = `${window.location.origin}/auth/callback`;
+    const redirectTo = getCallbackUrl();
 
     if (mode === "signup") {
       const { error: signUpError } = await supabase.auth.signUp({
@@ -49,7 +58,7 @@ export default function LoginClient() {
       if (signInError) {
         setError(signInError.message);
       } else {
-        router.push(nextPath);
+        router.push(getSafeNextPath());
       }
     }
 
@@ -61,7 +70,7 @@ export default function LoginClient() {
     setStatus(null);
     setLoading(true);
 
-    const redirectTo = `${window.location.origin}/auth/callback`;
+    const redirectTo = getCallbackUrl();
 
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider,
