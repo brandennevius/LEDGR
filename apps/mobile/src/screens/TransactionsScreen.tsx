@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
   Pressable,
@@ -83,6 +84,9 @@ export function TransactionsScreen() {
   const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
   const [categoryList, setCategoryList] = useState<string[]>([]);
   const [query, setQuery] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'SPEND' | 'INCOME'>('ALL');
+  const [sortBy, setSortBy] = useState<'DATE_DESC' | 'AMOUNT_DESC' | 'AMOUNT_ASC'>('DATE_DESC');
 
   const [selected, setSelected] = useState<TransactionDetail | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -138,14 +142,31 @@ export function TransactionsScreen() {
   }, []);
 
   const filteredRows = useMemo(() => {
+    let rows = [...transactions];
     const trimmed = query.trim().toLowerCase();
-    if (!trimmed) return transactions;
-    return transactions.filter(
-      (row) =>
-        row.name.toLowerCase().includes(trimmed) ||
-        row.category.toLowerCase().includes(trimmed)
-    );
-  }, [query, transactions]);
+    if (trimmed) {
+      rows = rows.filter(
+        (row) =>
+          row.name.toLowerCase().includes(trimmed) ||
+          row.category.toLowerCase().includes(trimmed)
+      );
+    }
+
+    if (typeFilter === 'SPEND') {
+      rows = rows.filter((row) => !row.isIncome);
+    }
+    if (typeFilter === 'INCOME') {
+      rows = rows.filter((row) => row.isIncome);
+    }
+
+    rows.sort((a, b) => {
+      if (sortBy === 'AMOUNT_DESC') return b.amount - a.amount;
+      if (sortBy === 'AMOUNT_ASC') return a.amount - b.amount;
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
+    });
+
+    return rows;
+  }, [query, sortBy, transactions, typeFilter]);
 
   const stats = useMemo(() => {
     const income = transactions
@@ -157,12 +178,17 @@ export function TransactionsScreen() {
     return { income, spend };
   }, [transactions]);
 
-  const reviewCount = useMemo(
-    () => transactions.filter((tx) => tx.needsReview).length,
-    [transactions]
-  );
+  const reviewCount = useMemo(() => transactions.filter((tx) => tx.needsReview).length, [transactions]);
 
-  const hasActiveFilters = categoryFilter !== 'All' || needsReviewOnly || days !== 30 || query.trim().length > 0;
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (days !== 30) count += 1;
+    if (categoryFilter !== 'All') count += 1;
+    if (needsReviewOnly) count += 1;
+    if (typeFilter !== 'ALL') count += 1;
+    if (sortBy !== 'DATE_DESC') count += 1;
+    return count;
+  }, [categoryFilter, days, needsReviewOnly, sortBy, typeFilter]);
 
   const openDetail = async (id: string) => {
     setDetailOpen(true);
@@ -272,66 +298,23 @@ export function TransactionsScreen() {
           </View>
         </View>
 
-        <View style={styles.filtersCard}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search-outline" size={20} color={colors.textMuted} />
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search transactions"
+            placeholder="Search"
             placeholderTextColor={colors.textMuted}
             style={styles.searchInput}
           />
-
-          <View style={styles.filterHeaderRow}>
-            <Text style={styles.filterSectionTitle}>Date range</Text>
-            {days !== 30 ? <Text style={styles.filterHint}>{days} days</Text> : null}
-          </View>
-          <View style={styles.filterRow}>
-            {dayOptions.map((option) => (
-              <Chip
-                key={option.value}
-                label={option.label}
-                active={days === option.value}
-                onPress={() => setDays(option.value)}
-              />
-            ))}
-          </View>
-
-          <View style={styles.filterHeaderRow}>
-            <Text style={styles.filterSectionTitle}>Category</Text>
-            {categoryFilter !== 'All' ? <Text style={styles.filterHint}>{categoryFilter}</Text> : null}
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-            {(categoryList.length ? categoryList : ['All']).map((name) => (
-              <View key={name}>
-                <Chip label={name} active={categoryFilter === name} onPress={() => setCategoryFilter(name)} />
+          <Pressable style={styles.filterButton} onPress={() => setFiltersOpen(true)}>
+            <Ionicons name="options-outline" size={20} color={colors.text} />
+            {activeFilterCount > 0 ? (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
               </View>
-            ))}
-          </ScrollView>
-
-          <View style={styles.filterHeaderRow}>
-            <Text style={styles.filterSectionTitle}>Review status</Text>
-            <Text style={styles.filterHint}>{reviewCount} flagged</Text>
-          </View>
-          <View style={styles.filterRow}>
-            <Chip
-              label={needsReviewOnly ? 'Needs review' : 'All reviews'}
-              active={needsReviewOnly}
-              onPress={() => setNeedsReviewOnly((prev) => !prev)}
-            />
-            {hasActiveFilters ? (
-              <Pressable
-                onPress={() => {
-                  setQuery('');
-                  setDays(30);
-                  setCategoryFilter('All');
-                  setNeedsReviewOnly(false);
-                }}
-                style={styles.clearButton}
-              >
-                <Text style={styles.clearButtonLabel}>Clear filters</Text>
-              </Pressable>
             ) : null}
-          </View>
+          </Pressable>
         </View>
 
         {loading ? (
@@ -368,6 +351,90 @@ export function TransactionsScreen() {
           </Pressable>
         ))}
       </ScrollView>
+
+      <ModalSheet visible={filtersOpen} onClose={() => setFiltersOpen(false)}>
+        <ScrollView contentContainerStyle={styles.filterSheetContent} showsVerticalScrollIndicator={false}>
+          <Text style={styles.sheetTitle}>Filters</Text>
+
+          <Text style={styles.sheetSection}>Filter by month</Text>
+          <View style={styles.filterRow}>
+            {dayOptions.map((option) => (
+              <Chip
+                key={option.value}
+                label={option.label}
+                active={days === option.value}
+                onPress={() => setDays(option.value)}
+              />
+            ))}
+          </View>
+
+          <Text style={styles.sheetSection}>Filter by category</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+            {(categoryList.length ? categoryList : ['All']).map((name) => (
+              <View key={name}>
+                <Chip label={name} active={categoryFilter === name} onPress={() => setCategoryFilter(name)} />
+              </View>
+            ))}
+          </ScrollView>
+
+          <Text style={styles.sheetSection}>Filter by review status ({reviewCount})</Text>
+          <View style={styles.filterRow}>
+            <Chip
+              label={needsReviewOnly ? 'Needs review only' : 'All reviews'}
+              active={needsReviewOnly}
+              onPress={() => setNeedsReviewOnly((prev) => !prev)}
+            />
+          </View>
+
+          <Text style={styles.sheetSection}>Filter by type</Text>
+          <View style={styles.filterRow}>
+            <Chip label="All" active={typeFilter === 'ALL'} onPress={() => setTypeFilter('ALL')} />
+            <Chip label="Spend" active={typeFilter === 'SPEND'} onPress={() => setTypeFilter('SPEND')} />
+            <Chip label="Income" active={typeFilter === 'INCOME'} onPress={() => setTypeFilter('INCOME')} />
+          </View>
+
+          <Text style={styles.sheetSection}>Other filters</Text>
+          <View style={styles.placeholderList}>
+            <Text style={styles.placeholderItem}>Filter by account (soon)</Text>
+            <Text style={styles.placeholderItem}>Filter by recurring (soon)</Text>
+            <Text style={styles.placeholderItem}>Filter by tag (soon)</Text>
+          </View>
+
+          <Text style={styles.sheetSection}>Sorting</Text>
+          <View style={styles.filterRow}>
+            <Chip label="Date" active={sortBy === 'DATE_DESC'} onPress={() => setSortBy('DATE_DESC')} />
+            <Chip
+              label="Amount (high to low)"
+              active={sortBy === 'AMOUNT_DESC'}
+              onPress={() => setSortBy('AMOUNT_DESC')}
+            />
+            <Chip
+              label="Amount (low to high)"
+              active={sortBy === 'AMOUNT_ASC'}
+              onPress={() => setSortBy('AMOUNT_ASC')}
+            />
+          </View>
+
+          <View style={styles.sheetActions}>
+            <Pressable
+              onPress={() => {
+                setDays(30);
+                setCategoryFilter('All');
+                setNeedsReviewOnly(false);
+                setTypeFilter('ALL');
+                setSortBy('DATE_DESC');
+                setQuery('');
+              }}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryLabel}>Clear all</Text>
+            </Pressable>
+            <Pressable style={styles.primaryButton} onPress={() => setFiltersOpen(false)}>
+              <Text style={styles.primaryLabel}>Apply</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </ModalSheet>
 
       <ModalSheet visible={detailOpen} onClose={() => setDetailOpen(false)}>
         {detailLoading || !selected ? (
@@ -534,63 +601,90 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 6,
   },
-  filtersCard: {
-    backgroundColor: 'rgba(17, 22, 43, 0.7)',
-    borderRadius: 18,
-    padding: 14,
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.cardBorder,
+    borderRadius: 18,
+    paddingHorizontal: 12,
     gap: 10,
+    backgroundColor: 'rgba(17, 22, 43, 0.7)',
   },
   searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    color: colors.text,
+  },
+  filterButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.text,
-    backgroundColor: 'rgba(9, 13, 27, 0.7)',
+    backgroundColor: 'rgba(9, 13, 27, 0.65)',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 4,
+  },
+  filterBadgeText: {
+    color: colors.background,
+    fontSize: 10,
+    fontWeight: '700',
   },
   filterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  filterHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  filterSheetContent: {
+    gap: 12,
+    paddingBottom: 18,
   },
-  filterSectionTitle: {
+  sheetTitle: {
     color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  sheetSection: {
+    color: colors.textMuted,
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
-  },
-  filterHint: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
+    marginTop: 6,
   },
   categoryScroll: {
     gap: 8,
     paddingRight: 6,
   },
-  clearButton: {
+  placeholderList: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 12,
+    padding: 10,
+    gap: 6,
   },
-  clearButtonLabel: {
+  placeholderItem: {
     color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontSize: 13,
+  },
+  sheetActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
   },
   loadingCard: {
     flexDirection: 'row',
