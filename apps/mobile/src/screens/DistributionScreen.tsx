@@ -43,6 +43,29 @@ type DistributionResponse = {
   links: SankeyLink[];
 };
 
+type AllocationBucket = {
+  id: 'spend' | 'savings' | 'investments' | 'transfers' | 'internal' | 'unallocated';
+  label: string;
+  value: number;
+  color: string;
+};
+
+type FlowPath = {
+  id: string;
+  sourceLabel: string;
+  targetLabel: string;
+  value: number;
+};
+
+const BUCKET_COLORS: Record<AllocationBucket['id'], string> = {
+  spend: '#22D3EE',
+  savings: '#34D399',
+  investments: '#F59E0B',
+  transfers: '#A78BFA',
+  internal: '#60A5FA',
+  unallocated: '#F87171',
+};
+
 const formatCurrency = (value: number) =>
   value.toLocaleString('en-US', {
     style: 'currency',
@@ -50,15 +73,7 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   });
 
-type FlowPath = {
-  id: string;
-  sourceLabel: string;
-  targetLabel: string;
-  value: number;
-  color: string;
-  sourceColumn: number;
-  targetColumn: number;
-};
+const formatPct = (value: number) => `${Math.round(value)}%`;
 
 export function DistributionScreen() {
   const [data, setData] = useState<DistributionResponse | null>(null);
@@ -113,10 +128,67 @@ export function DistributionScreen() {
     ];
   }, [data]);
 
-  const maxCategory = useMemo(() => {
-    if (!data?.categories?.length) return 1;
-    return Math.max(...data.categories.map((item) => item.value), 1);
+  const allocation = useMemo(() => {
+    const inflowTotal = Math.max(0, data?.inflowTotal ?? 0);
+    const spend = Math.max(0, data?.spendTotal ?? 0);
+    const savings = Math.max(0, data?.savings ?? 0);
+    const investments = Math.max(0, data?.investmentTotal ?? 0);
+    const transfers = Math.max(0, data?.transferTotal ?? 0);
+    const internal = Math.max(0, data?.internalTransferTotal ?? 0);
+
+    const allocated = spend + savings + investments + transfers + internal;
+    const unallocated = Math.max(0, inflowTotal - allocated);
+
+    const buckets: AllocationBucket[] = (
+      [
+        { id: 'spend', label: 'Spend', value: spend, color: BUCKET_COLORS.spend },
+        { id: 'savings', label: 'Savings', value: savings, color: BUCKET_COLORS.savings },
+        { id: 'investments', label: 'Investments', value: investments, color: BUCKET_COLORS.investments },
+        { id: 'transfers', label: 'Transfers', value: transfers, color: BUCKET_COLORS.transfers },
+        { id: 'internal', label: 'Internal', value: internal, color: BUCKET_COLORS.internal },
+        { id: 'unallocated', label: 'Unallocated', value: unallocated, color: BUCKET_COLORS.unallocated },
+      ] as AllocationBucket[]
+    ).filter((bucket) => bucket.value > 0);
+
+    return {
+      inflowTotal,
+      buckets,
+    };
   }, [data]);
+
+  const [selectedBucket, setSelectedBucket] = useState<AllocationBucket['id']>('spend');
+
+  useEffect(() => {
+    if (!allocation.buckets.length) {
+      return;
+    }
+    if (!allocation.buckets.some((bucket) => bucket.id === selectedBucket)) {
+      setSelectedBucket(allocation.buckets[0].id);
+    }
+  }, [allocation.buckets, selectedBucket]);
+
+  const selectedBucketData = useMemo(
+    () => allocation.buckets.find((bucket) => bucket.id === selectedBucket) ?? null,
+    [allocation.buckets, selectedBucket]
+  );
+
+  const selectedBreakdown = useMemo(() => {
+    if (!selectedBucketData) return [];
+
+    if (selectedBucketData.id === 'spend') {
+      return [...(data?.categories ?? [])]
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 6)
+        .map((item) => ({ label: item.name, value: item.value }));
+    }
+
+    return [
+      {
+        label: selectedBucketData.label,
+        value: selectedBucketData.value,
+      },
+    ];
+  }, [data?.categories, selectedBucketData]);
 
   const flowPaths = useMemo<FlowPath[]>(() => {
     const nodes = data?.nodes ?? [];
@@ -136,54 +208,34 @@ export function DistributionScreen() {
           sourceLabel: source.label,
           targetLabel: target.label,
           value: link.value,
-          color: link.color,
-          sourceColumn: source.column,
-          targetColumn: target.column,
         };
       })
       .filter((item): item is FlowPath => Boolean(item))
       .sort((a, b) => b.value - a.value);
   }, [data]);
 
-  const maxFlowPathValue = useMemo(
-    () => Math.max(1, ...flowPaths.map((path) => path.value), 1),
-    [flowPaths]
-  );
-
   const visibleFlowPaths = useMemo(() => flowPaths.slice(0, flowLimit), [flowLimit, flowPaths]);
 
-  const stageTotals = useMemo(() => {
-    const nodes = data?.nodes ?? [];
-    if (!nodes.length) {
-      return [];
-    }
+  const maxFlowPathValue = useMemo(
+    () => Math.max(1, ...visibleFlowPaths.map((path) => path.value), 1),
+    [visibleFlowPaths]
+  );
 
-    const columns = Array.from(new Set(nodes.map((node) => node.column))).sort((a, b) => a - b);
-    const totals = columns.map((column, index) => {
-      const total = nodes
-        .filter((node) => node.column === column)
-        .reduce((sum, node) => sum + node.value, 0);
-
-      let label = `Stage ${index + 1}`;
-      if (index === 0) label = 'Sources';
-      if (index === columns.length - 1) label = 'Destinations';
-      if (columns.length > 2 && index > 0 && index < columns.length - 1) label = 'Allocation';
-
-      return { label, value: total };
-    });
-
-    return totals;
-  }, [data]);
+  const maxBreakdown = useMemo(
+    () => Math.max(1, ...selectedBreakdown.map((item) => item.value), 1),
+    [selectedBreakdown]
+  );
 
   return (
-    <Screen title="Distribution" subtitle="Flow of funds across this month.">
+    <Screen title="Distribution" subtitle="Where each paycheck dollar is allocated.">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingCard}>
             <ActivityIndicator color={colors.primary} />
-            <Text style={styles.loadingText}>Building flow view...</Text>
+            <Text style={styles.loadingText}>Loading allocation graph...</Text>
           </View>
         ) : null}
+
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <View style={styles.summaryGrid}>
@@ -196,142 +248,140 @@ export function DistributionScreen() {
         </View>
 
         <View style={styles.sectionCard}>
+          <Text style={[styles.sectionTitle, isCompact && styles.sectionTitleCompact]}>Paycheck allocation</Text>
+          <Text style={[styles.sectionSubtitle, isCompact && styles.sectionSubtitleCompact]}>
+            {data?.rangeLabel ?? 'This month'} • mirrors web distribution totals
+          </Text>
+
+          {allocation.buckets.length > 0 ? (
+            <>
+              <View style={styles.allocationTrack}>
+                {allocation.buckets.map((bucket) => {
+                  const pct = allocation.inflowTotal > 0 ? (bucket.value / allocation.inflowTotal) * 100 : 0;
+                  return (
+                    <View
+                      key={bucket.id}
+                      style={[
+                        styles.allocationSegment,
+                        {
+                          flexGrow: Math.max(1, bucket.value),
+                          backgroundColor: bucket.color,
+                          opacity: selectedBucket === bucket.id ? 1 : 0.7,
+                        },
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+
+              <View style={styles.bucketLegend}>
+                {allocation.buckets.map((bucket) => {
+                  const pct = allocation.inflowTotal > 0 ? (bucket.value / allocation.inflowTotal) * 100 : 0;
+                  const active = selectedBucket === bucket.id;
+                  return (
+                    <Pressable
+                      key={bucket.id}
+                      onPress={() => setSelectedBucket(bucket.id)}
+                      style={[styles.bucketCard, active && styles.bucketCardActive]}
+                    >
+                      <View style={styles.bucketHeader}>
+                        <View style={[styles.bucketDot, { backgroundColor: bucket.color }]} />
+                        <Text style={styles.bucketLabel}>{bucket.label}</Text>
+                        <Text style={styles.bucketPct}>{formatPct(pct)}</Text>
+                      </View>
+                      <Text style={styles.bucketAmount}>{formatCurrency(bucket.value)}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No income data found for this month.</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Selected bucket breakdown</Text>
+          <Text style={styles.sectionSubtitle}>{selectedBucketData?.label ?? 'Choose a bucket above'}</Text>
+
+          {selectedBreakdown.length > 0 ? (
+            selectedBreakdown.map((item) => {
+              const pct = selectedBucketData ? (item.value / Math.max(1, selectedBucketData.value)) * 100 : 0;
+              const widthPct = Math.max(6, Math.round((item.value / maxBreakdown) * 100));
+              return (
+                <View key={item.label} style={styles.breakdownRow}>
+                  <View style={styles.breakdownHeader}>
+                    <Text style={styles.breakdownName} numberOfLines={1}>
+                      {item.label}
+                    </Text>
+                    <Text style={styles.breakdownAmount}>{formatCurrency(item.value)}</Text>
+                  </View>
+                  <View style={styles.breakdownBarTrack}>
+                    <View style={[styles.breakdownBarFill, { width: `${widthPct}%` }]} />
+                  </View>
+                  <Text style={styles.breakdownMeta}>{formatPct(pct)} of {selectedBucketData?.label ?? 'bucket'}</Text>
+                </View>
+              );
+            })
+          ) : (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No detail breakdown for this bucket yet.</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.sectionCard}>
           <View style={styles.flowHeaderRow}>
             <View>
-              <Text style={[styles.sectionTitle, isCompact && styles.sectionTitleCompact]}>Flow map</Text>
-              <Text style={[styles.sectionSubtitle, isCompact && styles.sectionSubtitleCompact]}>
-                {data?.rangeLabel ?? 'This month'}
-              </Text>
+              <Text style={styles.sectionTitle}>Top money paths</Text>
+              <Text style={styles.sectionSubtitle}>Income source {'->'} destination</Text>
             </View>
             {flowPaths.length > 5 ? (
               <View style={styles.toggleRow}>
                 <Pressable
                   onPress={() => setFlowLimit(5)}
-                  style={[
-                    styles.toggleButton,
-                    flowLimit === 5 && styles.toggleButtonActive,
-                    isCompact && styles.toggleButtonCompact,
-                  ]}
+                  style={[styles.toggleButton, flowLimit === 5 && styles.toggleButtonActive]}
                 >
-                  <Text
-                    style={[
-                      styles.toggleLabel,
-                      flowLimit === 5 && styles.toggleLabelActive,
-                      isCompact && styles.toggleLabelCompact,
-                    ]}
-                  >
-                    Top 5
-                  </Text>
+                  <Text style={[styles.toggleLabel, flowLimit === 5 && styles.toggleLabelActive]}>Top 5</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => setFlowLimit(8)}
-                  style={[
-                    styles.toggleButton,
-                    flowLimit === 8 && styles.toggleButtonActive,
-                    isCompact && styles.toggleButtonCompact,
-                  ]}
+                  style={[styles.toggleButton, flowLimit === 8 && styles.toggleButtonActive]}
                 >
-                  <Text
-                    style={[
-                      styles.toggleLabel,
-                      flowLimit === 8 && styles.toggleLabelActive,
-                      isCompact && styles.toggleLabelCompact,
-                    ]}
-                  >
-                    Top 8
-                  </Text>
+                  <Text style={[styles.toggleLabel, flowLimit === 8 && styles.toggleLabelActive]}>Top 8</Text>
                 </Pressable>
               </View>
             ) : null}
           </View>
-          <View style={styles.flowMapWrapper}>
-            {visibleFlowPaths.length > 0 ? (
-              <View style={styles.flowList}>
-                {visibleFlowPaths.map((path) => {
-                  const widthPct = Math.max(10, Math.round((path.value / maxFlowPathValue) * 100));
-                  return (
-                    <View key={path.id} style={styles.pathRow}>
-                      <View style={styles.pathHeader}>
-                        <Text style={styles.pathRoute} numberOfLines={1}>
-                          {path.sourceLabel} {'->'} {path.targetLabel}
-                        </Text>
-                        <Text style={[styles.pathAmount, isCompact && styles.pathAmountCompact]}>
-                          {formatCurrency(path.value)}
-                        </Text>
-                      </View>
-                      <View style={styles.pathBarTrack}>
-                        <View
-                          style={[
-                            styles.pathBarFill,
-                            {
-                              width: `${widthPct}%`,
-                              backgroundColor: path.color || colors.primary,
-                            },
-                          ]}
-                        />
-                      </View>
+
+          {visibleFlowPaths.length > 0 ? (
+            <View style={styles.flowList}>
+              {visibleFlowPaths.map((path) => {
+                const widthPct = Math.max(10, Math.round((path.value / maxFlowPathValue) * 100));
+                const incomePct = allocation.inflowTotal > 0 ? (path.value / allocation.inflowTotal) * 100 : 0;
+
+                return (
+                  <View key={path.id} style={styles.pathRow}>
+                    <View style={styles.pathHeader}>
+                      <Text style={styles.pathRoute} numberOfLines={1}>
+                        {path.sourceLabel} {'->'} {path.targetLabel}
+                      </Text>
+                      <Text style={styles.pathAmount}>{formatCurrency(path.value)}</Text>
                     </View>
-                  );
-                })}
-              </View>
-            ) : (
-              <Text style={styles.emptyText}>Connect accounts to see your distribution flow.</Text>
-            )}
-          </View>
-          {stageTotals.length > 0 ? (
-            <View style={styles.stageTotals}>
-              {stageTotals.map((stage) => (
-                <View key={stage.label} style={styles.stageCard}>
-                  <Text style={[styles.stageLabel, isCompact && styles.stageLabelCompact]}>{stage.label}</Text>
-                  <Text style={[styles.stageValue, isCompact && styles.stageValueCompact]}>
-                    {formatCurrency(stage.value)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Flow breakdown</Text>
-          <View style={styles.flowRow}>
-            <View style={styles.flowItem}>
-              <Text style={styles.flowLabel}>Investments</Text>
-              <Text style={styles.flowValue}>{formatCurrency(data?.investmentTotal ?? 0)}</Text>
-            </View>
-            <View style={styles.flowItem}>
-              <Text style={styles.flowLabel}>Transfers</Text>
-              <Text style={styles.flowValue}>{formatCurrency(data?.transferTotal ?? 0)}</Text>
-            </View>
-            <View style={styles.flowItem}>
-              <Text style={styles.flowLabel}>Internal</Text>
-              <Text style={styles.flowValue}>{formatCurrency(data?.internalTransferTotal ?? 0)}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Top destinations</Text>
-          <Text style={styles.sectionSubtitle}>Largest spending categories</Text>
-          {(data?.categories ?? []).length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>No category data yet.</Text>
+                    <View style={styles.pathBarTrack}>
+                      <View style={[styles.pathBarFill, { width: `${widthPct}%` }]} />
+                    </View>
+                    <Text style={styles.pathMeta}>{formatPct(incomePct)} of paycheck</Text>
+                  </View>
+                );
+              })}
             </View>
           ) : (
-            data?.categories.map((category) => {
-              const percent = Math.round((category.value / maxCategory) * 100);
-              return (
-                <View key={category.name} style={styles.categoryRow}>
-                  <View style={styles.categoryHeader}>
-                    <Text style={styles.categoryName}>{category.name}</Text>
-                    <Text style={styles.categoryAmount}>{formatCurrency(category.value)}</Text>
-                  </View>
-                  <View style={styles.categoryBarTrack}>
-                    <View style={[styles.categoryBarFill, { width: `${percent}%` }]} />
-                  </View>
-                </View>
-              );
-            })
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>Connect accounts to view flow paths.</Text>
+            </View>
           )}
         </View>
       </ScrollView>
@@ -410,6 +460,95 @@ const styles = StyleSheet.create({
   sectionSubtitleCompact: {
     fontSize: 11,
   },
+  allocationTrack: {
+    marginTop: 12,
+    flexDirection: 'row',
+    height: 18,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  allocationSegment: {
+    height: '100%',
+  },
+  bucketLegend: {
+    marginTop: 12,
+    gap: 8,
+  },
+  bucketCard: {
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  bucketCardActive: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderColor: colors.primary,
+  },
+  bucketHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bucketDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 999,
+  },
+  bucketLabel: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  bucketPct: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  bucketAmount: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  breakdownRow: {
+    marginTop: 12,
+  },
+  breakdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  breakdownName: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
+  },
+  breakdownAmount: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  breakdownBarTrack: {
+    marginTop: 6,
+    height: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    overflow: 'hidden',
+  },
+  breakdownBarFill: {
+    height: '100%',
+    backgroundColor: colors.accent,
+  },
+  breakdownMeta: {
+    marginTop: 4,
+    color: colors.textMuted,
+    fontSize: 11,
+  },
   flowHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -428,10 +567,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  toggleButtonCompact: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
   toggleButtonActive: {
     backgroundColor: 'rgba(56, 189, 248, 0.18)',
     borderColor: colors.primary,
@@ -443,22 +578,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
-  toggleLabelCompact: {
-    fontSize: 10,
-  },
   toggleLabelActive: {
     color: colors.text,
   },
-  flowMapWrapper: {
-    marginTop: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(9, 13, 27, 0.45)',
-    minHeight: 120,
-    padding: 12,
-  },
   flowList: {
+    marginTop: 12,
     gap: 12,
   },
   pathRow: {
@@ -481,9 +605,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  pathAmountCompact: {
-    fontSize: 11,
-  },
   pathBarTrack: {
     height: 10,
     borderRadius: 6,
@@ -494,87 +615,11 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 6,
     minWidth: 8,
+    backgroundColor: colors.primary,
   },
-  stageTotals: {
-    marginTop: 12,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  stageCard: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: 12,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  stageLabel: {
-    color: colors.textMuted,
-    fontSize: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  stageLabelCompact: {
-    fontSize: 9,
-  },
-  stageValue: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  stageValueCompact: {
-    fontSize: 12,
-  },
-  flowRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 12,
-  },
-  flowItem: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: 14,
-    padding: 12,
-  },
-  flowLabel: {
+  pathMeta: {
     color: colors.textMuted,
     fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  flowValue: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  categoryRow: {
-    marginTop: 12,
-  },
-  categoryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  categoryName: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  categoryAmount: {
-    color: colors.textMuted,
-    fontSize: 12,
-  },
-  categoryBarTrack: {
-    marginTop: 6,
-    height: 8,
-    borderRadius: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    overflow: 'hidden',
-  },
-  categoryBarFill: {
-    height: '100%',
-    backgroundColor: colors.accent,
   },
   emptyCard: {
     marginTop: 12,
