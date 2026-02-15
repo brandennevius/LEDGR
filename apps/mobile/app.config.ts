@@ -28,6 +28,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ios: {
       supportsTablet: true,
       bundleIdentifier,
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+      },
     },
     android: {
       package: androidPackage,
@@ -41,6 +44,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     web: {
       favicon: './assets/favicon.png',
     },
+    updates: {
+      url: 'https://u.expo.dev/2f7b00cb-4081-478c-80d2-521ec553e02a',
+    },
+    runtimeVersion: {
+      policy: 'appVersion',
+    },
     plugins: [
       'expo-font',
       'expo-secure-store',
@@ -48,6 +57,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       './plugins/with-path-safe-ios-scripts',
     ],
     extra: {
+      eas: {
+        projectId: '2f7b00cb-4081-478c-80d2-521ec553e02a',
+      },
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL,
