@@ -86,6 +86,7 @@ export function CategoriesScreen() {
   const [newBudget, setNewBudget] = useState('');
   const [newEssential, setNewEssential] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
+  const [categoryDetailOpen, setCategoryDetailOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [groupCategories, setGroupCategories] = useState('');
   const [groupBudget, setGroupBudget] = useState('');
@@ -284,7 +285,10 @@ export function CategoriesScreen() {
               return (
                 <Pressable
                   key={row.name}
-                  onPress={() => setSelected(row.name)}
+                  onPress={() => {
+                    setSelected(row.name);
+                    setCategoryDetailOpen(true);
+                  }}
                   style={[styles.categoryRow, selected === row.name && styles.categoryRowActive]}
                 >
                   <View style={styles.categoryHeader}>
@@ -300,8 +304,11 @@ export function CategoriesScreen() {
           )}
         </View>
 
+      </ScrollView>
+
+      <ModalSheet visible={categoryDetailOpen} onClose={() => setCategoryDetailOpen(false)}>
         {selectedRow ? (
-          <View style={styles.sectionCard}>
+          <ScrollView contentContainerStyle={styles.categoryDetailContent} showsVerticalScrollIndicator={false}>
             <View style={styles.detailHeader}>
               <View>
                 <Text style={styles.sectionTitle}>{selectedRow.name}</Text>
@@ -313,6 +320,7 @@ export function CategoriesScreen() {
                 <Text style={styles.secondaryLabel}>Edit</Text>
               </Pressable>
             </View>
+
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Spend</Text>
               <Text style={styles.detailValue}>{formatCurrency(selectedRow.spend)}</Text>
@@ -346,9 +354,11 @@ export function CategoriesScreen() {
                 ))
               )}
             </View>
-          </View>
-        ) : null}
-      </ScrollView>
+          </ScrollView>
+        ) : (
+          <Text style={styles.emptyText}>No category selected.</Text>
+        )}
+      </ModalSheet>
 
       <ModalSheet visible={editOpen} onClose={() => setEditOpen(false)}>
         <Text style={styles.modalTitle}>Update category</Text>
@@ -613,6 +623,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  categoryDetailContent: {
+    gap: 12,
+    paddingBottom: 8,
   },
   detailRow: {
     flexDirection: 'row',
