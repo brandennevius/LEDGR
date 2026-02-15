@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createDrawerNavigator } from '@react-navigation/drawer';
 import { NavigationContainer } from '@react-navigation/native';
 import { StyleSheet, View } from 'react-native';
 
@@ -15,7 +14,6 @@ import { TransactionsScreen } from '../screens/TransactionsScreen';
 import { colors, navigationTheme } from '../theme';
 
 const Tab = createBottomTabNavigator();
-const Drawer = createDrawerNavigator();
 
 function MainTabs() {
   return (
@@ -38,6 +36,7 @@ function MainTabs() {
             Goals: 'flag',
             Accounts: 'wallet',
             Categories: 'layers',
+            Settings: 'settings',
           };
           const name = iconMap[route.name] ?? 'ellipse';
           return <Ionicons name={name} size={size ?? 22} color={color} />;
@@ -50,6 +49,7 @@ function MainTabs() {
       <Tab.Screen name="Goals" component={GoalsScreen} />
       <Tab.Screen name="Accounts" component={AccountsScreen} />
       <Tab.Screen name="Categories" component={CategoriesScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
 }
@@ -58,19 +58,7 @@ export function AppNavigator() {
   return (
     <NavigationContainer theme={navigationTheme}>
       <View style={styles.container}>
-        <Drawer.Navigator
-          screenOptions={{
-            headerShown: false,
-            drawerStyle: {
-              backgroundColor: colors.surface,
-            },
-            drawerActiveTintColor: colors.primary,
-            drawerInactiveTintColor: colors.textMuted,
-          }}
-        >
-          <Drawer.Screen name="Home" component={MainTabs} />
-          <Drawer.Screen name="Settings" component={SettingsScreen} />
-        </Drawer.Navigator>
+        <MainTabs />
         <CoachChatFab />
       </View>
     </NavigationContainer>
