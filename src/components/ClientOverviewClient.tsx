@@ -33,6 +33,7 @@ type DebtProjection = {
 
 type CategoryBudget = {
   name: string;
+  color?: string;
   essential: boolean;
   budget: number;
   spend: number;
@@ -43,6 +44,7 @@ type CategoryBudget = {
 
 type CategoryMonthSummary = {
   name: string;
+  color?: string;
   spend: number;
   budget: number | null;
 };
@@ -740,7 +742,13 @@ export default function ClientOverviewClient({
                     return (
                       <div key={item.name}>
                         <div className="flex items-center justify-between text-xs">
-                          <span>{item.name}</span>
+                          <span className="flex items-center gap-2">
+                            <span
+                              className="h-2.5 w-2.5 rounded-full"
+                              style={{ backgroundColor: item.color ?? "var(--ocean)" }}
+                            />
+                            {item.name}
+                          </span>
                           <span className="text-[color:var(--ink-soft)]">
                             {formatCurrency(item.spend)}
                             {item.budget
@@ -750,8 +758,11 @@ export default function ClientOverviewClient({
                         </div>
                         <div className="mt-2 h-2 rounded-full bg-emerald-100">
                           <div
-                            className="h-2 rounded-full bg-[color:var(--ocean)]"
-                            style={{ width: `${progress}%` }}
+                            className="h-2 rounded-full"
+                            style={{
+                              width: `${progress}%`,
+                              backgroundColor: item.color ?? "var(--ocean)",
+                            }}
                           />
                         </div>
                       </div>

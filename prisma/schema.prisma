@@ -80,6 +80,7 @@ model Category {
   id            String   @id @default(uuid()) @db.Uuid
   userId        String   @db.Uuid
   name          String
+  color         String?
   essential     Boolean  @default(false)
   monthlyBudget Float?
   createdAt     DateTime @default(now())

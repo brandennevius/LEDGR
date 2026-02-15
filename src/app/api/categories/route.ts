@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
+import { normalizeHexColor, resolveCategoryColor } from "@/lib/categoryColors";
 
 export async function GET() {
   const client = await getAuthedUser();
@@ -36,6 +37,7 @@ export async function GET() {
     return {
       id: existing?.id,
       name,
+      color: resolveCategoryColor(name, existing?.color),
       essential: existing?.essential ?? false,
       monthlyBudget: existing?.monthlyBudget ?? null,
     };
@@ -61,6 +63,7 @@ export async function POST(request: Request) {
 
   const body = (await request.json()) as {
     name?: string;
+    color?: string | null;
     essential?: boolean;
     monthlyBudget?: number | null;
   };
@@ -75,15 +78,27 @@ export async function POST(request: Request) {
       ? body.monthlyBudget
       : null;
 
+  const hasColorInPayload = Object.prototype.hasOwnProperty.call(body ?? {}, "color");
+  const normalizedColor = normalizeHexColor(body?.color);
+  const updateData: {
+    color?: string | null;
+    essential: boolean;
+    monthlyBudget: number | null;
+  } = {
+    essential: body?.essential ?? false,
+    monthlyBudget,
+  };
+  if (hasColorInPayload) {
+    updateData.color = normalizedColor;
+  }
+
   const category = await prisma.category.upsert({
     where: { userId_name: { userId: client.id, name } },
-    update: {
-      essential: body?.essential ?? false,
-      monthlyBudget,
-    },
+    update: updateData,
     create: {
       userId: client.id,
       name,
+      color: normalizedColor,
       essential: body?.essential ?? false,
       monthlyBudget,
     },

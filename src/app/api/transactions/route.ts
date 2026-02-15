@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
+import { resolveCategoryColor } from "@/lib/categoryColors";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -22,17 +23,32 @@ export async function GET(request: Request) {
       ? { category }
       : {};
 
-  const transactions = await prisma.transaction.findMany({
-    where: {
-      userId: client.id,
-      date: { gte: since },
-      ...categoryFilter,
-      ...(needsReview ? { categoryNeedsReview: true } : {}),
-    },
-    orderBy: { date: "desc" },
-    take: 200,
-    include: { splits: true },
-  });
+  const [transactions, settings] = await Promise.all([
+    prisma.transaction.findMany({
+      where: {
+        userId: client.id,
+        date: { gte: since },
+        ...categoryFilter,
+        ...(needsReview ? { categoryNeedsReview: true } : {}),
+      },
+      orderBy: { date: "desc" },
+      take: 200,
+      include: { splits: true },
+    }),
+    prisma.category.findMany({
+      where: { userId: client.id },
+      select: { name: true, color: true },
+    }),
+  ]);
+
+  const settingsMap = new Map(
+    settings.map((setting) => [setting.name.toLowerCase(), setting.color])
+  );
+  const resolveTxColor = (categoryName: string) =>
+    resolveCategoryColor(
+      categoryName,
+      settingsMap.get(categoryName.toLowerCase()) ?? null
+    );
 
   const data = transactions.flatMap((tx) => {
     const label = tx.merchantName ?? tx.name;
@@ -47,6 +63,7 @@ export async function GET(request: Request) {
           baseId: tx.id,
           name: label,
           category: tx.category ?? "Uncategorized",
+          categoryColor: resolveTxColor(tx.category ?? "Uncategorized"),
           amount: Math.abs(tx.amount),
           isIncome: tx.amount < 0,
           transactionType: tx.transactionType,
@@ -64,6 +81,7 @@ export async function GET(request: Request) {
       baseId: tx.id,
       name: `${label} (Split)`,
       category: split.category,
+      categoryColor: resolveTxColor(split.category),
       amount: Math.abs(split.amount),
       isIncome: sign < 0,
       transactionType: tx.transactionType,
@@ -83,6 +101,7 @@ export async function GET(request: Request) {
               baseId: tx.id,
               name: `${label} (Remainder)`,
               category: tx.category ?? "Uncategorized",
+              categoryColor: resolveTxColor(tx.category ?? "Uncategorized"),
               amount: remaining,
               isIncome: sign < 0,
               transactionType: tx.transactionType,

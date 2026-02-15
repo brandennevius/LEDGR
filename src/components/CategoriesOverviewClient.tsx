@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { categoryColorPalette } from "@/lib/categoryColors";
 
 type Summary = {
   mode: "budget" | "compare";
@@ -13,6 +14,7 @@ type Summary = {
 
 type CategoryRow = {
   name: string;
+  color: string;
   spend: number;
   prevSpend: number;
   budget: number | null;
@@ -84,9 +86,11 @@ export default function CategoriesOverviewClient({
   const [newName, setNewName] = useState("");
   const [newBudget, setNewBudget] = useState("");
   const [newEssential, setNewEssential] = useState(false);
+  const [newColor, setNewColor] = useState<string>(categoryColorPalette[0]);
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetDraft, setBudgetDraft] = useState("");
   const [essentialDraft, setEssentialDraft] = useState(false);
+  const [colorDraft, setColorDraft] = useState<string>(categoryColorPalette[0]);
 
   const selectedRow = useMemo(
     () => rows.find((row) => row.name === selectedName) ?? rows[0],
@@ -98,9 +102,35 @@ export default function CategoriesOverviewClient({
     return Math.max(...values, 1);
   }, [rows]);
 
+  const rowsByName = useMemo(
+    () => new Map(rows.map((row) => [row.name, row])),
+    [rows]
+  );
+
   const sortedGroups = useMemo(
     () =>
-      [...groups].sort((a, b) => {
+      [...groups]
+        .map((group) => {
+          const categories = group.categories.map(
+            (item) => rowsByName.get(item.name) ?? item
+          );
+          const spend = categories.reduce((total, item) => total + item.spend, 0);
+          const budgetSum = categories.reduce(
+            (total, item) => total + (item.budget ?? 0),
+            0
+          );
+          const budget =
+            budgetSum + (group.unassignedBudget ?? 0) > 0
+              ? budgetSum + (group.unassignedBudget ?? 0)
+              : null;
+          return {
+            ...group,
+            spend,
+            budget,
+            categories,
+          };
+        })
+        .sort((a, b) => {
         if (a.status !== b.status) {
           if (a.status === "over") return -1;
           if (b.status === "over") return 1;
@@ -108,8 +138,8 @@ export default function CategoriesOverviewClient({
           if (b.status === "risk") return 1;
         }
         return b.spend - a.spend;
-      }),
-    [groups]
+        }),
+    [groups, rowsByName]
   );
 
   const groupedCategoryNames = useMemo(() => {
@@ -132,6 +162,7 @@ export default function CategoriesOverviewClient({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: row.name,
+        color: row.color,
         essential: row.essential,
         monthlyBudget: row.budget,
       }),
@@ -147,12 +178,14 @@ export default function CategoriesOverviewClient({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: newName.trim(),
+        color: newColor,
         essential: newEssential,
         monthlyBudget: budget,
       }),
     });
     const newRow: CategoryRow = {
       name: newName.trim(),
+      color: newColor,
       spend: 0,
       prevSpend: 0,
       budget: budget,
@@ -166,6 +199,7 @@ export default function CategoriesOverviewClient({
     setNewName("");
     setNewBudget("");
     setNewEssential(false);
+    setNewColor(categoryColorPalette[0]);
     setShowAdd(false);
   };
 
@@ -240,6 +274,7 @@ export default function CategoriesOverviewClient({
     const row = rows.find((item) => item.name === name);
     setBudgetDraft(row?.budget ? String(row.budget) : "");
     setEssentialDraft(Boolean(row?.essential));
+    setColorDraft(row?.color ?? categoryColorPalette[0]);
   };
 
   return (
@@ -308,6 +343,11 @@ export default function CategoriesOverviewClient({
                 Essential
               </label>
             </div>
+            <ColorPicker
+              value={newColor}
+              onChange={setNewColor}
+              label="Category color"
+            />
             <button
               onClick={handleCreate}
               className="rounded-full bg-[color:var(--ocean)] px-4 py-2 text-xs font-semibold text-white"
@@ -376,9 +416,17 @@ export default function CategoriesOverviewClient({
             <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/80">
               Category
             </p>
-            <h2 className="text-2xl font-semibold">
-              {selectedRow?.name ?? "Select a category"}
-            </h2>
+            <div className="mt-1 flex items-center gap-3">
+              {selectedRow ? (
+                <span
+                  className="h-3 w-3 rounded-full ring-2 ring-white/25"
+                  style={{ backgroundColor: selectedRow.color }}
+                />
+              ) : null}
+              <h2 className="text-2xl font-semibold">
+                {selectedRow?.name ?? "Select a category"}
+              </h2>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -388,6 +436,7 @@ export default function CategoriesOverviewClient({
                   selectedRow?.budget ? String(selectedRow.budget) : ""
                 );
                 setEssentialDraft(Boolean(selectedRow?.essential));
+                setColorDraft(selectedRow?.color ?? categoryColorPalette[0]);
               }}
               className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white/70"
             >
@@ -440,12 +489,19 @@ export default function CategoriesOverviewClient({
                 Essential
               </label>
             </div>
+            <ColorPicker
+              value={colorDraft}
+              onChange={setColorDraft}
+              label="Category color"
+              dark
+            />
             <button
               onClick={async () => {
                 const updated = rows.map((row) =>
                   row.name === selectedRow.name
                     ? {
                         ...row,
+                        color: colorDraft,
                         budget: budgetDraft ? Number(budgetDraft) : null,
                         essential: essentialDraft,
                       }
@@ -454,6 +510,7 @@ export default function CategoriesOverviewClient({
                 setRows(updated);
                 await handleSave({
                   ...selectedRow,
+                  color: colorDraft,
                   budget: budgetDraft ? Number(budgetDraft) : null,
                   essential: essentialDraft,
                 });
@@ -467,7 +524,10 @@ export default function CategoriesOverviewClient({
         ) : null}
 
         <div className="mt-6 rounded-2xl border border-white/10 bg-white/10 p-4">
-          <CategoryBarChart values={monthlyTotals} />
+          <CategoryBarChart
+            values={monthlyTotals}
+            color={selectedRow?.color ?? "#f43f5e"}
+          />
         </div>
 
         <div className="mt-6">
@@ -542,6 +602,47 @@ export default function CategoriesOverviewClient({
   );
 }
 
+function ColorPicker({
+  value,
+  onChange,
+  label,
+  dark = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  dark?: boolean;
+}) {
+  return (
+    <div>
+      <p className={`mb-2 text-[10px] uppercase tracking-[0.2em] ${dark ? "text-white/70" : "text-[color:var(--ink-soft)]"}`}>
+        {label}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {categoryColorPalette.map((color) => (
+          <button
+            key={color}
+            type="button"
+            onClick={() => onChange(color)}
+            className={`h-6 w-6 rounded-full ring-offset-2 transition ${
+              dark ? "ring-offset-[color:var(--ink)]" : "ring-offset-white"
+            } ${
+              value === color
+                ? dark
+                  ? "ring-2 ring-white/90"
+                  : "ring-2 ring-[color:var(--ocean)]"
+                : "ring-1 ring-black/10"
+            }`}
+            style={{ backgroundColor: color }}
+            aria-label={`Select ${color} color`}
+            title={color}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CategoryRow({
   row,
   max,
@@ -556,26 +657,29 @@ function CategoryRow({
   const progress = row.budget
     ? Math.min(100, (row.spend / row.budget) * 100)
     : Math.min(100, (row.spend / max) * 100);
-  const statusColor =
-    row.status === "over"
-      ? "bg-rose-500"
-      : row.status === "risk"
-      ? "bg-amber-400"
-      : row.status === "ok"
-      ? "bg-emerald-500"
-      : "bg-slate-300";
   return (
     <button
       onClick={() => onSelect(row.name)}
       className={`w-full rounded-2xl border px-3 py-2 text-left transition ${
         selected
-          ? "border-[color:var(--ocean)] bg-emerald-50/60"
+          ? ""
           : "border-black/5 bg-white"
       }`}
+      style={
+        selected
+          ? {
+              borderColor: row.color,
+              backgroundColor: `${row.color}14`,
+            }
+          : undefined
+      }
     >
       <div className="grid grid-cols-[1.4fr_0.7fr_0.7fr] items-center gap-2">
         <div className="flex items-center gap-2 text-sm font-medium">
-          <span className="h-2 w-2 rounded-full bg-[color:var(--ocean)]" />
+          <span
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: row.color }}
+          />
           <span>{row.name}</span>
         </div>
         <span className="text-xs font-semibold">{formatCurrency(row.spend)}</span>
@@ -584,7 +688,10 @@ function CategoryRow({
         </span>
       </div>
       <div className="mt-2 h-2 rounded-full bg-slate-100">
-        <div className={`h-2 rounded-full ${statusColor}`} style={{ width: `${progress}%` }} />
+        <div
+          className="h-2 rounded-full"
+          style={{ width: `${progress}%`, backgroundColor: row.color }}
+        />
       </div>
     </button>
   );
@@ -625,8 +732,10 @@ function DonutChart({ spend, budget }: { spend: number; budget: number }) {
 
 function CategoryBarChart({
   values,
+  color,
 }: {
   values: { label: string; value: number }[];
+  color: string;
 }) {
   const max = Math.max(...values.map((item) => item.value), 1);
   return (
@@ -635,8 +744,8 @@ function CategoryBarChart({
         {values.map((item) => (
           <div key={item.label} className="flex flex-col items-center gap-1">
             <div
-              className="w-3 rounded-full bg-rose-500"
-              style={{ height: `${Math.max(6, (item.value / max) * 90)}px` }}
+              className="w-3 rounded-full"
+              style={{ backgroundColor: color, height: `${Math.max(6, (item.value / max) * 90)}px` }}
             />
             <span className="text-[10px] text-white/70">
               {item.label}

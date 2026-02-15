@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
+import { resolveCategoryColor } from "@/lib/categoryColors";
 
 export async function GET(
   _request: Request,
@@ -12,20 +13,35 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const transaction = await prisma.transaction.findFirst({
-    where: { id, userId: user.id },
-    include: { account: true, splits: true },
-  });
+  const [transaction, settings] = await Promise.all([
+    prisma.transaction.findFirst({
+      where: { id, userId: user.id },
+      include: { account: true, splits: true },
+    }),
+    prisma.category.findMany({
+      where: { userId: user.id },
+      select: { name: true, color: true },
+    }),
+  ]);
 
   if (!transaction) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const settingsMap = new Map(
+    settings.map((setting) => [setting.name.toLowerCase(), setting.color])
+  );
+  const categoryName = transaction.category ?? "Uncategorized";
+
   return NextResponse.json({
     id: transaction.id,
     name: transaction.merchantName ?? transaction.name,
     amount: transaction.amount,
-    category: transaction.category ?? "Uncategorized",
+    category: categoryName,
+    categoryColor: resolveCategoryColor(
+      categoryName,
+      settingsMap.get(categoryName.toLowerCase()) ?? null
+    ),
     transactionType: transaction.transactionType,
     transferPeerId: transaction.transferPeerId,
     date: transaction.date.toISOString(),

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireAuthedUser } from "@/lib/auth";
+import { resolveCategoryColor } from "@/lib/categoryColors";
 import CategoriesOverviewClient from "@/components/CategoriesOverviewClient";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +71,7 @@ export default async function CategoriesPage() {
           : "ok";
       return {
         name,
+        color: resolveCategoryColor(name, setting?.color),
         spend,
         prevSpend: previous,
         budget,

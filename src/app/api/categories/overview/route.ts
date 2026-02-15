@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
+import { resolveCategoryColor } from "@/lib/categoryColors";
 
 const formatMonthKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -72,6 +73,7 @@ export async function GET() {
           : "ok";
       return {
         name,
+        color: resolveCategoryColor(name, setting?.color),
         spend,
         prevSpend: previous,
         budget,

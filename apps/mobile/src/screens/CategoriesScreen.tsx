@@ -87,6 +87,7 @@ const CATEGORY_PALETTE = [
   '#f59e0b',
   '#06b6d4',
 ];
+const CATEGORY_COLORS = CATEGORY_PALETTE;
 
 const normalizeHex = (value: string) => {
   const color = value.trim();
@@ -120,9 +121,11 @@ export function CategoriesScreen() {
   const [addOpen, setAddOpen] = useState(false);
   const [budgetDraft, setBudgetDraft] = useState('');
   const [essentialDraft, setEssentialDraft] = useState(false);
+  const [colorDraft, setColorDraft] = useState(CATEGORY_COLORS[0]);
   const [newName, setNewName] = useState('');
   const [newBudget, setNewBudget] = useState('');
   const [newEssential, setNewEssential] = useState(false);
+  const [newColor, setNewColor] = useState(CATEGORY_COLORS[0]);
   const [groupOpen, setGroupOpen] = useState(false);
   const [categoryDetailOpen, setCategoryDetailOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
@@ -135,7 +138,11 @@ export function CategoriesScreen() {
       const data = await apiRequest<OverviewResponse>('/api/categories/overview');
       setOverview(data);
       if (!selected && data.categories.length > 0) {
-        setSelected(data.categories[0].name);
+        const first = data.categories[0];
+        setSelected(first.name);
+        setBudgetDraft(first.budget ? String(first.budget) : '');
+        setEssentialDraft(Boolean(first.essential));
+        setColorDraft(resolveCategoryColor(first));
       }
       setError(null);
     } catch (err) {
@@ -238,6 +245,7 @@ export function CategoriesScreen() {
     if (!selectedRow) return;
     setBudgetDraft(selectedRow.budget ? String(selectedRow.budget) : '');
     setEssentialDraft(selectedRow.essential);
+    setColorDraft(resolveCategoryColor(selectedRow));
     setEditOpen(true);
   };
 
@@ -249,6 +257,7 @@ export function CategoriesScreen() {
         method: 'POST',
         body: {
           name: selectedRow.name,
+          color: colorDraft,
           essential: essentialDraft,
           monthlyBudget: budgetDraft ? Number(budgetDraft) : null,
         },
@@ -268,6 +277,7 @@ export function CategoriesScreen() {
         method: 'POST',
         body: {
           name: newName.trim(),
+          color: newColor,
           essential: newEssential,
           monthlyBudget: newBudget ? Number(newBudget) : null,
         },
@@ -275,6 +285,7 @@ export function CategoriesScreen() {
       setNewName('');
       setNewBudget('');
       setNewEssential(false);
+      setNewColor(CATEGORY_COLORS[0]);
       await load();
     } finally {
       setSaving(false);
@@ -336,7 +347,7 @@ export function CategoriesScreen() {
                 </View>
                 <Text style={styles.groupMeta}>
                   {(group.categories ?? []).length > 0
-                    ? group.categories.join(', ')
+                    ? group.categories.map((item) => item.name).join(', ')
                     : 'No categories assigned'}
                 </Text>
                 <Text style={styles.groupMeta}>
@@ -396,11 +407,17 @@ export function CategoriesScreen() {
                   style={[
                     styles.categoryRow,
                     selected === row.name && styles.categoryRowActive,
-                    selected === row.name && { borderColor: categoryColor },
+                    selected === row.name && {
+                      borderColor: categoryColor,
+                      backgroundColor: `${categoryColor}1A`,
+                    },
                   ]}
                 >
                   <View style={styles.categoryHeader}>
-                    <Text style={styles.categoryName}>{row.name}</Text>
+                    <View style={styles.categoryNameWrap}>
+                      <View style={[styles.categoryDot, { backgroundColor: categoryColor }]} />
+                      <Text style={styles.categoryName}>{row.name}</Text>
+                    </View>
                     <Text style={styles.categoryAmount}>{formatCurrency(row.spend)}</Text>
                   </View>
                   <View style={styles.categoryBarTrack}>
@@ -427,7 +444,12 @@ export function CategoriesScreen() {
           <ScrollView contentContainerStyle={styles.categoryDetailContent} showsVerticalScrollIndicator={false}>
             <View style={styles.detailHeader}>
               <View>
-                <Text style={[styles.sectionTitle, { color: selectedCategoryColor }]}>{selectedRow.name}</Text>
+                <View style={styles.detailTitleWrap}>
+                  <View style={[styles.categoryDot, { backgroundColor: selectedCategoryColor }]} />
+                  <Text style={[styles.sectionTitle, { color: selectedCategoryColor }]}>
+                    {selectedRow.name}
+                  </Text>
+                </View>
                 <Text style={styles.sectionSubtitle}>
                   {selectedRow.essential ? 'Essential' : 'Flexible'} · {selectedRow.status}
                 </Text>
@@ -524,6 +546,7 @@ export function CategoriesScreen() {
             {essentialDraft ? 'Essential category' : 'Mark as essential'}
           </Text>
         </Pressable>
+        <ColorPalettePicker selected={colorDraft} onSelect={setColorDraft} />
         <Pressable style={styles.primaryButton} onPress={saveCategory} disabled={saving}>
           <Text style={styles.primaryLabel}>{saving ? 'Saving...' : 'Save'}</Text>
         </Pressable>
@@ -554,6 +577,7 @@ export function CategoriesScreen() {
             {newEssential ? 'Essential category' : 'Mark as essential'}
           </Text>
         </Pressable>
+        <ColorPalettePicker selected={newColor} onSelect={setNewColor} />
         <Pressable style={styles.primaryButton} onPress={createCategory} disabled={saving}>
           <Text style={styles.primaryLabel}>{saving ? 'Saving...' : 'Create'}</Text>
         </Pressable>
@@ -588,6 +612,33 @@ export function CategoriesScreen() {
         </Pressable>
       </ModalSheet>
     </Screen>
+  );
+}
+
+function ColorPalettePicker({
+  selected,
+  onSelect,
+}: {
+  selected: string;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <View style={styles.colorPickerWrap}>
+      <Text style={styles.colorPickerLabel}>Category color</Text>
+      <View style={styles.colorPickerGrid}>
+        {CATEGORY_COLORS.map((color) => (
+          <Pressable
+            key={color}
+            onPress={() => onSelect(color)}
+            style={[
+              styles.colorSwatch,
+              { backgroundColor: color },
+              selected === color && styles.colorSwatchActive,
+            ]}
+          />
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -745,6 +796,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  categoryNameWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  categoryDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
   categoryName: {
     color: colors.text,
     fontSize: 14,
@@ -769,6 +830,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  detailTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   categoryDetailContent: {
     gap: 12,
@@ -919,5 +985,31 @@ const styles = StyleSheet.create({
   toggleLabel: {
     color: colors.text,
     fontSize: 12,
+  },
+  colorPickerWrap: {
+    marginBottom: 12,
+  },
+  colorPickerLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  colorPickerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  colorSwatch: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  colorSwatchActive: {
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
 });

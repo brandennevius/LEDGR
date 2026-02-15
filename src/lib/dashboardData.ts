@@ -6,6 +6,7 @@ import {
 import { buildClientSnapshot } from "@/utils/trends";
 import { categorizeTransactions } from "@/lib/categorize";
 import { computeCashOnHand, hydrateGoals } from "@/lib/goals";
+import { resolveCategoryColor } from "@/lib/categoryColors";
 import {
   accountKind,
   detectInternalTransfers,
@@ -402,6 +403,7 @@ export const getClientOverviewData = async (user: User) => {
           : "ok";
       return {
         name: setting.name,
+        color: resolveCategoryColor(setting.name, setting.color),
         essential: setting.essential,
         budget,
         spend,
@@ -425,6 +427,7 @@ export const getClientOverviewData = async (user: User) => {
   const categoryMonthSummary = Array.from(summarySource.entries())
     .map(([name, spend]) => ({
       name,
+      color: resolveCategoryColor(name, settingsMap.get(name)?.color),
       spend,
       budget: settingsMap.get(name)?.monthlyBudget ?? null,
     }))

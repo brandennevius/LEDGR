@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { categoryColorPalette } from "@/lib/categoryColors";
 
 type CategorySetting = {
   id?: string;
   name: string;
+  color: string;
   essential: boolean;
   monthlyBudget: number | null;
 };
@@ -19,6 +21,7 @@ const formatCurrency = (value: number) =>
 export default function CategorySettingsClient() {
   const [settings, setSettings] = useState<CategorySetting[]>([]);
   const [name, setName] = useState("");
+  const [color, setColor] = useState<string>(categoryColorPalette[0]);
   const [essential, setEssential] = useState(false);
   const [budget, setBudget] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -36,6 +39,7 @@ export default function CategorySettingsClient() {
 
   const saveSetting = async (payload: {
     name: string;
+    color?: string | null;
     essential?: boolean;
     monthlyBudget?: number | null;
   }) => {
@@ -60,10 +64,12 @@ export default function CategorySettingsClient() {
     const monthlyBudget = budget ? Number(budget) : null;
     await saveSetting({
       name: name.trim(),
+      color,
       essential,
       monthlyBudget: monthlyBudget && !Number.isNaN(monthlyBudget) ? monthlyBudget : null,
     });
     setName("");
+    setColor(categoryColorPalette[0]);
     setEssential(false);
     setBudget("");
   };
@@ -84,13 +90,27 @@ export default function CategorySettingsClient() {
         ) : null}
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-[1.2fr_0.6fr_0.6fr_auto]">
+      <div className="mt-4 grid gap-3 md:grid-cols-[1.2fr_1fr_0.6fr_0.6fr_auto]">
         <input
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder="Category name (e.g., Rent)"
           className="rounded-2xl border border-black/10 bg-white px-3 py-2 text-sm"
         />
+        <div className="flex items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 py-2">
+          {categoryColorPalette.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className={`h-5 w-5 rounded-full ring-offset-2 transition ${
+                color === item ? "ring-2 ring-[color:var(--ocean)]" : "ring-1 ring-black/10"
+              }`}
+              style={{ backgroundColor: item }}
+              onClick={() => setColor(item)}
+              aria-label={`Select ${item} color`}
+            />
+          ))}
+        </div>
         <label className="flex items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 py-2 text-xs text-[color:var(--ink-soft)]">
           <input
             type="checkbox"
@@ -126,7 +146,13 @@ export default function CategorySettingsClient() {
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium">{item.name}</p>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <p className="text-sm font-medium">{item.name}</p>
+                  </div>
                   <p className="text-xs text-[color:var(--ink-soft)]">
                     {item.essential ? "Essential" : "Flexible"}
                     {item.monthlyBudget
@@ -150,6 +176,29 @@ export default function CategorySettingsClient() {
                     />
                     Essential
                   </label>
+                  <div className="flex items-center gap-1 rounded-full border border-black/10 bg-white px-2 py-1">
+                    {categoryColorPalette.map((colorOption) => (
+                      <button
+                        key={`${item.name}-${colorOption}`}
+                        type="button"
+                        onClick={() => {
+                          const next = settings.map((setting) =>
+                            setting.name === item.name
+                              ? { ...setting, color: colorOption }
+                              : setting
+                          );
+                          setSettings(next);
+                        }}
+                        className={`h-3.5 w-3.5 rounded-full ring-offset-2 ${
+                          item.color === colorOption
+                            ? "ring-2 ring-[color:var(--ocean)]"
+                            : "ring-1 ring-black/10"
+                        }`}
+                        style={{ backgroundColor: colorOption }}
+                        aria-label={`Set ${item.name} color to ${colorOption}`}
+                      />
+                    ))}
+                  </div>
                   <input
                     type="number"
                     min={0}
@@ -174,6 +223,7 @@ export default function CategorySettingsClient() {
                     onClick={() =>
                       saveSetting({
                         name: item.name,
+                        color: item.color,
                         essential: item.essential,
                         monthlyBudget: item.monthlyBudget,
                       })
