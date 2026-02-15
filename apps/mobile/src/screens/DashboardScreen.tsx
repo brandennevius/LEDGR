@@ -351,7 +351,7 @@ export function DashboardScreen() {
   const budgetDiff = budget - spent;
 
   return (
-    <Screen title="Dashboard" subtitle="Live overview from linked accounts.">
+    <Screen edgeToEdge>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingCard}>
@@ -668,6 +668,8 @@ export function DashboardScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    paddingTop: 76,
+    paddingHorizontal: 14,
     paddingBottom: 26,
     gap: 14,
   },

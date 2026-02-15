@@ -104,7 +104,7 @@ export function SettingsScreen() {
   };
 
   return (
-    <Screen title="Settings" subtitle="Personalize your experience">
+    <Screen edgeToEdge>
       <View style={styles.content}>
         <View style={styles.card}>
           <Text style={styles.label}>Signed in as</Text>
@@ -175,6 +175,8 @@ export function SettingsScreen() {
 const styles = StyleSheet.create({
   content: {
     flex: 1,
+    paddingTop: 76,
+    paddingHorizontal: 16,
     gap: 16,
   },
   card: {

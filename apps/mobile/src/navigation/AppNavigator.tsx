@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CoachChatFab } from '../components/CoachChatFab';
 import { AccountsScreen } from '../screens/AccountsScreen';
@@ -18,13 +18,38 @@ const Tab = createBottomTabNavigator();
 function MainTabs() {
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
+      screenOptions={({ route, navigation }) => ({
         tabBarShowLabel: false,
+        headerShown: route.name === 'Dashboard' || route.name === 'Settings',
+        headerTransparent: true,
+        headerTitleAlign: 'center',
+        headerTitle: () => (
+          <Text style={styles.headerTitle}>{route.name === 'Settings' ? 'Settings' : 'LEDGR'}</Text>
+        ),
+        headerLeft: () =>
+          route.name === 'Settings' ? (
+            <Pressable
+              onPress={() => navigation.navigate('Dashboard')}
+              style={styles.headerIconButton}
+            >
+              <Ionicons name="arrow-back" size={20} color={colors.text} />
+            </Pressable>
+          ) : route.name === 'Dashboard' ? (
+            <Pressable
+              onPress={() => navigation.navigate('Settings')}
+              style={styles.headerIconButton}
+            >
+              <Ionicons name="settings-outline" size={20} color={colors.text} />
+            </Pressable>
+          ) : null,
+        headerRight: () => (route.name === 'Dashboard' ? <CoachChatFab variant="icon" /> : null),
+        headerLeftContainerStyle: styles.headerSideContainer,
+        headerRightContainerStyle: styles.headerSideContainer,
         tabBarStyle: {
           backgroundColor: 'rgba(12, 17, 36, 0.92)',
           borderTopColor: colors.cardBorder,
           height: 64,
+          display: route.name === 'Settings' ? 'none' : 'flex',
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
@@ -36,7 +61,6 @@ function MainTabs() {
             Goals: 'flag',
             Accounts: 'wallet',
             Categories: 'layers',
-            Settings: 'settings',
           };
           const name = iconMap[route.name] ?? 'ellipse';
           return <Ionicons name={name} size={size ?? 22} color={color} />;
@@ -49,7 +73,11 @@ function MainTabs() {
       <Tab.Screen name="Goals" component={GoalsScreen} />
       <Tab.Screen name="Accounts" component={AccountsScreen} />
       <Tab.Screen name="Categories" component={CategoriesScreen} />
-      <Tab.Screen name="Settings" component={SettingsScreen} />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ tabBarButton: () => null }}
+      />
     </Tab.Navigator>
   );
 }
@@ -59,7 +87,6 @@ export function AppNavigator() {
     <NavigationContainer theme={navigationTheme}>
       <View style={styles.container}>
         <MainTabs />
-        <CoachChatFab />
       </View>
     </NavigationContainer>
   );
@@ -68,5 +95,24 @@ export function AppNavigator() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  headerTitle: {
+    color: colors.text,
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  headerIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  headerSideContainer: {
+    paddingHorizontal: 12,
   },
 });

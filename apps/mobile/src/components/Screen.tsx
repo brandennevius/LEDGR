@@ -9,22 +9,30 @@ import { colors, gradients } from '../theme';
 type ScreenProps = {
   title?: string;
   subtitle?: string;
+  edgeToEdge?: boolean;
   children?: ReactNode;
 };
 
-export function Screen({ title, subtitle, children }: ScreenProps) {
+export function Screen({ title, subtitle, edgeToEdge = false, children }: ScreenProps) {
   return (
     <LinearGradient colors={gradients.app} style={styles.root}>
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <SafeAreaView
+        style={[styles.safe, edgeToEdge && styles.safeEdgeToEdge]}
+        edges={['top', 'left', 'right']}
+      >
         {(title || subtitle) && (
-          <View style={styles.header}>
+          <View style={[styles.header, edgeToEdge && styles.edgeHeader]}>
             {title ? <Text style={styles.title}>{title}</Text> : null}
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           </View>
         )}
-        <BlurView intensity={18} tint="dark" style={styles.content}>
-          <View style={styles.inner}>{children}</View>
-        </BlurView>
+        {edgeToEdge ? (
+          <View style={styles.edgeContent}>{children}</View>
+        ) : (
+          <BlurView intensity={18} tint="dark" style={styles.content}>
+            <View style={styles.inner}>{children}</View>
+          </BlurView>
+        )}
       </SafeAreaView>
     </LinearGradient>
   );
@@ -39,8 +47,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
   },
+  safeEdgeToEdge: {
+    paddingHorizontal: 0,
+  },
   header: {
     marginBottom: 16,
+  },
+  edgeHeader: {
+    paddingHorizontal: 20,
   },
   title: {
     color: colors.text,
@@ -64,5 +78,8 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     backgroundColor: colors.card,
+  },
+  edgeContent: {
+    flex: 1,
   },
 });

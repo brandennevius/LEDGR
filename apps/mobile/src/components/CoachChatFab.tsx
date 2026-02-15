@@ -49,7 +49,11 @@ function parseBoldSegments(text: string): TextSegment[] {
   return segments;
 }
 
-export function CoachChatFab() {
+type CoachChatFabProps = {
+  variant?: 'fab' | 'icon';
+};
+
+export function CoachChatFab({ variant = 'fab' }: CoachChatFabProps) {
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -158,14 +162,23 @@ export function CoachChatFab() {
     ]);
   };
 
-  return (
-    <>
+  const trigger =
+    variant === 'icon' ? (
+      <Pressable onPress={() => setOpen(true)} style={styles.iconButton}>
+        <Ionicons name="chatbubble-outline" size={22} color={colors.text} />
+      </Pressable>
+    ) : (
       <Pressable
         onPress={() => setOpen(true)}
         style={[styles.fab, { bottom: bottomOffset }]}
       >
         <Ionicons name="chatbubble-ellipses" size={20} color={colors.background} />
       </Pressable>
+    );
+
+  return (
+    <>
+      {trigger}
 
       <ModalSheet visible={open} onClose={() => setOpen(false)}>
         <View style={styles.headerRow}>
@@ -240,6 +253,16 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   title: {
     color: colors.text,
