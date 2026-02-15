@@ -157,6 +157,13 @@ export function TransactionsScreen() {
     return { income, spend };
   }, [transactions]);
 
+  const reviewCount = useMemo(
+    () => transactions.filter((tx) => tx.needsReview).length,
+    [transactions]
+  );
+
+  const hasActiveFilters = categoryFilter !== 'All' || needsReviewOnly || days !== 30 || query.trim().length > 0;
+
   const openDetail = async (id: string) => {
     setDetailOpen(true);
     setDetailLoading(true);
@@ -273,6 +280,11 @@ export function TransactionsScreen() {
             placeholderTextColor={colors.textMuted}
             style={styles.searchInput}
           />
+
+          <View style={styles.filterHeaderRow}>
+            <Text style={styles.filterSectionTitle}>Date range</Text>
+            {days !== 30 ? <Text style={styles.filterHint}>{days} days</Text> : null}
+          </View>
           <View style={styles.filterRow}>
             {dayOptions.map((option) => (
               <Chip
@@ -283,20 +295,42 @@ export function TransactionsScreen() {
               />
             ))}
           </View>
-          <View style={styles.filterRow}>
-            {(categoryList.length ? categoryList : ['All']).slice(0, 6).map((name) => (
-              <Chip
-                key={name}
-                label={name}
-                active={categoryFilter === name}
-                onPress={() => setCategoryFilter(name)}
-              />
+
+          <View style={styles.filterHeaderRow}>
+            <Text style={styles.filterSectionTitle}>Category</Text>
+            {categoryFilter !== 'All' ? <Text style={styles.filterHint}>{categoryFilter}</Text> : null}
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+            {(categoryList.length ? categoryList : ['All']).map((name) => (
+              <View key={name}>
+                <Chip label={name} active={categoryFilter === name} onPress={() => setCategoryFilter(name)} />
+              </View>
             ))}
+          </ScrollView>
+
+          <View style={styles.filterHeaderRow}>
+            <Text style={styles.filterSectionTitle}>Review status</Text>
+            <Text style={styles.filterHint}>{reviewCount} flagged</Text>
+          </View>
+          <View style={styles.filterRow}>
             <Chip
               label={needsReviewOnly ? 'Needs review' : 'All reviews'}
               active={needsReviewOnly}
               onPress={() => setNeedsReviewOnly((prev) => !prev)}
             />
+            {hasActiveFilters ? (
+              <Pressable
+                onPress={() => {
+                  setQuery('');
+                  setDays(30);
+                  setCategoryFilter('All');
+                  setNeedsReviewOnly(false);
+                }}
+                style={styles.clearButton}
+              >
+                <Text style={styles.clearButtonLabel}>Clear filters</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
 
@@ -521,6 +555,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  filterHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  filterSectionTitle: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  filterHint: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  categoryScroll: {
+    gap: 8,
+    paddingRight: 6,
+  },
+  clearButton: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  clearButtonLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   loadingCard: {
     flexDirection: 'row',
