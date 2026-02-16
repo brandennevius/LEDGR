@@ -7,11 +7,12 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { LoadingScreen } from './src/screens/LoadingScreen';
+import { MfaGate } from './src/components/MfaGate';
 
 WebBrowser.maybeCompleteAuthSession();
 
 function RootNavigator() {
-  const { session, initializing } = useAuth();
+  const { session, initializing, signOut } = useAuth();
 
   if (initializing) {
     return <LoadingScreen />;
@@ -21,7 +22,11 @@ function RootNavigator() {
     return <AuthScreen />;
   }
 
-  return <AppNavigator />;
+  return (
+    <MfaGate session={session} onSignOut={signOut}>
+      <AppNavigator />
+    </MfaGate>
+  );
 }
 
 export default function App() {
