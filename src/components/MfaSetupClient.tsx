@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const inputClassName =
   "w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-emerald-200 focus:ring-2 focus:ring-emerald-100";
@@ -22,8 +21,6 @@ export default function MfaSetupClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = getSafeNextPath(searchParams.get("next"));
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-
   const [factorId, setFactorId] = useState<string | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [code, setCode] = useState("");
@@ -31,45 +28,34 @@ export default function MfaSetupClient() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const ensureSession = async () => {
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    return {
-      hasSession: Boolean(sessionData.session?.access_token),
-      sessionError: sessionError?.message ?? null,
-    };
-  };
-
   const startEnrollment = async () => {
     setLoading(true);
     setError(null);
     setStatus(null);
+    try {
+      const response = await fetch("/api/mfa/enroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const payload = (await response.json()) as {
+        factorId?: string;
+        qrCode?: string;
+        error?: string;
+      };
 
-    const { hasSession, sessionError } = await ensureSession();
-    if (!hasSession) {
-      setError(
-        sessionError
-          ? `Unable to validate session: ${sessionError}`
-          : "Your session is missing or expired. Please sign in again."
-      );
+      if (!response.ok || !payload.factorId) {
+        setError(normalizeMfaError(payload.error ?? "Unable to generate MFA QR code."));
+        return;
+      }
+
+      setFactorId(payload.factorId);
+      setQrCode(payload.qrCode ?? null);
+      setStatus("Scan the QR code in your authenticator app, then enter the 6-digit code.");
+    } catch {
+      setError("Unable to generate MFA QR code.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const { data, error: enrollError } = await supabase.auth.mfa.enroll({
-      factorType: "totp",
-      friendlyName: "LEDGR Authenticator",
-    });
-
-    if (enrollError) {
-      setError(normalizeMfaError(enrollError.message));
-      setLoading(false);
-      return;
-    }
-
-    setFactorId(data.id);
-    setQrCode(data.totp.qr_code);
-    setStatus("Scan the QR code in your authenticator app, then enter the 6-digit code.");
-    setLoading(false);
   };
 
   const verifyEnrollment = async () => {
@@ -77,19 +63,23 @@ export default function MfaSetupClient() {
     setLoading(true);
     setError(null);
     setStatus(null);
-
-    const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
-      factorId,
-      code: code.trim(),
-    });
-
-    if (verifyError) {
-      setError(normalizeMfaError(verifyError.message));
+    try {
+      const response = await fetch("/api/mfa/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ factorId, code: code.trim() }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setError(normalizeMfaError(payload.error ?? "Unable to verify MFA code."));
+        return;
+      }
+      router.replace(nextPath);
+    } catch {
+      setError("Unable to verify MFA code.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    router.replace(nextPath);
   };
 
   return (

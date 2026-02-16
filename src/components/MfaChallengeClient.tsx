@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const inputClassName =
   "w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-emerald-200 focus:ring-2 focus:ring-emerald-100";
@@ -22,8 +21,6 @@ export default function MfaChallengeClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = getSafeNextPath(searchParams.get("next"));
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-
   const [factorId, setFactorId] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -33,33 +30,26 @@ export default function MfaChallengeClient() {
     let mounted = true;
 
     const loadFactors = async () => {
-      const { data: sessionData, error: sessionError } =
-        await supabase.auth.getSession();
-      const hasSession = Boolean(sessionData.session?.access_token);
-      if (!hasSession) {
-        setError(
-          sessionError?.message
-            ? `Unable to validate session: ${sessionError.message}`
-            : "Your session is missing or expired. Please sign in again."
-        );
-        return;
-      }
-
-      const { data, error: factorError } = await supabase.auth.mfa.listFactors();
+      const response = await fetch("/api/mfa/factors");
+      const payload = (await response.json()) as {
+        factorId?: string | null;
+        hasFactor?: boolean;
+        error?: string;
+      };
 
       if (!mounted) return;
-      if (factorError) {
-        setError(normalizeMfaError(factorError.message));
+
+      if (!response.ok) {
+        setError(normalizeMfaError(payload.error ?? "Unable to load MFA factors."));
         return;
       }
 
-      const verifiedFactor = data.totp[0] ?? data.phone[0];
-      if (!verifiedFactor) {
+      if (!payload.hasFactor || !payload.factorId) {
         router.replace(`/mfa/setup?next=${encodeURIComponent(nextPath)}`);
         return;
       }
 
-      setFactorId(verifiedFactor.id);
+      setFactorId(payload.factorId);
     };
 
     loadFactors().catch(() => {
@@ -70,25 +60,29 @@ export default function MfaChallengeClient() {
     return () => {
       mounted = false;
     };
-  }, [nextPath, router, supabase]);
+  }, [nextPath, router]);
 
   const verifyCode = async () => {
     if (!factorId || !code.trim()) return;
     setLoading(true);
     setError(null);
-
-    const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
-      factorId,
-      code: code.trim(),
-    });
-
-    if (verifyError) {
-      setError(normalizeMfaError(verifyError.message));
+    try {
+      const response = await fetch("/api/mfa/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ factorId, code: code.trim() }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setError(normalizeMfaError(payload.error ?? "Unable to verify MFA code."));
+        return;
+      }
+      router.replace(nextPath);
+    } catch {
+      setError("Unable to verify MFA code.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    router.replace(nextPath);
   };
 
   return (
