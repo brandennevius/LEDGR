@@ -8,20 +8,12 @@ const protectedRoutes = [
   "/accounts",
   "/categories",
   "/goals",
-  "/mfa",
 ];
 
 const isProtectedRoute = (pathname: string) =>
   protectedRoutes.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
   );
-
-const isMfaRoute = (pathname: string) =>
-  pathname === "/mfa" ||
-  pathname.startsWith("/mfa/");
-
-const isAuthUtilityRoute = (pathname: string) =>
-  pathname.startsWith("/auth/");
 
 export async function middleware(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -70,44 +62,6 @@ export async function middleware(request: NextRequest) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/client";
     return NextResponse.redirect(redirectUrl);
-  }
-
-  if (user && !isAuthUtilityRoute(request.nextUrl.pathname)) {
-    const [{ data: aalData }, { data: factorsData }] = await Promise.all([
-      supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
-      supabase.auth.mfa.listFactors(),
-    ]);
-
-    const hasVerifiedFactor =
-      (factorsData?.totp?.length ?? 0) > 0 ||
-      (factorsData?.phone?.length ?? 0) > 0;
-    const isAal2 = aalData?.currentLevel === "aal2";
-    const requestedPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
-
-    if (!hasVerifiedFactor && isProtectedRoute(request.nextUrl.pathname)) {
-      if (request.nextUrl.pathname !== "/mfa/setup") {
-        const setupUrl = request.nextUrl.clone();
-        setupUrl.pathname = "/mfa/setup";
-        setupUrl.searchParams.set("next", requestedPath);
-        return NextResponse.redirect(setupUrl);
-      }
-    }
-
-    if (hasVerifiedFactor && !isAal2 && isProtectedRoute(request.nextUrl.pathname)) {
-      if (request.nextUrl.pathname !== "/mfa/challenge") {
-        const challengeUrl = request.nextUrl.clone();
-        challengeUrl.pathname = "/mfa/challenge";
-        challengeUrl.searchParams.set("next", requestedPath);
-        return NextResponse.redirect(challengeUrl);
-      }
-    }
-
-    if (isMfaRoute(request.nextUrl.pathname) && hasVerifiedFactor && isAal2) {
-      const next = request.nextUrl.searchParams.get("next");
-      const destination =
-        next && next.startsWith("/") ? next : "/client";
-      return NextResponse.redirect(new URL(destination, request.url));
-    }
   }
 
   if (user || !isProtectedRoute(request.nextUrl.pathname)) {

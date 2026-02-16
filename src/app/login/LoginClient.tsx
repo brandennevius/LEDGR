@@ -30,13 +30,6 @@ export default function LoginClient() {
     return callbackUrl.toString();
   };
 
-  const getOAuthCallbackUrl = () => {
-    const challengePath = `/mfa/challenge?next=${encodeURIComponent(getSafeNextPath())}`;
-    const callbackUrl = new URL("/auth/callback", window.location.origin);
-    callbackUrl.searchParams.set("next", challengePath);
-    return callbackUrl.toString();
-  };
-
   const handleEmailAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
@@ -78,7 +71,7 @@ export default function LoginClient() {
     setStatus(null);
     setLoading(true);
 
-    const redirectTo = getOAuthCallbackUrl();
+    const redirectTo = getCallbackUrl();
 
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider,
