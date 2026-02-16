@@ -32,13 +32,11 @@ export default function MfaSetupClient() {
   const [loading, setLoading] = useState(false);
 
   const ensureSession = async () => {
-    const [{ data: sessionData }, { data: userData }] = await Promise.all([
-      supabase.auth.getSession(),
-      supabase.auth.getUser(),
-    ]);
-    const hasSession = Boolean(sessionData.session?.access_token);
-    const hasUser = Boolean(userData.user);
-    return hasSession && hasUser;
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    return {
+      hasSession: Boolean(sessionData.session?.access_token),
+      sessionError: sessionError?.message ?? null,
+    };
   };
 
   const startEnrollment = async () => {
@@ -46,11 +44,14 @@ export default function MfaSetupClient() {
     setError(null);
     setStatus(null);
 
-    const hasSession = await ensureSession();
+    const { hasSession, sessionError } = await ensureSession();
     if (!hasSession) {
-      setError("Your session has expired. Please sign in again.");
+      setError(
+        sessionError
+          ? `Unable to validate session: ${sessionError}`
+          : "Your session is missing or expired. Please sign in again."
+      );
       setLoading(false);
-      router.replace(`/login?next=${encodeURIComponent(`/mfa/setup?next=${nextPath}`)}`);
       return;
     }
 
@@ -152,6 +153,13 @@ export default function MfaSetupClient() {
         ) : null}
 
         <div className="mt-6 flex items-center gap-3 text-sm">
+          <Link
+            href={`/login?next=${encodeURIComponent(`/mfa/setup?next=${nextPath}`)}`}
+            className="text-[color:var(--ink-soft)] underline"
+          >
+            Sign in again
+          </Link>
+          <span className="text-[color:var(--ink-soft)]">·</span>
           <Link href="/auth/signout" className="text-[color:var(--ink-soft)] underline">
             Sign out
           </Link>

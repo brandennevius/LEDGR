@@ -33,14 +33,15 @@ export default function MfaChallengeClient() {
     let mounted = true;
 
     const loadFactors = async () => {
-      const [{ data: sessionData }, { data: userData }] = await Promise.all([
-        supabase.auth.getSession(),
-        supabase.auth.getUser(),
-      ]);
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
       const hasSession = Boolean(sessionData.session?.access_token);
-      const hasUser = Boolean(userData.user);
-      if (!hasSession || !hasUser) {
-        router.replace(`/login?next=${encodeURIComponent(nextPath)}`);
+      if (!hasSession) {
+        setError(
+          sessionError?.message
+            ? `Unable to validate session: ${sessionError.message}`
+            : "Your session is missing or expired. Please sign in again."
+        );
         return;
       }
 
@@ -130,6 +131,13 @@ export default function MfaChallengeClient() {
         ) : null}
 
         <div className="mt-6 flex items-center gap-3 text-sm">
+          <Link
+            href={`/login?next=${encodeURIComponent(nextPath)}`}
+            className="text-[color:var(--ink-soft)] underline"
+          >
+            Sign in again
+          </Link>
+          <span className="text-[color:var(--ink-soft)]">·</span>
           <Link href="/mfa/setup" className="text-[color:var(--ink-soft)] underline">
             Set up a new factor
           </Link>
