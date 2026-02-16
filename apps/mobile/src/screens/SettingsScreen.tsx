@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -8,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
 import { Screen } from '../components/Screen';
 import { useAuth } from '../context/AuthContext';
@@ -24,6 +26,14 @@ const formatCurrency = (value: number) =>
     currency: 'USD',
     maximumFractionDigits: 0,
   });
+
+const resolvedBaseUrl =
+  Constants.expoConfig?.extra?.apiBaseUrl ??
+  process.env.EXPO_PUBLIC_API_BASE_URL ??
+  process.env.EXPO_PUBLIC_API_URL ??
+  'https://ledgr-henna.vercel.app';
+
+const privacyPolicyUrl = `${resolvedBaseUrl.replace(/\/$/, '')}/privacy`;
 
 export function SettingsScreen() {
   const { user, signOut } = useAuth();
@@ -103,6 +113,14 @@ export function SettingsScreen() {
     setStatus(`Theme set to ${value}.`);
   };
 
+  const handleOpenPrivacy = async () => {
+    try {
+      await Linking.openURL(privacyPolicyUrl);
+    } catch {
+      setStatus('Unable to open privacy policy.');
+    }
+  };
+
   return (
     <Screen edgeToEdge>
       <View style={styles.content}>
@@ -129,6 +147,16 @@ export function SettingsScreen() {
               </Pressable>
             ))}
           </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Legal</Text>
+          <Text style={styles.sectionSubtitle}>
+            Review how LEDGR handles personal and financial data.
+          </Text>
+          <Pressable style={styles.secondaryButton} onPress={handleOpenPrivacy}>
+            <Text style={styles.secondaryLabel}>Open Privacy Policy</Text>
+          </Pressable>
         </View>
 
         <View style={styles.card}>

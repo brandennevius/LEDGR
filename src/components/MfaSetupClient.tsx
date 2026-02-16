@@ -11,6 +11,13 @@ const inputClassName =
 const getSafeNextPath = (value: string | null) =>
   value && value.startsWith("/") ? value : "/client";
 
+const normalizeMfaError = (message: string) => {
+  if (message.includes("missing sub claim")) {
+    return "Your session is invalid for MFA setup. Sign out, sign in again, then retry.";
+  }
+  return message;
+};
+
 export default function MfaSetupClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -24,10 +31,28 @@ export default function MfaSetupClient() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const ensureSession = async () => {
+    const [{ data: sessionData }, { data: userData }] = await Promise.all([
+      supabase.auth.getSession(),
+      supabase.auth.getUser(),
+    ]);
+    const hasSession = Boolean(sessionData.session?.access_token);
+    const hasUser = Boolean(userData.user);
+    return hasSession && hasUser;
+  };
+
   const startEnrollment = async () => {
     setLoading(true);
     setError(null);
     setStatus(null);
+
+    const hasSession = await ensureSession();
+    if (!hasSession) {
+      setError("Your session has expired. Please sign in again.");
+      setLoading(false);
+      router.replace(`/login?next=${encodeURIComponent(`/mfa/setup?next=${nextPath}`)}`);
+      return;
+    }
 
     const { data, error: enrollError } = await supabase.auth.mfa.enroll({
       factorType: "totp",
@@ -35,7 +60,7 @@ export default function MfaSetupClient() {
     });
 
     if (enrollError) {
-      setError(enrollError.message);
+      setError(normalizeMfaError(enrollError.message));
       setLoading(false);
       return;
     }
@@ -58,7 +83,7 @@ export default function MfaSetupClient() {
     });
 
     if (verifyError) {
-      setError(verifyError.message);
+      setError(normalizeMfaError(verifyError.message));
       setLoading(false);
       return;
     }

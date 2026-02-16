@@ -424,6 +424,18 @@ export default function Landing() {
             </div>
           </div>
         </section>
+
+        <footer className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-black/10 bg-white/70 px-5 py-4 text-xs text-[color:var(--ink-soft)]">
+          <span>LEDGR Financial Coaching</span>
+          <div className="flex items-center gap-4">
+            <Link href="/privacy" className="hover:text-[color:var(--ocean)]">
+              Privacy Policy
+            </Link>
+            <Link href="/login" className="hover:text-[color:var(--ocean)]">
+              Sign in
+            </Link>
+          </div>
+        </footer>
       </main>
     </div>
   );

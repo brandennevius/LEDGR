@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -186,6 +187,17 @@ export default function LoginClient() {
             >
               {mode === "signup" ? "Create account" : "Sign in"}
             </button>
+
+            <p className="pt-1 text-xs text-[color:var(--ink-soft)]">
+              By continuing, you agree to our{" "}
+              <Link
+                href="/privacy"
+                className="font-medium text-[color:var(--ocean-dark)] underline underline-offset-4"
+              >
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </form>
         </div>
       </div>

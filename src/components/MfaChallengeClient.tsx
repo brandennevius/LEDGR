@@ -11,6 +11,13 @@ const inputClassName =
 const getSafeNextPath = (value: string | null) =>
   value && value.startsWith("/") ? value : "/client";
 
+const normalizeMfaError = (message: string) => {
+  if (message.includes("missing sub claim")) {
+    return "Your session is invalid for MFA challenge. Sign out, sign in again, then retry.";
+  }
+  return message;
+};
+
 export default function MfaChallengeClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -26,11 +33,22 @@ export default function MfaChallengeClient() {
     let mounted = true;
 
     const loadFactors = async () => {
+      const [{ data: sessionData }, { data: userData }] = await Promise.all([
+        supabase.auth.getSession(),
+        supabase.auth.getUser(),
+      ]);
+      const hasSession = Boolean(sessionData.session?.access_token);
+      const hasUser = Boolean(userData.user);
+      if (!hasSession || !hasUser) {
+        router.replace(`/login?next=${encodeURIComponent(nextPath)}`);
+        return;
+      }
+
       const { data, error: factorError } = await supabase.auth.mfa.listFactors();
 
       if (!mounted) return;
       if (factorError) {
-        setError(factorError.message);
+        setError(normalizeMfaError(factorError.message));
         return;
       }
 
@@ -64,7 +82,7 @@ export default function MfaChallengeClient() {
     });
 
     if (verifyError) {
-      setError(verifyError.message);
+      setError(normalizeMfaError(verifyError.message));
       setLoading(false);
       return;
     }
