@@ -132,6 +132,10 @@ export function CategoriesScreen() {
   const [groupCategories, setGroupCategories] = useState('');
   const [groupBudget, setGroupBudget] = useState('');
   const [saving, setSaving] = useState(false);
+  const currentMonthLabel = useMemo(
+    () => new Date().toLocaleDateString('en-US', { month: 'short' }),
+    []
+  );
 
   const load = async () => {
     try {
@@ -319,49 +323,22 @@ export function CategoriesScreen() {
   };
 
   return (
-    <Screen title="Categories" subtitle="Budgets, pacing, and groups.">
+    <Screen title="Categories" subtitle="Monthly spend against budget.">
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.headerTitle}>Categories overview</Text>
-            <Text style={styles.headerSubtitle}>Track budgets and compare to last month.</Text>
+            <Text style={styles.headerTitle}>This month</Text>
+            <Text style={styles.headerSubtitle}>Spent vs budget by category.</Text>
           </View>
           <View style={styles.headerButtons}>
             <Pressable style={styles.secondaryButton} onPress={() => setGroupOpen(true)}>
-              <Text style={styles.secondaryLabel}>Add group</Text>
+              <Text style={styles.secondaryLabel}>Group</Text>
             </Pressable>
             <Pressable style={styles.primaryButton} onPress={() => setAddOpen(true)}>
               <Text style={styles.primaryLabel}>Add</Text>
             </Pressable>
           </View>
         </View>
-
-        {(overview?.groups ?? []).length > 0 ? (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Category groups</Text>
-            {(overview?.groups ?? []).map((group) => (
-              <View key={group.id} style={styles.groupRow}>
-                <View style={styles.groupHeader}>
-                  <Text style={styles.groupName}>{group.name}</Text>
-                  <Text style={styles.groupAmount}>{formatCurrency(group.spend)}</Text>
-                </View>
-                <Text style={styles.groupMeta}>
-                  {(group.categories ?? []).length > 0
-                    ? group.categories.map((item) => item.name).join(', ')
-                    : 'No categories assigned'}
-                </Text>
-                <Text style={styles.groupMeta}>
-                  Budget {group.budget ? formatCurrency(group.budget) : '--'}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Category groups</Text>
-            <Text style={styles.emptyText}>No groups yet. Create one to organize categories.</Text>
-          </View>
-        )}
 
         {loading ? (
           <View style={styles.loadingCard}>
@@ -372,70 +349,90 @@ export function CategoriesScreen() {
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {overview ? (
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>
-              {overview.summary.mode === 'budget' ? 'Budget pacing' : 'Spend comparison'}
+          <>
+            <View style={styles.monthTotalsRow}>
+              <View style={styles.totalBlock}>
+                <Text style={styles.totalValue}>{formatCurrency(overview.summary.spend)}</Text>
+                <Text style={styles.totalLabel}>spent in {currentMonthLabel}</Text>
+              </View>
+              <View style={styles.totalDivider} />
+              <View style={[styles.totalBlock, styles.totalBlockRight]}>
+                <Text style={styles.totalValue}>{formatCurrency(overview.summary.budget)}</Text>
+                <Text style={styles.totalLabel}>total budget</Text>
+              </View>
+            </View>
+            <Text
+              style={[
+                styles.totalDelta,
+                overview.summary.spend > overview.summary.budget ? styles.totalDeltaOver : styles.totalDeltaUnder,
+              ]}
+            >
+              {overview.summary.spend > overview.summary.budget
+                ? `${formatCurrency(overview.summary.spend - overview.summary.budget)} over budget`
+                : `${formatCurrency(overview.summary.budget - overview.summary.spend)} under budget`}
             </Text>
-            <Text style={styles.summaryValue}>{formatCurrency(overview.summary.spend)} spent</Text>
-            <Text style={styles.summarySubtitle}>
-              {overview.summary.mode === 'budget'
-                ? `${formatCurrency(overview.summary.projected)} projected vs ${formatCurrency(
-                    overview.summary.budget
-                  )} budget`
-                : `${overview.summary.changePct.toFixed(0)}% vs last month`}
-            </Text>
-          </View>
+          </>
         ) : null}
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Categories</Text>
-          {(overview?.categories ?? []).length === 0 ? (
-            <Text style={styles.emptyText}>No categories yet.</Text>
-          ) : (
-            overview?.categories.map((row) => {
-              const progress = row.budget
-                ? Math.min(100, (row.spend / row.budget) * 100)
-                : Math.min(100, (row.spend / maxSpend) * 100);
-              const categoryColor = resolveCategoryColor(row);
-              return (
-                <Pressable
-                  key={row.name}
-                  onPress={() => {
-                    setSelected(row.name);
-                    setCategoryDetailOpen(true);
-                  }}
-                  style={[
-                    styles.categoryRow,
-                    selected === row.name && styles.categoryRowActive,
-                    selected === row.name && {
-                      borderColor: categoryColor,
-                      backgroundColor: `${categoryColor}1A`,
-                    },
-                  ]}
-                >
-                  <View style={styles.categoryHeader}>
-                    <View style={styles.categoryNameWrap}>
-                      <View style={[styles.categoryDot, { backgroundColor: categoryColor }]} />
-                      <Text style={styles.categoryName}>{row.name}</Text>
-                    </View>
-                    <Text style={styles.categoryAmount}>{formatCurrency(row.spend)}</Text>
-                  </View>
-                  <View style={styles.categoryBarTrack}>
-                    <View
-                      style={[
-                        styles.categoryBarFill,
-                        {
-                          width: `${progress}%`,
-                          backgroundColor: categoryColor,
-                        },
-                      ]}
-                    />
-                  </View>
-                </Pressable>
-              );
-            })
-          )}
+        <View style={styles.listHeader}>
+          <Text style={styles.listHeaderCategory}>Category</Text>
+          <Text style={styles.listHeaderAmount}>Spent</Text>
+          <Text style={styles.listHeaderBudget}>Budget</Text>
         </View>
+
+        {(overview?.categories ?? []).length === 0 ? (
+          <Text style={styles.emptyText}>No categories yet.</Text>
+        ) : (
+          overview?.categories.map((row) => {
+            const budget = row.budget ?? 0;
+            const ratio = row.budget
+              ? row.spend / Math.max(budget, 1)
+              : row.spend / Math.max(maxSpend, 1);
+            const progress = Math.min(1, ratio);
+            const categoryColor = resolveCategoryColor(row);
+            const barColor = row.budget
+              ? row.spend > budget
+                ? colors.danger
+                : row.spend > budget * 0.8
+                  ? '#f59e0b'
+                  : '#22c55e'
+              : categoryColor;
+            return (
+              <Pressable
+                key={row.name}
+                onPress={() => {
+                  setSelected(row.name);
+                  setCategoryDetailOpen(true);
+                }}
+                style={[styles.compactRow, selected === row.name && styles.compactRowActive]}
+              >
+                <View style={styles.compactLine}>
+                  <View style={styles.compactNameWrap}>
+                    <View style={[styles.categoryDot, { backgroundColor: categoryColor }]} />
+                    <Text style={styles.compactName} numberOfLines={1}>
+                      {row.name}
+                    </Text>
+                  </View>
+                  <View style={styles.compactMetrics}>
+                    <Text style={styles.compactAmount}>{formatCurrency(row.spend)}</Text>
+                    <View style={styles.compactBarTrack}>
+                      <View
+                        style={[
+                          styles.compactBarFill,
+                          {
+                            width: `${progress * 100}%`,
+                            backgroundColor: barColor,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.compactBudget}>{row.budget ? formatCurrency(row.budget) : '--'}</Text>
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })
+        )}
 
       </ScrollView>
 
@@ -708,65 +705,82 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 12,
   },
-  summaryCard: {
+  monthTotalsRow: {
     backgroundColor: 'rgba(17, 22, 43, 0.7)',
     borderRadius: 22,
-    padding: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-  },
-  summaryTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  summaryValue: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  summarySubtitle: {
-    color: colors.textMuted,
-    fontSize: 12,
-    marginTop: 4,
-  },
-  groupRow: {
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-  },
-  groupHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    gap: 12,
   },
-  groupName: {
+  totalBlock: {
+    flex: 1,
+  },
+  totalBlockRight: {
+    alignItems: 'flex-end',
+  },
+  totalDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: colors.cardBorder,
+  },
+  totalValue: {
     color: colors.text,
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 29,
+    fontWeight: '800',
+    lineHeight: 32,
   },
-  groupAmount: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  groupMeta: {
+  totalLabel: {
     color: colors.textMuted,
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 2,
   },
-  sectionCard: {
-    backgroundColor: 'rgba(17, 22, 43, 0.7)',
-    borderRadius: 22,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    gap: 12,
+  totalDelta: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: -4,
+    marginBottom: 2,
+  },
+  totalDeltaOver: {
+    color: colors.danger,
+  },
+  totalDeltaUnder: {
+    color: '#22c55e',
+  },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: 8,
+    marginTop: 4,
+  },
+  listHeaderCategory: {
+    flex: 1,
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+  },
+  listHeaderAmount: {
+    width: 76,
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    textAlign: 'right',
+  },
+  listHeaderBudget: {
+    width: 76,
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    textAlign: 'right',
   },
   sectionTitle: {
     color: colors.text,
@@ -782,49 +796,68 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
   },
-  categoryRow: {
-    padding: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  compactRow: {
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.cardBorder,
   },
-  categoryRowActive: {
-    borderColor: colors.primary,
+  compactRowActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
   },
-  categoryHeader: {
+  compactLine: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
   },
-  categoryNameWrap: {
+  compactNameWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1,
+  },
+  compactMetrics: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   categoryDot: {
     width: 10,
     height: 10,
     borderRadius: 999,
   },
-  categoryName: {
+  compactName: {
     color: colors.text,
-    fontSize: 14,
+    fontSize: 17,
+    lineHeight: 20,
+    fontWeight: '600',
+    flex: 1,
+  },
+  compactAmount: {
+    width: 70,
+    color: colors.text,
+    fontSize: 17,
+    lineHeight: 20,
+    textAlign: 'right',
     fontWeight: '600',
   },
-  categoryAmount: {
-    color: colors.textMuted,
-    fontSize: 12,
-  },
-  categoryBarTrack: {
-    marginTop: 6,
-    height: 8,
-    borderRadius: 6,
+  compactBarTrack: {
+    flex: 1,
+    height: 9,
+    borderRadius: 999,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     overflow: 'hidden',
   },
-  categoryBarFill: {
+  compactBarFill: {
     height: '100%',
-    backgroundColor: colors.accent,
+    borderRadius: 999,
+  },
+  compactBudget: {
+    width: 70,
+    color: colors.text,
+    fontSize: 17,
+    lineHeight: 20,
+    textAlign: 'right',
+    fontWeight: '600',
   },
   detailHeader: {
     flexDirection: 'row',
