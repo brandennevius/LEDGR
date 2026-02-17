@@ -20,29 +20,29 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route, navigation }) => ({
         tabBarShowLabel: false,
-        headerShown: route.name === 'Dashboard' || route.name === 'Settings',
-        headerTransparent: true,
+        headerShown: true,
+        headerTransparent: false,
+        headerStyle: styles.headerBar,
+        headerShadowVisible: false,
         headerTitleAlign: 'center',
-        headerTitle: () => (
-          <Text style={styles.headerTitle}>{route.name === 'Settings' ? 'Settings' : 'LEDGR'}</Text>
+        headerTitle: () => <Text style={styles.headerTitle}>LEDGR</Text>,
+        headerLeft: () => (
+          <Pressable
+            onPress={() =>
+              route.name === 'Settings'
+                ? navigation.navigate('Dashboard')
+                : navigation.navigate('Settings')
+            }
+            style={styles.headerIconButton}
+          >
+            <Ionicons
+              name={route.name === 'Settings' ? 'settings' : 'settings-outline'}
+              size={20}
+              color={colors.text}
+            />
+          </Pressable>
         ),
-        headerLeft: () =>
-          route.name === 'Settings' ? (
-            <Pressable
-              onPress={() => navigation.navigate('Dashboard')}
-              style={styles.headerIconButton}
-            >
-              <Ionicons name="arrow-back" size={20} color={colors.text} />
-            </Pressable>
-          ) : route.name === 'Dashboard' ? (
-            <Pressable
-              onPress={() => navigation.navigate('Settings')}
-              style={styles.headerIconButton}
-            >
-              <Ionicons name="settings-outline" size={20} color={colors.text} />
-            </Pressable>
-          ) : null,
-        headerRight: () => (route.name === 'Dashboard' ? <CoachChatFab variant="icon" /> : null),
+        headerRight: () => <CoachChatFab variant="icon" />,
         headerLeftContainerStyle: styles.headerSideContainer,
         headerRightContainerStyle: styles.headerSideContainer,
         tabBarStyle: {
@@ -95,6 +95,9 @@ export function AppNavigator() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  headerBar: {
+    backgroundColor: 'rgba(8, 14, 32, 0.96)',
   },
   headerTitle: {
     color: colors.text,
