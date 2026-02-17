@@ -43,7 +43,7 @@ export function AuthScreen() {
   };
 
   return (
-    <Screen title="Welcome back" subtitle="Sign in to your financial coach">
+    <Screen title="Welcome back" subtitle="Sign in to your financial coach" topInset>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.select({ ios: 'padding', android: undefined })}

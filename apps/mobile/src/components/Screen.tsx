@@ -10,15 +10,26 @@ type ScreenProps = {
   title?: string;
   subtitle?: string;
   edgeToEdge?: boolean;
+  topInset?: boolean;
   children?: ReactNode;
 };
 
-export function Screen({ title, subtitle, edgeToEdge = false, children }: ScreenProps) {
+export function Screen({
+  title,
+  subtitle,
+  edgeToEdge = false,
+  topInset = false,
+  children,
+}: ScreenProps) {
   return (
     <LinearGradient colors={gradients.app} style={styles.root}>
       <SafeAreaView
-        style={[styles.safe, edgeToEdge && styles.safeEdgeToEdge]}
-        edges={['top', 'left', 'right']}
+        style={[
+          styles.safe,
+          topInset && styles.safeWithTopInset,
+          edgeToEdge && styles.safeEdgeToEdge,
+        ]}
+        edges={topInset ? ['top', 'left', 'right'] : ['left', 'right']}
       >
         {(title || subtitle) && (
           <View style={[styles.header, edgeToEdge && styles.edgeHeader]}>
@@ -45,6 +56,9 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     paddingHorizontal: 20,
+    paddingTop: 0,
+  },
+  safeWithTopInset: {
     paddingTop: 12,
   },
   safeEdgeToEdge: {

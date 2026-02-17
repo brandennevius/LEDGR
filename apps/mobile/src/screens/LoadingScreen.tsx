@@ -5,7 +5,7 @@ import { colors } from '../theme';
 
 export function LoadingScreen() {
   return (
-    <Screen>
+    <Screen topInset>
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
