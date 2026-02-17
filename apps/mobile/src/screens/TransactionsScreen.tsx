@@ -168,16 +168,6 @@ export function TransactionsScreen() {
     return rows;
   }, [query, sortBy, transactions, typeFilter]);
 
-  const stats = useMemo(() => {
-    const income = transactions
-      .filter((tx) => tx.isIncome)
-      .reduce((acc, tx) => acc + tx.amount, 0);
-    const spend = transactions
-      .filter((tx) => !tx.isIncome)
-      .reduce((acc, tx) => acc + tx.amount, 0);
-    return { income, spend };
-  }, [transactions]);
-
   const reviewCount = useMemo(() => transactions.filter((tx) => tx.needsReview).length, [transactions]);
 
   const activeFilterCount = useMemo(() => {
@@ -287,17 +277,6 @@ export function TransactionsScreen() {
           />
         }
       >
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Spend ({days}d)</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(stats.spend)}</Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Income ({days}d)</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(stats.income)}</Text>
-          </View>
-        </View>
-
         <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={20} color={colors.textMuted} />
           <TextInput
@@ -577,28 +556,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 24,
     gap: 12,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  summaryCard: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.02)',
-  },
-  summaryLabel: {
-    color: colors.textMuted,
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  summaryValue: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-    marginTop: 6,
   },
   searchBar: {
     flexDirection: 'row',

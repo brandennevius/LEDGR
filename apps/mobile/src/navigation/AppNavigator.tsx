@@ -38,7 +38,7 @@ function MainTabs() {
             <Ionicons
               name={route.name === 'Settings' ? 'settings' : 'settings-outline'}
               size={20}
-              color={colors.text}
+              color={colors.chromeText}
             />
           </Pressable>
         ),
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.chrome,
   },
   headerTitle: {
-    color: colors.text,
+    color: colors.chromeText,
     fontSize: 26,
     fontWeight: '800',
     letterSpacing: 0.5,
@@ -112,8 +112,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.cardBorder,
-    backgroundColor: colors.elevated,
+    borderColor: colors.chromeButtonBorder,
+    backgroundColor: colors.chromeButtonBg,
   },
   headerSideContainer: {
     paddingHorizontal: 12,

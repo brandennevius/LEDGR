@@ -1005,9 +1005,7 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     borderRadius: 18,
-    backgroundColor: 'rgba(18, 24, 46, 0.7)',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    backgroundColor: colors.elevated,
   },
   loadingText: {
     color: colors.textMuted,
@@ -1018,7 +1016,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   monthTotalsRow: {
-    backgroundColor: 'rgba(17, 22, 43, 0.7)',
+    backgroundColor: 'transparent',
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -1038,7 +1036,7 @@ const styles = StyleSheet.create({
     borderRadius: 53,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: colors.elevated,
   },
   totalValue: {
     color: colors.text,
@@ -1167,7 +1165,7 @@ const styles = StyleSheet.create({
     minWidth: 62,
     height: 8,
     borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: colors.progressTrack,
     overflow: 'hidden',
   },
   compactBarFill: {

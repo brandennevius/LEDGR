@@ -168,7 +168,7 @@ export function CoachChatFab({ variant = 'fab' }: CoachChatFabProps) {
   const trigger =
     variant === 'icon' ? (
       <Pressable onPress={() => setOpen(true)} style={styles.iconButton}>
-        <Ionicons name="chatbubble-outline" size={22} color={colors.text} />
+        <Ionicons name="chatbubble-outline" size={22} color={colors.chromeText} />
       </Pressable>
     ) : (
       <Pressable
@@ -191,7 +191,7 @@ export function CoachChatFab({ variant = 'fab' }: CoachChatFabProps) {
           >
             <View style={[styles.chatHeader, { paddingTop: Math.max(insets.top, 10) }]}>
               <Pressable style={styles.chatHeaderIcon} onPress={() => setOpen(false)}>
-                <Ionicons name="chevron-down" size={22} color={colors.text} />
+                <Ionicons name="chevron-down" size={22} color={colors.chromeText} />
               </Pressable>
               <View style={styles.chatHeaderCenter}>
                 <Text style={styles.title}>Penny</Text>
@@ -281,8 +281,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.cardBorder,
-    backgroundColor: colors.elevated,
+    borderColor: colors.chromeButtonBorder,
+    backgroundColor: colors.chromeButtonBg,
   },
   chatScreen: {
     flex: 1,
@@ -305,21 +305,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.cardBorder,
-    backgroundColor: colors.elevated,
+    borderColor: colors.chromeButtonBorder,
+    backgroundColor: colors.chromeButtonBg,
   },
   chatHeaderCenter: {
     flex: 1,
     paddingHorizontal: 10,
   },
   title: {
-    color: colors.text,
+    color: colors.chromeText,
     fontSize: 17,
     fontWeight: '700',
   },
   subtitle: {
-    color: colors.textMuted,
+    color: colors.chromeText,
     fontSize: 12,
+    opacity: 0.85,
     marginTop: 4,
     marginBottom: 0,
   },
