@@ -1,5 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,7 +13,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import ModalSheet from './ModalSheet';
 import { apiRequest, apiStreamRequest } from '../lib/api';
 import { colors } from '../theme';
 
@@ -55,6 +57,7 @@ type CoachChatFabProps = {
 
 export function CoachChatFab({ variant = 'fab' }: CoachChatFabProps) {
   const insets = useSafeAreaInsets();
+  const messagesRef = useRef<ScrollView | null>(null);
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -180,59 +183,76 @@ export function CoachChatFab({ variant = 'fab' }: CoachChatFabProps) {
     <>
       {trigger}
 
-      <ModalSheet visible={open} onClose={() => setOpen(false)}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.title}>AI Coach</Text>
-            <Text style={styles.subtitle}>Ask anything about your finances.</Text>
-          </View>
-          <Pressable style={styles.clearButton} onPress={clearThread}>
-            <Text style={styles.clearLabel}>Clear</Text>
-          </Pressable>
-        </View>
-
-        <ScrollView style={styles.messages} contentContainerStyle={styles.messagesContent}>
-          {messages.map((message, index) => (
-            <View
-              key={`${message.role}-${index}`}
-              style={[
-                styles.bubble,
-                message.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.bubbleText,
-                  message.role === 'user' ? styles.bubbleTextUser : styles.bubbleTextAssistant,
-                ]}
-              >
-                {parseBoldSegments(message.content).map((segment, segmentIndex) => (
-                  <Text
-                    key={`${index}-${segmentIndex}`}
-                    style={segment.bold ? styles.bubbleTextBold : undefined}
-                  >
-                    {segment.text}
-                  </Text>
-                ))}
-              </Text>
+      <Modal visible={open} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setOpen(false)}>
+        <View style={styles.chatScreen}>
+          <KeyboardAvoidingView
+            style={styles.chatScreen}
+            behavior={Platform.select({ ios: 'padding', android: undefined })}
+          >
+            <View style={[styles.chatHeader, { paddingTop: Math.max(insets.top, 10) }]}>
+              <Pressable style={styles.chatHeaderIcon} onPress={() => setOpen(false)}>
+                <Ionicons name="chevron-down" size={22} color={colors.text} />
+              </Pressable>
+              <View style={styles.chatHeaderCenter}>
+                <Text style={styles.title}>AI Coach</Text>
+                <Text style={styles.subtitle}>Ask anything about your finances.</Text>
+              </View>
+              <Pressable style={styles.clearButton} onPress={clearThread}>
+                <Text style={styles.clearLabel}>Clear</Text>
+              </Pressable>
             </View>
-          ))}
-          {loading ? <Text style={styles.loadingText}>Thinking...</Text> : null}
-        </ScrollView>
 
-        <View style={styles.inputRow}>
-          <TextInput
-            value={input}
-            onChangeText={setInput}
-            placeholder="Where can I cut spending this month?"
-            placeholderTextColor={colors.textMuted}
-            style={styles.input}
-          />
-          <Pressable onPress={send} disabled={loading} style={styles.sendButton}>
-            <Text style={styles.sendLabel}>{loading ? '...' : 'Send'}</Text>
-          </Pressable>
+            <ScrollView
+              ref={messagesRef}
+              style={styles.messages}
+              contentContainerStyle={[styles.messagesContent, { paddingBottom: Math.max(insets.bottom, 10) }]}
+              keyboardShouldPersistTaps="handled"
+              onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: true })}
+            >
+              {messages.map((message, index) => (
+                <View
+                  key={`${message.role}-${index}`}
+                  style={[
+                    styles.bubble,
+                    message.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.bubbleText,
+                      message.role === 'user' ? styles.bubbleTextUser : styles.bubbleTextAssistant,
+                    ]}
+                  >
+                    {parseBoldSegments(message.content).map((segment, segmentIndex) => (
+                      <Text
+                        key={`${index}-${segmentIndex}`}
+                        style={segment.bold ? styles.bubbleTextBold : undefined}
+                      >
+                        {segment.text}
+                      </Text>
+                    ))}
+                  </Text>
+                </View>
+              ))}
+              {loading ? <Text style={styles.loadingText}>Thinking...</Text> : null}
+            </ScrollView>
+
+            <View style={[styles.inputRow, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+              <TextInput
+                value={input}
+                onChangeText={setInput}
+                placeholder="Where can I cut spending this month?"
+                placeholderTextColor={colors.textMuted}
+                style={styles.input}
+                multiline
+              />
+              <Pressable onPress={send} disabled={loading} style={styles.sendButton}>
+                <Text style={styles.sendLabel}>{loading ? '...' : 'Send'}</Text>
+              </Pressable>
+            </View>
+          </KeyboardAvoidingView>
         </View>
-      </ModalSheet>
+      </Modal>
     </>
   );
 }
@@ -264,6 +284,34 @@ const styles = StyleSheet.create({
     borderColor: colors.cardBorder,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
+  chatScreen: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.cardBorder,
+    backgroundColor: 'rgba(8, 14, 32, 0.96)',
+  },
+  chatHeaderIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  chatHeaderCenter: {
+    flex: 1,
+    paddingHorizontal: 10,
+  },
   title: {
     color: colors.text,
     fontSize: 17,
@@ -273,13 +321,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 4,
-    marginBottom: 10,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 0,
   },
   clearButton: {
     borderWidth: 1,
@@ -295,8 +337,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   messages: {
-    maxHeight: 360,
-    marginBottom: 10,
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 12,
   },
   messagesContent: {
     gap: 8,
@@ -339,6 +382,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.cardBorder,
+    backgroundColor: 'rgba(8, 14, 32, 0.96)',
   },
   input: {
     flex: 1,
