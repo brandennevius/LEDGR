@@ -65,7 +65,7 @@ export function CoachChatFab({ variant = 'fab' }: CoachChatFabProps) {
     {
       role: 'assistant',
       content:
-        "I'm your coach. Ask about spending patterns, categories, or where to cut this month.",
+        "I'm Penny. Ask about spending patterns, categories, or where to cut this month.",
     },
   ]);
 
@@ -160,7 +160,7 @@ export function CoachChatFab({ variant = 'fab' }: CoachChatFabProps) {
       {
         role: 'assistant',
         content:
-          "I'm your coach. Ask about spending patterns, categories, or where to cut this month.",
+          "I'm Penny. Ask about spending patterns, categories, or where to cut this month.",
       },
     ]);
   };
@@ -194,7 +194,7 @@ export function CoachChatFab({ variant = 'fab' }: CoachChatFabProps) {
                 <Ionicons name="chevron-down" size={22} color={colors.text} />
               </Pressable>
               <View style={styles.chatHeaderCenter}>
-                <Text style={styles.title}>AI Coach</Text>
+                <Text style={styles.title}>Penny</Text>
                 <Text style={styles.subtitle}>Ask anything about your finances.</Text>
               </View>
               <Pressable style={styles.clearButton} onPress={clearThread}>
