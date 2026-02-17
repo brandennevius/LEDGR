@@ -378,15 +378,18 @@ export function CategoriesScreen() {
   };
 
   const openTransactionDetail = async (id: string) => {
-    setTransactionDetailOpen(true);
-    setTransactionDetailLoading(true);
-    try {
-      const detail = await apiRequest<TransactionDetail>(`/api/transactions/${id}`);
-      setSelectedTransaction(detail);
-      setTransactionCategoryInput(detail.category ?? '');
-    } finally {
-      setTransactionDetailLoading(false);
-    }
+    setCategoryDetailOpen(false);
+    setTimeout(async () => {
+      setTransactionDetailOpen(true);
+      setTransactionDetailLoading(true);
+      try {
+        const detail = await apiRequest<TransactionDetail>(`/api/transactions/${id}`);
+        setSelectedTransaction(detail);
+        setTransactionCategoryInput(detail.category ?? '');
+      } finally {
+        setTransactionDetailLoading(false);
+      }
+    }, 180);
   };
 
   const saveTransactionCategory = async () => {

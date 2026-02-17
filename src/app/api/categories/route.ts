@@ -13,6 +13,11 @@ export async function GET() {
     select: { category: true },
     distinct: ["category"],
   });
+  const splitCategories = await prisma.transactionSplit.findMany({
+    where: { transaction: { userId: client.id } },
+    select: { category: true },
+    distinct: ["category"],
+  });
   const settings = await prisma.category.findMany({
     where: { userId: client.id },
     orderBy: { name: "asc" },
@@ -27,6 +32,7 @@ export async function GET() {
       ...categories
         .map((item) => item.category ?? "Uncategorized")
         .filter(Boolean),
+      ...splitCategories.map((item) => item.category).filter(Boolean),
       ...settings.map((item) => item.name),
     ])
   ).sort((a, b) => a.localeCompare(b));

@@ -207,12 +207,28 @@ export function TransactionsScreen() {
 
   const saveDetail = async () => {
     if (!selected) return;
+    const nextCategory = categoryInput.trim();
+    if (!nextCategory) return;
     setSavingDetail(true);
     try {
+      const existing = new Set(
+        categoryList.filter((name) => name !== 'All').map((name) => name.toLowerCase())
+      );
+      if (!existing.has(nextCategory.toLowerCase())) {
+        await apiRequest('/api/categories', {
+          method: 'POST',
+          body: {
+            name: nextCategory,
+            color: null,
+            essential: false,
+            monthlyBudget: null,
+          },
+        });
+      }
       await apiRequest(`/api/transactions/${selected.id}`, {
         method: 'PATCH',
         body: {
-          category: categoryInput,
+          category: nextCategory,
           transactionType: transactionTypeInput,
           applyToSimilar,
           applyToCategory,
@@ -222,6 +238,7 @@ export function TransactionsScreen() {
         },
       });
       await fetchRows();
+      await fetchCategories();
       setDetailOpen(false);
     } finally {
       setSavingDetail(false);
@@ -439,6 +456,19 @@ export function TransactionsScreen() {
               placeholderTextColor={colors.textMuted}
               style={styles.input}
             />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+              {categoryList
+                .filter((name) => name !== 'All')
+                .map((name) => (
+                  <View key={name}>
+                    <Chip
+                      label={name}
+                      active={categoryInput.trim().toLowerCase() === name.toLowerCase()}
+                      onPress={() => setCategoryInput(name)}
+                    />
+                  </View>
+                ))}
+            </ScrollView>
 
             <Text style={styles.detailSectionTitle}>Transaction type</Text>
             <View style={styles.filterRow}>

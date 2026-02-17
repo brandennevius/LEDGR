@@ -55,7 +55,12 @@ export async function PUT(
           amount: Number(split.amount ?? 0),
           note: split.note?.trim() ?? null,
         }))
-        .filter((split) => split.category && split.amount > 0)
+        .filter(
+          (split) =>
+            split.category &&
+            split.category.toLowerCase() !== "split" &&
+            split.amount > 0
+        )
     : [];
 
   const transaction = await prisma.transaction.findFirst({

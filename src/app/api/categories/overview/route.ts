@@ -6,6 +6,12 @@ import { resolveCategoryColor } from "@/lib/categoryColors";
 
 const formatMonthKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+const normalizeCategory = (value?: string | null) => {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return "Uncategorized";
+  if (trimmed.toLowerCase() === "split") return "Uncategorized";
+  return trimmed;
+};
 
 export async function GET() {
   const user = await getAuthedUser();
@@ -19,6 +25,7 @@ export async function GET() {
     prisma.transaction.findMany({
       where: { userId: user.id },
       orderBy: { date: "desc" },
+      include: { splits: true },
     }),
   ]);
 
@@ -36,14 +43,53 @@ export async function GET() {
   const currentSpend = new Map<string, number>();
   const prevSpend = new Map<string, number>();
 
+  type SpendEntry = { category: string; amount: number; date: Date };
+  const spendEntries: SpendEntry[] = [];
   transactions.forEach((tx) => {
     if (tx.amount <= 0) return;
-    const category = tx.category ?? "Uncategorized";
-    const key = formatMonthKey(tx.date);
+    if (tx.splits.length === 0) {
+      spendEntries.push({
+        category: normalizeCategory(tx.category),
+        amount: tx.amount,
+        date: tx.date,
+      });
+      return;
+    }
+
+    const splitRows = tx.splits
+      .map((split) => ({
+        category: normalizeCategory(split.category),
+        amount: Math.max(0, Math.abs(split.amount)),
+      }))
+      .filter((row) => row.amount > 0);
+    const splitTotal = splitRows.reduce((sum, row) => sum + row.amount, 0);
+    splitRows.forEach((row) => {
+      spendEntries.push({
+        category: row.category,
+        amount: row.amount,
+        date: tx.date,
+      });
+    });
+
+    const remainder = Math.max(0, Math.abs(tx.amount) - splitTotal);
+    if (remainder > 0.01) {
+      spendEntries.push({
+        category: normalizeCategory(tx.category),
+        amount: remainder,
+        date: tx.date,
+      });
+    }
+  });
+
+  spendEntries.forEach((entry) => {
+    const key = formatMonthKey(entry.date);
     if (key === currentMonthKey) {
-      currentSpend.set(category, (currentSpend.get(category) ?? 0) + tx.amount);
+      currentSpend.set(
+        entry.category,
+        (currentSpend.get(entry.category) ?? 0) + entry.amount
+      );
     } else if (key === prevMonthKey) {
-      prevSpend.set(category, (prevSpend.get(category) ?? 0) + tx.amount);
+      prevSpend.set(entry.category, (prevSpend.get(entry.category) ?? 0) + entry.amount);
     }
   });
 
@@ -133,13 +179,46 @@ export async function GET() {
     };
   });
 
-  const transactionsData = transactions.map((tx) => ({
-    id: tx.id,
-    name: tx.merchantName ?? tx.name,
-    amount: tx.amount,
-    category: tx.category ?? "Uncategorized",
-    date: tx.date.toISOString(),
-  }));
+  const transactionsData = transactions.flatMap((tx) => {
+    if (tx.splits.length === 0) {
+      return [
+        {
+          id: tx.id,
+          name: tx.merchantName ?? tx.name,
+          amount: tx.amount,
+          category: normalizeCategory(tx.category),
+          date: tx.date.toISOString(),
+        },
+      ];
+    }
+
+    const splitRows = tx.splits
+      .map((split) => ({
+        id: `${tx.id}:split:${split.id}`,
+        name: tx.merchantName ?? tx.name,
+        amount: Math.abs(split.amount),
+        category: normalizeCategory(split.category),
+        date: tx.date.toISOString(),
+      }))
+      .filter((row) => row.amount > 0);
+
+    const splitTotal = splitRows.reduce((sum, row) => sum + row.amount, 0);
+    const remainder = Math.max(0, Math.abs(tx.amount) - splitTotal);
+    const remainderRow =
+      remainder > 0.01
+        ? [
+            {
+              id: `${tx.id}:remainder`,
+              name: tx.merchantName ?? tx.name,
+              amount: remainder,
+              category: normalizeCategory(tx.category),
+              date: tx.date.toISOString(),
+            },
+          ]
+        : [];
+
+    return [...splitRows, ...remainderRow];
+  });
 
   return NextResponse.json({
     summary,
