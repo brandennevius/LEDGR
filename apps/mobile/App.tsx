@@ -1,5 +1,8 @@
 import * as WebBrowser from 'expo-web-browser';
 import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect } from 'react';
+import { Appearance } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -25,6 +28,18 @@ function RootNavigator() {
 }
 
 export default function App() {
+  useEffect(() => {
+    const loadTheme = async () => {
+      const stored = await AsyncStorage.getItem('theme');
+      if (stored === 'light' || stored === 'dark') {
+        Appearance.setColorScheme(stored);
+      } else {
+        Appearance.setColorScheme(null);
+      }
+    };
+    loadTheme();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

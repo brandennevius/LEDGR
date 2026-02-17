@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Appearance } from 'react-native';
 import Constants from 'expo-constants';
 
 import { Screen } from '../components/Screen';
@@ -110,6 +111,7 @@ export function SettingsScreen() {
   const handleThemeChange = async (value: 'system' | 'light' | 'dark') => {
     setTheme(value);
     await AsyncStorage.setItem('theme', value);
+    Appearance.setColorScheme(value === 'system' ? null : value);
     setStatus(`Theme set to ${value}.`);
   };
 

@@ -51,8 +51,8 @@ function MainTabs() {
           height: 64,
           display: route.name === 'Settings' ? 'none' : 'flex',
         },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
+        tabBarActiveTintColor: colors.primary as unknown as string,
+        tabBarInactiveTintColor: colors.textMuted as unknown as string,
         tabBarIcon: ({ color, size }) => {
           const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
             Dashboard: 'grid',
