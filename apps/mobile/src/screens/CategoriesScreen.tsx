@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Svg, { Circle, G } from 'react-native-svg';
 
 import ModalSheet from '../components/ModalSheet';
 import { Screen } from '../components/Screen';
@@ -355,7 +356,7 @@ export function CategoriesScreen() {
                 <Text style={styles.totalValue}>{formatCurrency(overview.summary.spend)}</Text>
                 <Text style={styles.totalLabel}>spent in {currentMonthLabel}</Text>
               </View>
-              <View style={styles.totalDivider} />
+              <SummaryDonut categories={overview.categories} total={overview.summary.spend} />
               <View style={[styles.totalBlock, styles.totalBlockRight]}>
                 <Text style={styles.totalValue}>{formatCurrency(overview.summary.budget)}</Text>
                 <Text style={styles.totalLabel}>total budget</Text>
@@ -612,6 +613,60 @@ export function CategoriesScreen() {
   );
 }
 
+function SummaryDonut({
+  categories,
+  total,
+}: {
+  categories: CategoryRow[];
+  total: number;
+}) {
+  const radius = 36;
+  const stroke = 11;
+  const circumference = 2 * Math.PI * radius;
+  const normalizedTotal = Math.max(total, 1);
+  const slices = categories
+    .filter((row) => row.spend > 0)
+    .sort((a, b) => b.spend - a.spend)
+    .slice(0, 8);
+
+  let offset = 0;
+  return (
+    <View style={styles.donutWrap}>
+      <Svg width={96} height={96}>
+        <G rotation="-90" origin="48, 48">
+          <Circle
+            cx={48}
+            cy={48}
+            r={radius}
+            stroke="rgba(255,255,255,0.14)"
+            strokeWidth={stroke}
+            fill="none"
+          />
+          {slices.map((slice) => {
+            const pct = slice.spend / normalizedTotal;
+            const arc = circumference * pct;
+            const dashOffset = -offset;
+            offset += arc;
+            return (
+              <Circle
+                key={slice.name}
+                cx={48}
+                cy={48}
+                r={radius}
+                stroke={resolveCategoryColor(slice)}
+                strokeWidth={stroke}
+                fill="none"
+                strokeDasharray={`${arc} ${circumference - arc}`}
+                strokeDashoffset={dashOffset}
+              />
+            );
+          })}
+        </G>
+      </Svg>
+    </View>
+  );
+}
+
 function ColorPalettePicker({
   selected,
   onSelect,
@@ -721,10 +776,13 @@ const styles = StyleSheet.create({
   totalBlockRight: {
     alignItems: 'flex-end',
   },
-  totalDivider: {
-    width: 1,
-    alignSelf: 'stretch',
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+  donutWrap: {
+    width: 106,
+    height: 106,
+    borderRadius: 53,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
   },
   totalValue: {
     color: colors.text,
