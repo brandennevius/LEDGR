@@ -46,7 +46,7 @@ function MainTabs() {
         headerLeftContainerStyle: styles.headerSideContainer,
         headerRightContainerStyle: styles.headerSideContainer,
         tabBarStyle: {
-          backgroundColor: 'rgba(12, 17, 36, 0.92)',
+          backgroundColor: colors.chrome,
           borderTopColor: colors.cardBorder,
           height: 64,
           display: route.name === 'Settings' ? 'none' : 'flex',
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerBar: {
-    backgroundColor: 'rgba(8, 14, 32, 0.96)',
+    backgroundColor: colors.chrome,
   },
   headerTitle: {
     color: colors.text,
@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: colors.elevated,
   },
   headerSideContainer: {
     paddingHorizontal: 12,

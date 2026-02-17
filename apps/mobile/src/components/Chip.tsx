@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   chipInactive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: colors.elevated,
     borderColor: colors.cardBorder,
   },
   label: {

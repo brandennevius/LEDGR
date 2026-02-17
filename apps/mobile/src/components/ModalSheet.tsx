@@ -27,7 +27,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(9, 12, 18, 0.65)',
+    backgroundColor: colors.backdrop,
   },
   sheet: {
     backgroundColor: colors.surface,

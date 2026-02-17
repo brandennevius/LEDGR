@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: colors.elevated,
   },
   chatScreen: {
     flex: 1,
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.cardBorder,
-    backgroundColor: 'rgba(8, 14, 32, 0.96)',
+    backgroundColor: colors.chrome,
   },
   chatHeaderIcon: {
     width: 34,
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: colors.elevated,
   },
   chatHeaderCenter: {
     flex: 1,
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: colors.elevated,
   },
   clearLabel: {
     color: colors.textMuted,
@@ -350,12 +350,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   bubbleUser: {
-    backgroundColor: 'rgba(114, 92, 255, 0.25)',
+    backgroundColor: colors.userBubble,
     alignSelf: 'flex-end',
     maxWidth: '86%',
   },
   bubbleAssistant: {
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: colors.assistantBubble,
     borderWidth: 1,
     borderColor: colors.cardBorder,
     alignSelf: 'flex-start',
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.cardBorder,
-    backgroundColor: 'rgba(8, 14, 32, 0.96)',
+    backgroundColor: colors.chrome,
   },
   input: {
     flex: 1,
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: colors.text,
-    backgroundColor: 'rgba(9, 13, 27, 0.7)',
+    backgroundColor: colors.inputBg,
   },
   sendButton: {
     borderRadius: 12,

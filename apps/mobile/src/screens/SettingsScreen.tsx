@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     color: colors.text,
     marginTop: 12,
-    backgroundColor: 'rgba(9, 13, 27, 0.7)',
+    backgroundColor: colors.inputBg,
   },
   actionRow: {
     gap: 10,
