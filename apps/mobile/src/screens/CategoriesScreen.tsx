@@ -323,7 +323,7 @@ export function CategoriesScreen() {
   };
 
   return (
-    <Screen title="Categories" subtitle="Monthly spend against budget.">
+    <Screen title="Categories" subtitle="Monthly spend against budget." edgeToEdge>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <View>
@@ -641,6 +641,7 @@ function ColorPalettePicker({
 
 const styles = StyleSheet.create({
   content: {
+    paddingHorizontal: 20,
     paddingBottom: 24,
     gap: 14,
   },
@@ -710,8 +711,6 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -725,7 +724,7 @@ const styles = StyleSheet.create({
   totalDivider: {
     width: 1,
     alignSelf: 'stretch',
-    backgroundColor: colors.cardBorder,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
   },
   totalValue: {
     color: colors.text,
@@ -808,16 +807,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    width: '100%',
   },
   compactNameWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flex: 1,
+    flex: 0.47,
   },
   compactMetrics: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 0.53,
     gap: 10,
   },
   categoryDot: {
@@ -830,10 +831,10 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 20,
     fontWeight: '600',
-    flex: 1,
+    flexShrink: 1,
   },
   compactAmount: {
-    width: 70,
+    width: 64,
     color: colors.text,
     fontSize: 17,
     lineHeight: 20,
@@ -842,6 +843,7 @@ const styles = StyleSheet.create({
   },
   compactBarTrack: {
     flex: 1,
+    minWidth: 78,
     height: 9,
     borderRadius: 999,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
@@ -852,7 +854,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   compactBudget: {
-    width: 70,
+    width: 64,
     color: colors.text,
     fontSize: 17,
     lineHeight: 20,
