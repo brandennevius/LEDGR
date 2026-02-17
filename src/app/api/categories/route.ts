@@ -62,6 +62,7 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json()) as {
+    currentName?: string;
     name?: string;
     color?: string | null;
     essential?: boolean;
@@ -69,7 +70,8 @@ export async function POST(request: Request) {
   };
 
   const name = String(body?.name ?? "").trim();
-  if (!name) {
+  const currentName = String(body?.currentName ?? name).trim();
+  if (!name || !currentName) {
     return NextResponse.json({ error: "Name is required." }, { status: 400 });
   }
 
@@ -92,16 +94,62 @@ export async function POST(request: Request) {
     updateData.color = normalizedColor;
   }
 
-  const category = await prisma.category.upsert({
-    where: { userId_name: { userId: client.id, name } },
-    update: updateData,
-    create: {
-      userId: client.id,
-      name,
-      color: normalizedColor,
-      essential: body?.essential ?? false,
-      monthlyBudget,
-    },
+  const category = await prisma.$transaction(async (tx) => {
+    const renamed = currentName !== name;
+
+    if (renamed) {
+      await Promise.all([
+        tx.transaction.updateMany({
+          where: { userId: client.id, category: currentName },
+          data: { category: name },
+        }),
+        tx.transactionSplit.updateMany({
+          where: { transaction: { userId: client.id }, category: currentName },
+          data: { category: name },
+        }),
+        tx.goal.updateMany({
+          where: { userId: client.id, category: currentName },
+          data: { category: name },
+        }),
+        tx.categoryRule.updateMany({
+          where: { userId: client.id, category: currentName },
+          data: { category: name },
+        }),
+      ]);
+
+      const groupsWithCategory = await tx.categoryGroup.findMany({
+        where: { userId: client.id, categories: { has: currentName } },
+      });
+      for (const group of groupsWithCategory) {
+        const nextCategories = Array.from(
+          new Set(group.categories.map((item) => (item === currentName ? name : item)))
+        );
+        await tx.categoryGroup.update({
+          where: { id: group.id },
+          data: { categories: nextCategories },
+        });
+      }
+    }
+
+    const upserted = await tx.category.upsert({
+      where: { userId_name: { userId: client.id, name } },
+      update: updateData,
+      create: {
+        userId: client.id,
+        name,
+        color: normalizedColor,
+        essential: body?.essential ?? false,
+        monthlyBudget,
+      },
+    });
+
+    if (renamed) {
+      await tx.category.deleteMany({
+        where: { userId: client.id, name: currentName },
+      });
+    }
+
+    return upserted;
   });
 
   return NextResponse.json({ category });

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 
+import Chip from '../components/Chip';
 import ModalSheet from '../components/ModalSheet';
 import { Screen } from '../components/Screen';
 import { apiRequest } from '../lib/api';
@@ -57,6 +58,25 @@ type OverviewResponse = {
   categories: CategoryRow[];
   groups: GroupRow[];
   transactions: TransactionRow[];
+};
+
+type TransactionDetail = {
+  id: string;
+  name: string;
+  amount: number;
+  category: string;
+  transactionType?: 'INCOME' | 'INTERNAL_TRANSFER' | 'REGULAR';
+  date: string;
+  account?: {
+    name?: string;
+    institutionName?: string;
+    mask?: string;
+    type?: string;
+  };
+};
+
+type CategoriesResponse = {
+  categories: string[];
 };
 
 const formatCurrency = (value: number) =>
@@ -130,7 +150,6 @@ export function CategoriesScreen() {
   const [addOpen, setAddOpen] = useState(false);
   const [budgetDraft, setBudgetDraft] = useState('');
   const [essentialDraft, setEssentialDraft] = useState(false);
-  const [colorDraft, setColorDraft] = useState(CATEGORY_COLORS[0]);
   const [newName, setNewName] = useState('');
   const [newBudget, setNewBudget] = useState('');
   const [newEssential, setNewEssential] = useState(false);
@@ -140,6 +159,16 @@ export function CategoriesScreen() {
   const [groupName, setGroupName] = useState('');
   const [groupCategories, setGroupCategories] = useState('');
   const [groupBudget, setGroupBudget] = useState('');
+  const [groupDraft, setGroupDraft] = useState<string>('');
+  const [nameEditOpen, setNameEditOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [nameColorDraft, setNameColorDraft] = useState(CATEGORY_COLORS[0]);
+  const [transactionDetailOpen, setTransactionDetailOpen] = useState(false);
+  const [transactionDetailLoading, setTransactionDetailLoading] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<TransactionDetail | null>(null);
+  const [transactionCategoryInput, setTransactionCategoryInput] = useState('');
+  const [savingTransaction, setSavingTransaction] = useState(false);
+  const [categoryChoices, setCategoryChoices] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const currentMonthLabel = useMemo(
     () => new Date().toLocaleDateString('en-US', { month: 'short' }),
@@ -155,7 +184,6 @@ export function CategoriesScreen() {
         setSelected(first.name);
         setBudgetDraft(first.budget ? String(first.budget) : '');
         setEssentialDraft(Boolean(first.essential));
-        setColorDraft(resolveCategoryColor(first));
       }
       setError(null);
     } catch (err) {
@@ -169,8 +197,18 @@ export function CategoriesScreen() {
     }
   };
 
+  const loadCategoryChoices = async () => {
+    try {
+      const data = await apiRequest<CategoriesResponse>('/api/categories');
+      setCategoryChoices(data.categories ?? []);
+    } catch {
+      setCategoryChoices([]);
+    }
+  };
+
   useEffect(() => {
     load();
+    loadCategoryChoices();
   }, []);
 
   const selectedRow = useMemo(() => {
@@ -180,6 +218,13 @@ export function CategoriesScreen() {
     () => (selectedRow ? resolveCategoryColor(selectedRow) : colors.accent),
     [selectedRow]
   );
+  const selectedGroupId = useMemo(() => {
+    if (!selectedRow || !overview?.groups) return '';
+    const group = overview.groups.find((item) =>
+      (item.categories ?? []).some((category) => category.name === selectedRow.name)
+    );
+    return group?.id ?? '';
+  }, [overview, selectedRow]);
 
   const maxSpend = useMemo(() => {
     if (!overview?.categories?.length) return 1;
@@ -258,7 +303,7 @@ export function CategoriesScreen() {
     if (!selectedRow) return;
     setBudgetDraft(selectedRow.budget ? String(selectedRow.budget) : '');
     setEssentialDraft(selectedRow.essential);
-    setColorDraft(resolveCategoryColor(selectedRow));
+    setGroupDraft(selectedGroupId);
     // Close detail sheet first; iOS won't reliably stack a second RN Modal above it.
     setCategoryDetailOpen(false);
     setTimeout(() => setEditOpen(true), 180);
@@ -272,15 +317,96 @@ export function CategoriesScreen() {
         method: 'POST',
         body: {
           name: selectedRow.name,
-          color: colorDraft,
           essential: essentialDraft,
           monthlyBudget: budgetDraft ? Number(budgetDraft) : null,
+        },
+      });
+      await apiRequest('/api/category-groups', {
+        method: 'PATCH',
+        body: {
+          categoryName: selectedRow.name,
+          groupId: groupDraft || null,
         },
       });
       await load();
     } finally {
       setSaving(false);
       setEditOpen(false);
+    }
+  };
+
+  const openNameEditor = () => {
+    if (!selectedRow) return;
+    setNameDraft(selectedRow.name);
+    setNameColorDraft(resolveCategoryColor(selectedRow));
+    setNameEditOpen(true);
+  };
+
+  const saveNameAndColor = async () => {
+    if (!selectedRow || !nameDraft.trim()) return;
+    setSaving(true);
+    const nextName = nameDraft.trim();
+    try {
+      await apiRequest('/api/categories', {
+        method: 'POST',
+        body: {
+          currentName: selectedRow.name,
+          name: nextName,
+          color: nameColorDraft,
+          essential: selectedRow.essential,
+          monthlyBudget: selectedRow.budget,
+        },
+      });
+      await load();
+      await loadCategoryChoices();
+      setSelected(nextName);
+      setNameEditOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openTransactionDetail = async (id: string) => {
+    setTransactionDetailOpen(true);
+    setTransactionDetailLoading(true);
+    try {
+      const detail = await apiRequest<TransactionDetail>(`/api/transactions/${id}`);
+      setSelectedTransaction(detail);
+      setTransactionCategoryInput(detail.category ?? '');
+    } finally {
+      setTransactionDetailLoading(false);
+    }
+  };
+
+  const saveTransactionCategory = async () => {
+    if (!selectedTransaction) return;
+    const nextCategory = transactionCategoryInput.trim();
+    if (!nextCategory) return;
+    setSavingTransaction(true);
+    try {
+      const existing = new Set((categoryChoices ?? []).map((name) => name.toLowerCase()));
+      if (!existing.has(nextCategory.toLowerCase())) {
+        await apiRequest('/api/categories', {
+          method: 'POST',
+          body: {
+            name: nextCategory,
+            color: fallbackCategoryColor(nextCategory),
+            essential: false,
+            monthlyBudget: null,
+          },
+        });
+      }
+      await apiRequest(`/api/transactions/${selectedTransaction.id}`, {
+        method: 'PATCH',
+        body: {
+          category: nextCategory,
+        },
+      });
+      await loadCategoryChoices();
+      await load();
+      setTransactionDetailOpen(false);
+    } finally {
+      setSavingTransaction(false);
     }
   };
 
@@ -482,13 +608,16 @@ export function CategoriesScreen() {
               <View>
                 <View style={styles.detailTitleWrap}>
                   <View style={[styles.categoryDot, { backgroundColor: selectedCategoryColor }]} />
-                  <Text style={[styles.sectionTitle, { color: selectedCategoryColor }]}>
-                    {selectedRow.name}
-                  </Text>
+                  <Pressable onPress={openNameEditor}>
+                    <Text style={[styles.sectionTitle, { color: selectedCategoryColor }]}>
+                      {selectedRow.name}
+                    </Text>
+                  </Pressable>
                 </View>
                 <Text style={styles.sectionSubtitle}>
                   {selectedRow.essential ? 'Essential' : 'Flexible'} · {selectedRow.status}
                 </Text>
+                <Text style={styles.tapHint}>Tap category name to edit name and color</Text>
               </View>
               <Pressable style={styles.secondaryButton} onPress={openEdit}>
                 <Text style={styles.secondaryLabel}>Edit</Text>
@@ -544,7 +673,7 @@ export function CategoriesScreen() {
                   <View key={group.key} style={styles.monthGroup}>
                     <Text style={styles.monthTitle}>{group.label}</Text>
                     {group.items.map((tx) => (
-                      <View key={tx.id} style={styles.transactionRow}>
+                      <Pressable key={tx.id} onPress={() => openTransactionDetail(tx.id)} style={styles.transactionRow}>
                         <View style={styles.transactionLeft}>
                           <Text style={styles.transactionMeta}>{formatDayLabel(tx.date)}</Text>
                           <Text style={styles.transactionName}>{tx.name}</Text>
@@ -552,7 +681,7 @@ export function CategoriesScreen() {
                         <Text style={styles.transactionAmount}>
                           -{formatCurrencyDetailed(Math.abs(tx.amount))}
                         </Text>
-                      </View>
+                      </Pressable>
                     ))}
                   </View>
                 ))
@@ -582,10 +711,85 @@ export function CategoriesScreen() {
             {essentialDraft ? 'Essential category' : 'Mark as essential'}
           </Text>
         </Pressable>
-        <ColorPalettePicker selected={colorDraft} onSelect={setColorDraft} />
+        <Text style={styles.modalSubLabel}>Category group</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.groupChipsRow}>
+          <View style={styles.groupChipWrap}>
+            <Chip label="No group" active={!groupDraft} onPress={() => setGroupDraft('')} />
+          </View>
+          {(overview?.groups ?? []).map((group) => (
+            <View key={group.id} style={styles.groupChipWrap}>
+              <Chip
+                label={group.name}
+                active={groupDraft === group.id}
+                onPress={() => setGroupDraft(group.id)}
+              />
+            </View>
+          ))}
+        </ScrollView>
         <Pressable style={styles.primaryButton} onPress={saveCategory} disabled={saving}>
           <Text style={styles.primaryLabel}>{saving ? 'Saving...' : 'Save'}</Text>
         </Pressable>
+      </ModalSheet>
+
+      <ModalSheet visible={nameEditOpen} onClose={() => setNameEditOpen(false)}>
+        <Text style={styles.modalTitle}>Edit category identity</Text>
+        <TextInput
+          value={nameDraft}
+          onChangeText={setNameDraft}
+          placeholder="Category name"
+          placeholderTextColor={colors.textMuted}
+          style={styles.input}
+        />
+        <ColorPalettePicker selected={nameColorDraft} onSelect={setNameColorDraft} />
+        <Pressable style={styles.primaryButton} onPress={saveNameAndColor} disabled={saving}>
+          <Text style={styles.primaryLabel}>{saving ? 'Saving...' : 'Save name and color'}</Text>
+        </Pressable>
+      </ModalSheet>
+
+      <ModalSheet visible={transactionDetailOpen} onClose={() => setTransactionDetailOpen(false)}>
+        {transactionDetailLoading || !selectedTransaction ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={styles.loadingText}>Loading details...</Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.transactionDetailContent} showsVerticalScrollIndicator={false}>
+            <Text style={styles.modalTitle}>{selectedTransaction.name}</Text>
+            <Text style={styles.sectionSubtitle}>
+              {selectedTransaction.account?.institutionName ?? 'Account'} · {formatDayLabel(selectedTransaction.date)}
+            </Text>
+            <Text style={styles.transactionDetailAmount}>
+              {selectedTransaction.amount < 0 ? '+' : '-'} {formatCurrencyDetailed(Math.abs(selectedTransaction.amount))}
+            </Text>
+
+            <Text style={styles.modalSubLabel}>Category</Text>
+            <TextInput
+              value={transactionCategoryInput}
+              onChangeText={setTransactionCategoryInput}
+              placeholder="Set or create category"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+            />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.groupChipsRow}>
+              {categoryChoices.map((category) => (
+                <View key={category} style={styles.groupChipWrap}>
+                  <Chip
+                    label={category}
+                    active={transactionCategoryInput.trim().toLowerCase() === category.toLowerCase()}
+                    onPress={() => setTransactionCategoryInput(category)}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+            <Pressable
+              style={styles.primaryButton}
+              onPress={saveTransactionCategory}
+              disabled={savingTransaction}
+            >
+              <Text style={styles.primaryLabel}>{savingTransaction ? 'Saving...' : 'Save transaction'}</Text>
+            </Pressable>
+          </ScrollView>
+        )}
       </ModalSheet>
 
       <ModalSheet visible={addOpen} onClose={() => setAddOpen(false)}>
@@ -887,6 +1091,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
+  tapHint: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 4,
+  },
   emptyText: {
     color: colors.textMuted,
     fontSize: 12,
@@ -1094,6 +1303,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 8,
   },
+  modalSubLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
   input: {
     borderWidth: 1,
     borderColor: colors.cardBorder,
@@ -1118,6 +1334,23 @@ const styles = StyleSheet.create({
   toggleLabel: {
     color: colors.text,
     fontSize: 12,
+  },
+  groupChipsRow: {
+    gap: 8,
+    paddingBottom: 10,
+    paddingRight: 8,
+  },
+  groupChipWrap: {
+    marginBottom: 8,
+  },
+  transactionDetailContent: {
+    gap: 10,
+    paddingBottom: 8,
+  },
+  transactionDetailAmount: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
   },
   colorPickerWrap: {
     marginBottom: 12,
