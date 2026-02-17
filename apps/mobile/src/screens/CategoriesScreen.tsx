@@ -259,7 +259,9 @@ export function CategoriesScreen() {
     setBudgetDraft(selectedRow.budget ? String(selectedRow.budget) : '');
     setEssentialDraft(selectedRow.essential);
     setColorDraft(resolveCategoryColor(selectedRow));
-    setEditOpen(true);
+    // Close detail sheet first; iOS won't reliably stack a second RN Modal above it.
+    setCategoryDetailOpen(false);
+    setTimeout(() => setEditOpen(true), 180);
   };
 
   const saveCategory = async () => {
