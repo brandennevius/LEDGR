@@ -163,6 +163,7 @@ export function CategoriesScreen() {
   const [nameEditOpen, setNameEditOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [nameColorDraft, setNameColorDraft] = useState(CATEGORY_COLORS[0]);
+  const [nameEditError, setNameEditError] = useState<string | null>(null);
   const [transactionDetailOpen, setTransactionDetailOpen] = useState(false);
   const [transactionDetailLoading, setTransactionDetailLoading] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionDetail | null>(null);
@@ -339,7 +340,9 @@ export function CategoriesScreen() {
     if (!selectedRow) return;
     setNameDraft(selectedRow.name);
     setNameColorDraft(resolveCategoryColor(selectedRow));
-    setNameEditOpen(true);
+    setNameEditError(null);
+    setCategoryDetailOpen(false);
+    setTimeout(() => setNameEditOpen(true), 180);
   };
 
   const saveNameAndColor = async () => {
@@ -361,6 +364,14 @@ export function CategoriesScreen() {
       await loadCategoryChoices();
       setSelected(nextName);
       setNameEditOpen(false);
+      setCategoryDetailOpen(true);
+      setNameEditError(null);
+    } catch (err) {
+      const message =
+        typeof err === 'object' && err && 'error' in err
+          ? String((err as { error?: string }).error)
+          : 'Unable to update category name/color.';
+      setNameEditError(message);
     } finally {
       setSaving(false);
     }
@@ -608,7 +619,7 @@ export function CategoriesScreen() {
               <View>
                 <View style={styles.detailTitleWrap}>
                   <View style={[styles.categoryDot, { backgroundColor: selectedCategoryColor }]} />
-                  <Pressable onPress={openNameEditor}>
+                  <Pressable onPress={openNameEditor} hitSlop={10} style={styles.nameEditButton}>
                     <Text style={[styles.sectionTitle, { color: selectedCategoryColor }]}>
                       {selectedRow.name}
                     </Text>
@@ -617,7 +628,9 @@ export function CategoriesScreen() {
                 <Text style={styles.sectionSubtitle}>
                   {selectedRow.essential ? 'Essential' : 'Flexible'} · {selectedRow.status}
                 </Text>
-                <Text style={styles.tapHint}>Tap category name to edit name and color</Text>
+                <Pressable onPress={openNameEditor} hitSlop={8}>
+                  <Text style={styles.tapHint}>Edit name and color</Text>
+                </Pressable>
               </View>
               <Pressable style={styles.secondaryButton} onPress={openEdit}>
                 <Text style={styles.secondaryLabel}>Edit</Text>
@@ -741,6 +754,7 @@ export function CategoriesScreen() {
           style={styles.input}
         />
         <ColorPalettePicker selected={nameColorDraft} onSelect={setNameColorDraft} />
+        {nameEditError ? <Text style={styles.errorText}>{nameEditError}</Text> : null}
         <Pressable style={styles.primaryButton} onPress={saveNameAndColor} disabled={saving}>
           <Text style={styles.primaryLabel}>{saving ? 'Saving...' : 'Save name and color'}</Text>
         </Pressable>
@@ -1177,6 +1191,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  nameEditButton: {
+    maxWidth: '90%',
   },
   categoryDetailContent: {
     gap: 12,
