@@ -437,7 +437,12 @@ export function CategoriesScreen() {
                     </Text>
                   </View>
                   <View style={styles.compactMetrics}>
-                    <Text style={styles.compactAmount} numberOfLines={1}>
+                    <Text
+                      style={styles.compactAmount}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                    >
                       {formatCurrencyCompact(row.spend)}
                     </Text>
                     <View style={styles.compactBarTrack}>
@@ -451,7 +456,12 @@ export function CategoriesScreen() {
                         ]}
                       />
                     </View>
-                    <Text style={styles.compactBudget} numberOfLines={1}>
+                    <Text
+                      style={styles.compactBudget}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                    >
                       {row.budget ? formatCurrencyCompact(row.budget) : '--'}
                     </Text>
                   </View>
@@ -848,7 +858,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
   },
   listHeaderAmount: {
-    width: 76,
+    width: 64,
     color: colors.textMuted,
     fontSize: 11,
     fontWeight: '700',
@@ -857,7 +867,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   listHeaderBudget: {
-    width: 76,
+    width: 64,
     color: colors.textMuted,
     fontSize: 11,
     fontWeight: '700',
@@ -890,20 +900,22 @@ const styles = StyleSheet.create({
   compactLine: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
     width: '100%',
   },
   compactNameWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flex: 0.42,
+    gap: 6,
+    flex: 0.39,
+    minWidth: 0,
   },
   compactMetrics: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 0.58,
-    gap: 8,
+    flex: 0.61,
+    gap: 6,
+    minWidth: 0,
   },
   categoryDot: {
     width: 10,
@@ -912,23 +924,23 @@ const styles = StyleSheet.create({
   },
   compactName: {
     color: colors.text,
-    fontSize: 17,
-    lineHeight: 20,
-    fontWeight: '600',
+    fontSize: 14,
+    lineHeight: 17,
+    fontWeight: '500',
     flexShrink: 1,
   },
   compactAmount: {
-    width: 58,
+    width: 56,
     color: colors.text,
-    fontSize: 15,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 17,
     textAlign: 'right',
     fontWeight: '600',
   },
   compactBarTrack: {
     flex: 1,
-    minWidth: 68,
-    height: 9,
+    minWidth: 62,
+    height: 8,
     borderRadius: 999,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     overflow: 'hidden',
@@ -938,10 +950,10 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   compactBudget: {
-    width: 58,
+    width: 56,
     color: colors.text,
-    fontSize: 15,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 17,
     textAlign: 'right',
     fontWeight: '600',
   },
