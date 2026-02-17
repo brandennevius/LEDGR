@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Pressable,
@@ -176,7 +177,7 @@ export function CategoriesScreen() {
     []
   );
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const data = await apiRequest<OverviewResponse>('/api/categories/overview');
       setOverview(data);
@@ -196,21 +197,28 @@ export function CategoriesScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selected]);
 
-  const loadCategoryChoices = async () => {
+  const loadCategoryChoices = useCallback(async () => {
     try {
       const data = await apiRequest<CategoriesResponse>('/api/categories');
       setCategoryChoices(data.categories ?? []);
     } catch {
       setCategoryChoices([]);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
     loadCategoryChoices();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      loadCategoryChoices();
+    }, [load, loadCategoryChoices])
+  );
 
   const selectedRow = useMemo(() => {
     return overview?.categories.find((row) => row.name === selected) ?? null;
