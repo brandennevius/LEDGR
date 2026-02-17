@@ -204,15 +204,15 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingTop: 76,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     gap: 16,
   },
   card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    paddingVertical: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.cardBorder,
   },
   label: {
     color: colors.textMuted,

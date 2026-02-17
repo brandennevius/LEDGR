@@ -204,7 +204,7 @@ export function AccountsScreen() {
   };
 
   return (
-    <Screen title="Accounts" subtitle="Manage connected banks and sync status.">
+    <Screen title="Accounts" subtitle="Manage connected banks and sync status." edgeToEdge>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <View>
@@ -306,6 +306,7 @@ export function AccountsScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    paddingHorizontal: 20,
     paddingBottom: 24,
     gap: 14,
   },
@@ -360,8 +361,6 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 18,
     backgroundColor: 'rgba(18, 24, 46, 0.7)',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
   },
   loadingText: {
     color: colors.textMuted,
@@ -372,11 +371,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   sectionCard: {
-    backgroundColor: 'rgba(17, 22, 43, 0.7)',
-    borderRadius: 22,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    paddingVertical: 2,
     gap: 12,
   },
   sectionTitle: {

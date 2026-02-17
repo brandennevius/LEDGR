@@ -272,7 +272,7 @@ export function TransactionsScreen() {
   };
 
   return (
-    <Screen title="Transactions" subtitle="Review, filter, and recategorize.">
+    <Screen title="Transactions" subtitle="Review, filter, and recategorize." edgeToEdge>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -574,6 +574,7 @@ export function TransactionsScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    paddingHorizontal: 20,
     paddingBottom: 24,
     gap: 12,
   },
@@ -585,9 +586,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 14,
     borderRadius: 18,
-    backgroundColor: 'rgba(18, 24, 46, 0.7)',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(255,255,255,0.02)',
   },
   summaryLabel: {
     color: colors.textMuted,
@@ -604,12 +603,10 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
     borderRadius: 18,
     paddingHorizontal: 12,
     gap: 10,
-    backgroundColor: 'rgba(17, 22, 43, 0.7)',
+    backgroundColor: 'rgba(17, 22, 43, 0.45)',
   },
   searchInput: {
     flex: 1,
@@ -694,8 +691,6 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 18,
     backgroundColor: 'rgba(18, 24, 46, 0.7)',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
   },
   loadingText: {
     color: colors.textMuted,
@@ -708,9 +703,7 @@ const styles = StyleSheet.create({
   emptyCard: {
     padding: 18,
     borderRadius: 18,
-    backgroundColor: 'rgba(18, 24, 46, 0.7)',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(18, 24, 46, 0.35)',
     alignItems: 'center',
   },
   emptyTitle: {
@@ -725,11 +718,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   row: {
-    padding: 16,
-    borderRadius: 18,
-    backgroundColor: 'rgba(15, 20, 40, 0.6)',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.cardBorder,
+    backgroundColor: 'transparent',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

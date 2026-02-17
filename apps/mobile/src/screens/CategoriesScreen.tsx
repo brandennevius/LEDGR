@@ -72,6 +72,14 @@ const formatCurrencyDetailed = (value: number) =>
     currency: 'USD',
   });
 
+const formatCurrencyCompact = (value: number) =>
+  value.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  });
+
 const formatDayLabel = (value: string) =>
   new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
@@ -429,13 +437,8 @@ export function CategoriesScreen() {
                     </Text>
                   </View>
                   <View style={styles.compactMetrics}>
-                    <Text
-                      style={styles.compactAmount}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.72}
-                    >
-                      {formatCurrency(row.spend)}
+                    <Text style={styles.compactAmount} numberOfLines={1}>
+                      {formatCurrencyCompact(row.spend)}
                     </Text>
                     <View style={styles.compactBarTrack}>
                       <View
@@ -448,13 +451,8 @@ export function CategoriesScreen() {
                         ]}
                       />
                     </View>
-                    <Text
-                      style={styles.compactBudget}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.72}
-                    >
-                      {row.budget ? formatCurrency(row.budget) : '--'}
+                    <Text style={styles.compactBudget} numberOfLines={1}>
+                      {row.budget ? formatCurrencyCompact(row.budget) : '--'}
                     </Text>
                   </View>
                 </View>

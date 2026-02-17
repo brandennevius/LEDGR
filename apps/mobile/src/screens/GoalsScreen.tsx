@@ -266,7 +266,7 @@ export function GoalsScreen() {
   };
 
   return (
-    <Screen title="Goals" subtitle="Set goals and track progress.">
+    <Screen title="Goals" subtitle="Set goals and track progress." edgeToEdge>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <Pressable
@@ -521,6 +521,7 @@ export function GoalsScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    paddingHorizontal: 20,
     paddingBottom: 24,
     gap: 14,
   },
@@ -560,8 +561,6 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 18,
     backgroundColor: 'rgba(18, 24, 46, 0.7)',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
   },
   loadingText: {
     color: colors.textMuted,
@@ -572,11 +571,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   sectionCard: {
-    backgroundColor: 'rgba(17, 22, 43, 0.7)',
-    borderRadius: 22,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    paddingVertical: 2,
     gap: 12,
   },
   sectionTitle: {
@@ -595,8 +592,8 @@ const styles = StyleSheet.create({
   },
   goalCard: {
     padding: 14,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
     gap: 8,
   },
   goalHeader: {

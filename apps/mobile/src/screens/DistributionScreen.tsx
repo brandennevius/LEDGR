@@ -227,7 +227,7 @@ export function DistributionScreen() {
   );
 
   return (
-    <Screen title="Distribution" subtitle="Where each paycheck dollar is allocated.">
+    <Screen title="Distribution" subtitle="Where each paycheck dollar is allocated." edgeToEdge>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingCard}>
@@ -391,6 +391,7 @@ export function DistributionScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    paddingHorizontal: 20,
     paddingBottom: 24,
     gap: 16,
   },
@@ -402,8 +403,6 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 18,
     backgroundColor: 'rgba(18, 24, 46, 0.7)',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
   },
   loadingText: {
     color: colors.textMuted,
@@ -421,9 +420,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 14,
     borderRadius: 18,
-    backgroundColor: 'rgba(18, 24, 46, 0.7)',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(255,255,255,0.02)',
   },
   summaryLabel: {
     color: colors.textMuted,
@@ -438,11 +435,9 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   sectionCard: {
-    backgroundColor: 'rgba(17, 22, 43, 0.7)',
-    borderRadius: 22,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    padding: 0,
   },
   sectionTitle: {
     color: colors.text,
@@ -478,9 +473,7 @@ const styles = StyleSheet.create({
   bucketCard: {
     padding: 10,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
   },
   bucketCardActive: {
     backgroundColor: 'rgba(56, 189, 248, 0.12)',
@@ -625,7 +618,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 16,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
   },
   emptyText: {
     color: colors.textMuted,
