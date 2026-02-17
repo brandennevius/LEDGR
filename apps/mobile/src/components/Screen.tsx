@@ -1,5 +1,4 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -40,9 +39,9 @@ export function Screen({
         {edgeToEdge ? (
           <View style={styles.edgeContent}>{children}</View>
         ) : (
-          <BlurView intensity={18} tint="dark" style={styles.content}>
+          <View style={styles.contentFlat}>
             <View style={styles.inner}>{children}</View>
-          </BlurView>
+          </View>
         )}
       </SafeAreaView>
     </LinearGradient>
@@ -81,17 +80,13 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 14,
   },
-  content: {
+  contentFlat: {
     flex: 1,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    overflow: 'hidden',
   },
   inner: {
     flex: 1,
     padding: 20,
-    backgroundColor: colors.card,
+    backgroundColor: 'transparent',
   },
   edgeContent: {
     flex: 1,

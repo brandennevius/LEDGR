@@ -353,12 +353,26 @@ export function CategoriesScreen() {
           <>
             <View style={styles.monthTotalsRow}>
               <View style={styles.totalBlock}>
-                <Text style={styles.totalValue}>{formatCurrency(overview.summary.spend)}</Text>
+                <Text
+                  style={styles.totalValue}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.62}
+                >
+                  {formatCurrency(overview.summary.spend)}
+                </Text>
                 <Text style={styles.totalLabel}>spent in {currentMonthLabel}</Text>
               </View>
               <SummaryDonut categories={overview.categories} total={overview.summary.spend} />
               <View style={[styles.totalBlock, styles.totalBlockRight]}>
-                <Text style={styles.totalValue}>{formatCurrency(overview.summary.budget)}</Text>
+                <Text
+                  style={styles.totalValue}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.62}
+                >
+                  {formatCurrency(overview.summary.budget)}
+                </Text>
                 <Text style={styles.totalLabel}>total budget</Text>
               </View>
             </View>
@@ -415,7 +429,14 @@ export function CategoriesScreen() {
                     </Text>
                   </View>
                   <View style={styles.compactMetrics}>
-                    <Text style={styles.compactAmount}>{formatCurrency(row.spend)}</Text>
+                    <Text
+                      style={styles.compactAmount}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.72}
+                    >
+                      {formatCurrency(row.spend)}
+                    </Text>
                     <View style={styles.compactBarTrack}>
                       <View
                         style={[
@@ -427,7 +448,14 @@ export function CategoriesScreen() {
                         ]}
                       />
                     </View>
-                    <Text style={styles.compactBudget}>{row.budget ? formatCurrency(row.budget) : '--'}</Text>
+                    <Text
+                      style={styles.compactBudget}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.72}
+                    >
+                      {row.budget ? formatCurrency(row.budget) : '--'}
+                    </Text>
                   </View>
                 </View>
               </Pressable>

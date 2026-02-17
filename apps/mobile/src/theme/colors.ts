@@ -3,7 +3,7 @@ export const colors = {
   backgroundAlt: '#11162B',
   surface: '#151B34',
   card: 'rgba(255, 255, 255, 0.08)',
-  cardBorder: 'rgba(255, 255, 255, 0.14)',
+  cardBorder: 'rgba(255, 255, 255, 0.06)',
   text: '#E6E9F2',
   textMuted: '#A7B0C2',
   primary: '#38BDF8',
