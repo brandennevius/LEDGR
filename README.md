@@ -70,6 +70,9 @@ Open http://localhost:3000
 ## Deployment
 Recommended: Vercel Git integration. Push to main and let Vercel build.
 
+## Feedback Automation
+- Feedback intake + triage + `codex/*` PR bootstrap is documented in `docs/feedback-autofix-workflow.md`.
+
 ## Status
 Active POC under rapid iteration.
 Deployment test: README update.

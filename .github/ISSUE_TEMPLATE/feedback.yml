@@ -1,0 +1,106 @@
+name: Feedback Report
+description: Structured user/TestFlight feedback for automated triage
+title: "[Feedback] "
+labels:
+  - feedback
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for TestFlight and production user feedback.
+  - type: dropdown
+    id: source
+    attributes:
+      label: Source
+      options:
+        - TestFlight
+        - App Store Review
+        - Support Inbox
+        - Internal QA
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: App build/version
+      description: Example: iOS 1.0.4 (57)
+      placeholder: iOS 1.0.4 (57)
+    validations:
+      required: false
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - iOS
+        - Android
+        - Web
+        - Unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Blocker
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Product area
+      options:
+        - Authentication
+        - Accounts
+        - Transactions
+        - Categories
+        - Goals
+        - Insights/AI
+        - Performance
+        - Billing
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One concise sentence describing the issue
+      placeholder: App crashes when opening Transactions after linking Plaid.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open app
+        2. Go to Transactions
+        3. Tap an item
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: false
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Attachments/logs
+      description: Links to screenshots, videos, crash logs, Sentry events, etc.
+    validations:
+      required: false
+

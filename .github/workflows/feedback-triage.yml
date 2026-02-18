@@ -1,0 +1,188 @@
+name: Feedback Triage
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: feedback-triage
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Triage feedback issues
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const requiredLabels = [
+              { name: "feedback", color: "BFD4F2", description: "User/TestFlight feedback" },
+              { name: "triaged", color: "0E8A16", description: "Triage has run on this issue" },
+              { name: "duplicate", color: "D4C5F9", description: "Duplicate feedback report" },
+              { name: "autofix-ready", color: "FBCA04", description: "Ready to start codex autofix flow" },
+              { name: "autofix-in-progress", color: "1D76DB", description: "Codex autofix branch/PR in progress" },
+              { name: "p0", color: "B60205", description: "Blocker priority" },
+              { name: "p1", color: "D93F0B", description: "High priority" },
+              { name: "p2", color: "FBCA04", description: "Medium priority" },
+              { name: "p3", color: "0E8A16", description: "Low priority" }
+            ];
+
+            const existingLabels = await github.paginate(github.rest.issues.listLabelsForRepo, {
+              owner,
+              repo,
+              per_page: 100
+            });
+            const existingByName = new Set(existingLabels.map((l) => l.name));
+            for (const label of requiredLabels) {
+              if (existingByName.has(label.name)) continue;
+              await github.rest.issues.createLabel({
+                owner,
+                repo,
+                name: label.name,
+                color: label.color,
+                description: label.description
+              });
+            }
+
+            const openFeedbackIssues = (await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              labels: "feedback",
+              state: "open",
+              per_page: 100
+            })).filter((issue) => !issue.pull_request);
+
+            if (!openFeedbackIssues.length) {
+              core.info("No open feedback issues found.");
+              return;
+            }
+
+            function escapeRegex(value) {
+              return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            }
+
+            function parseField(body, fieldName) {
+              if (!body) return "";
+              const matcher = new RegExp(`###\\s*${escapeRegex(fieldName)}\\s*\\n+([\\s\\S]*?)(?=\\n###\\s|$)`, "i");
+              const match = body.match(matcher);
+              if (!match) return "";
+              const cleaned = match[1]
+                .split("\n")
+                .map((line) => line.trim())
+                .filter(Boolean)
+                .join(" ");
+              return cleaned.replace(/^_+|_+$/g, "");
+            }
+
+            function normalize(text) {
+              return (text || "")
+                .toLowerCase()
+                .replace(/[^a-z0-9\s]/g, " ")
+                .replace(/\s+/g, " ")
+                .trim();
+            }
+
+            function issueKey(issue) {
+              const summary = parseField(issue.body, "Summary");
+              return [normalize(issue.title), normalize(summary)].filter(Boolean).join(" | ");
+            }
+
+            function priorityLabelFromSeverity(rawSeverity) {
+              const severity = (rawSeverity || "").toLowerCase();
+              if (severity.includes("blocker")) return "p0";
+              if (severity.includes("high")) return "p1";
+              if (severity.includes("medium")) return "p2";
+              return "p3";
+            }
+
+            const byCreatedAsc = [...openFeedbackIssues].sort((a, b) => {
+              return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+            });
+
+            const canonicalByKey = new Map();
+            let processed = 0;
+            let duplicatesClosed = 0;
+
+            for (const issue of byCreatedAsc) {
+              const labels = issue.labels.map((l) => l.name);
+              const key = issueKey(issue);
+              const severity = parseField(issue.body, "Severity");
+              const priorityLabel = priorityLabelFromSeverity(severity);
+              const canonical = key ? canonicalByKey.get(key) : null;
+
+              if (!canonical && key) {
+                canonicalByKey.set(key, issue);
+              }
+
+              if (canonical && canonical.number !== issue.number) {
+                const duplicateLabels = ["duplicate", "triaged"];
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  labels: duplicateLabels
+                });
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  body: `Marked duplicate of #${canonical.number} during automated feedback triage.`
+                });
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  state: "closed",
+                  state_reason: "not_planned"
+                });
+                duplicatesClosed += 1;
+                continue;
+              }
+
+              if (labels.includes("triaged")) {
+                continue;
+              }
+
+              const labelsToAdd = ["triaged", priorityLabel];
+              if (priorityLabel === "p0" || priorityLabel === "p1") {
+                labelsToAdd.push("autofix-ready");
+              }
+
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: issue.number,
+                labels: labelsToAdd
+              });
+
+              const queueMessage =
+                priorityLabel === "p0" || priorityLabel === "p1"
+                  ? "This issue was added to the autofix queue (`autofix-ready`)."
+                  : "This issue was triaged but not auto-queued due to lower severity.";
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issue.number,
+                body: [
+                  "Automated triage complete.",
+                  `Priority: \`${priorityLabel}\``,
+                  queueMessage
+                ].join("\n")
+              });
+
+              processed += 1;
+            }
+
+            core.info(`Triaged ${processed} issue(s); closed ${duplicatesClosed} duplicate(s).`);
+
