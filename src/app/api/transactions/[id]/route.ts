@@ -75,6 +75,7 @@ export async function PATCH(
   const body = (await request.json()) as {
     category?: string;
     transactionType?: "INCOME" | "INTERNAL_TRANSFER" | "REGULAR";
+    amount?: number;
     applyToSimilar?: boolean;
     applyToCategory?: boolean;
     createRule?: boolean;
@@ -90,7 +91,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const updates: {
+  const classificationUpdates: {
     category?: string;
     categoryNeedsReview?: boolean;
     categorySource?: "USER";
@@ -98,20 +99,29 @@ export async function PATCH(
   } = {};
 
   if (body.category?.trim()) {
-    updates.category = body.category.trim();
-    updates.categoryNeedsReview = false;
-    updates.categorySource = "USER";
+    classificationUpdates.category = body.category.trim();
+    classificationUpdates.categoryNeedsReview = false;
+    classificationUpdates.categorySource = "USER";
   }
 
   if (body.transactionType) {
-    updates.transactionType = body.transactionType;
+    classificationUpdates.transactionType = body.transactionType;
   }
 
-  if (Object.keys(updates).length === 0) {
+  let amountUpdate: number | undefined;
+  if (typeof body.amount !== "undefined") {
+    const parsedAmount = Number(body.amount);
+    if (!Number.isFinite(parsedAmount)) {
+      return NextResponse.json({ error: "Invalid amount." }, { status: 400 });
+    }
+    amountUpdate = parsedAmount;
+  }
+
+  if (Object.keys(classificationUpdates).length === 0 && typeof amountUpdate === "undefined") {
     return NextResponse.json({ error: "No updates provided." }, { status: 400 });
   }
 
-  if (body.applyToSimilar && updates.category) {
+  if (body.applyToSimilar && classificationUpdates.category) {
     const nameMatch = transaction.merchantName?.trim()
       ? { merchantName: transaction.merchantName }
       : { name: transaction.name };
@@ -120,25 +130,28 @@ export async function PATCH(
         userId: user.id,
         ...nameMatch,
       },
-      data: updates,
+      data: classificationUpdates,
     });
-  } else if (body.applyToCategory && updates.category) {
+  } else if (body.applyToCategory && classificationUpdates.category) {
     const currentCategory = transaction.category ?? "Uncategorized";
     await prisma.transaction.updateMany({
       where: {
         userId: user.id,
         category: currentCategory === "Uncategorized" ? null : currentCategory,
       },
-      data: updates,
-    });
-  } else {
-    await prisma.transaction.updateMany({
-      where: { id, userId: user.id },
-      data: updates,
+      data: classificationUpdates,
     });
   }
 
-  if (body.createRule && updates.category) {
+  await prisma.transaction.update({
+    where: { id },
+    data: {
+      ...classificationUpdates,
+      ...(typeof amountUpdate !== "undefined" ? { amount: amountUpdate } : {}),
+    },
+  });
+
+  if (body.createRule && classificationUpdates.category) {
     const matchValue =
       body.ruleMatchValue?.trim() ||
       transaction.merchantName ||
@@ -149,8 +162,8 @@ export async function PATCH(
           userId: user.id,
           matchType: body.ruleMatchType ?? "EXACT",
           matchValue,
-          category: updates.category,
-          transactionType: updates.transactionType ?? "REGULAR",
+          category: classificationUpdates.category,
+          transactionType: classificationUpdates.transactionType ?? "REGULAR",
         },
       });
     }

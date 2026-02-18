@@ -90,6 +90,13 @@ const formatCurrency = (value: number, fractionDigits = 0) =>
     minimumFractionDigits: fractionDigits,
   });
 
+const sanitizeAmountInput = (value: string) => {
+  const cleaned = value.replace(/[^0-9.]/g, '');
+  const [whole, ...decimals] = cleaned.split('.');
+  if (decimals.length === 0) return whole;
+  return `${whole}.${decimals.join('').slice(0, 2)}`;
+};
+
 const buildSeries = (overview: OverviewResponse | null): ChartSeries => {
   const spend = overview?.monthDailySpend ?? [];
   const income = overview?.monthDailyIncome ?? [];
@@ -158,6 +165,8 @@ export function DashboardScreen() {
   const [createRule, setCreateRule] = useState(false);
   const [ruleMatchType, setRuleMatchType] = useState<'EXACT' | 'PARTIAL'>('EXACT');
   const [ruleMatchValue, setRuleMatchValue] = useState('');
+  const [amountInput, setAmountInput] = useState('');
+  const [editingAmount, setEditingAmount] = useState(false);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -287,6 +296,8 @@ export function DashboardScreen() {
       const detail = await apiRequest<TransactionDetail>(`/api/transactions/${id}`);
       setSelected(detail);
       setCategoryInput(detail.category ?? '');
+      setAmountInput(String(Math.abs(detail.amount)));
+      setEditingAmount(false);
       setTransactionTypeInput(detail.transactionType ?? 'REGULAR');
       setApplyToSimilar(false);
       setApplyToCategory(false);
@@ -300,11 +311,19 @@ export function DashboardScreen() {
 
   const saveDetail = async () => {
     if (!selected) return;
+    const parsedAmount = Number(amountInput);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+      setError('Enter a valid amount before saving.');
+      return;
+    }
+
+    const signedAmount = parsedAmount * (selected.amount < 0 ? -1 : 1);
     setSavingDetail(true);
     try {
       await apiRequest(`/api/transactions/${selected.id}`, {
         method: 'PATCH',
         body: {
+          amount: signedAmount,
           category: categoryInput,
           transactionType: transactionTypeInput,
           applyToSimilar,
@@ -316,6 +335,13 @@ export function DashboardScreen() {
       });
       setDetailOpen(false);
       await loadDashboard();
+      setError(null);
+    } catch (err) {
+      const message =
+        typeof err === 'object' && err && 'error' in err
+          ? String((err as { error?: string }).error)
+          : 'Unable to save transaction.';
+      setError(message);
     } finally {
       setSavingDetail(false);
     }
@@ -577,10 +603,24 @@ export function DashboardScreen() {
             <Text style={styles.detailHeader}>Transaction to review</Text>
             <Text style={styles.detailDate}>{new Date(selected.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</Text>
             <Text style={styles.detailTitle}>{selected.name}</Text>
-            <Text style={styles.detailAmount}>
-              {selected.amount < 0 ? '+' : '-'}
-              {formatCurrency(Math.abs(selected.amount), 2)}
-            </Text>
+            {editingAmount ? (
+              <TextInput
+                value={amountInput}
+                onChangeText={(value) => setAmountInput(sanitizeAmountInput(value))}
+                style={styles.amountInput}
+                keyboardType="decimal-pad"
+                autoFocus
+                selectTextOnFocus
+              />
+            ) : (
+              <Pressable onPress={() => setEditingAmount(true)}>
+                <Text style={styles.detailAmount}>
+                  {selected.amount < 0 ? '+' : '-'}
+                  {formatCurrency(Math.abs(selected.amount), 2)}
+                </Text>
+                <Text style={styles.detailAmountHint}>Tap amount to edit</Text>
+              </Pressable>
+            )}
             <Text style={styles.detailAccount}>
               {selected.account?.institutionName ?? 'Account'} · {selected.account?.name ?? 'Linked account'}
             </Text>
@@ -916,6 +956,22 @@ const styles = StyleSheet.create({
   },
   detailAmount: {
     color: colors.text,
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  detailAmountHint: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 4,
+  },
+  amountInput: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: colors.text,
+    backgroundColor: 'rgba(9, 13, 27, 0.7)',
     fontSize: 28,
     fontWeight: '700',
   },

@@ -44,6 +44,19 @@ type TransactionRow = {
   date: string;
 };
 
+type TransactionDetail = {
+  id: string;
+  name: string;
+  amount: number;
+  category: string;
+  transactionType?: 'INCOME' | 'INTERNAL_TRANSFER' | 'REGULAR';
+  date: string;
+  account?: {
+    name?: string;
+    institutionName?: string;
+  };
+};
+
 type OverviewResponse = {
   summary: {
     mode: 'budget' | 'compare';
@@ -70,6 +83,13 @@ const formatCurrencyDetailed = (value: number) =>
     style: 'currency',
     currency: 'USD',
   });
+
+const sanitizeAmountInput = (value: string) => {
+  const cleaned = value.replace(/[^0-9.]/g, '');
+  const [whole, ...decimals] = cleaned.split('.');
+  if (decimals.length === 0) return whole;
+  return `${whole}.${decimals.join('').slice(0, 2)}`;
+};
 
 const formatDayLabel = (value: string) =>
   new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -132,6 +152,16 @@ export function CategoriesScreen() {
   const [groupCategories, setGroupCategories] = useState('');
   const [groupBudget, setGroupBudget] = useState('');
   const [saving, setSaving] = useState(false);
+  const [transactionDetailOpen, setTransactionDetailOpen] = useState(false);
+  const [transactionDetailLoading, setTransactionDetailLoading] = useState(false);
+  const [savingTransactionDetail, setSavingTransactionDetail] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<TransactionDetail | null>(null);
+  const [transactionCategoryInput, setTransactionCategoryInput] = useState('');
+  const [transactionTypeInput, setTransactionTypeInput] = useState<'INCOME' | 'INTERNAL_TRANSFER' | 'REGULAR'>(
+    'REGULAR'
+  );
+  const [transactionAmountInput, setTransactionAmountInput] = useState('');
+  const [editingTransactionAmount, setEditingTransactionAmount] = useState(false);
 
   const load = async () => {
     try {
@@ -315,6 +345,54 @@ export function CategoriesScreen() {
     } finally {
       setSaving(false);
       setGroupOpen(false);
+    }
+  };
+
+  const openTransactionDetail = async (transactionId: string) => {
+    setTransactionDetailOpen(true);
+    setTransactionDetailLoading(true);
+    try {
+      const detail = await apiRequest<TransactionDetail>(`/api/transactions/${transactionId}`);
+      setSelectedTransaction(detail);
+      setTransactionCategoryInput(detail.category ?? '');
+      setTransactionTypeInput(detail.transactionType ?? 'REGULAR');
+      setTransactionAmountInput(String(Math.abs(detail.amount)));
+      setEditingTransactionAmount(false);
+    } finally {
+      setTransactionDetailLoading(false);
+    }
+  };
+
+  const saveTransactionDetail = async () => {
+    if (!selectedTransaction) return;
+    const parsedAmount = Number(transactionAmountInput);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+      setError('Enter a valid amount before saving.');
+      return;
+    }
+
+    const signedAmount = parsedAmount * (selectedTransaction.amount < 0 ? -1 : 1);
+    setSavingTransactionDetail(true);
+    try {
+      await apiRequest(`/api/transactions/${selectedTransaction.id}`, {
+        method: 'PATCH',
+        body: {
+          amount: signedAmount,
+          category: transactionCategoryInput,
+          transactionType: transactionTypeInput,
+        },
+      });
+      await load();
+      setTransactionDetailOpen(false);
+      setError(null);
+    } catch (err) {
+      const message =
+        typeof err === 'object' && err && 'error' in err
+          ? String((err as { error?: string }).error)
+          : 'Unable to save transaction.';
+      setError(message);
+    } finally {
+      setSavingTransactionDetail(false);
     }
   };
 
@@ -508,7 +586,11 @@ export function CategoriesScreen() {
                   <View key={group.key} style={styles.monthGroup}>
                     <Text style={styles.monthTitle}>{group.label}</Text>
                     {group.items.map((tx) => (
-                      <View key={tx.id} style={styles.transactionRow}>
+                      <Pressable
+                        key={tx.id}
+                        style={styles.transactionRow}
+                        onPress={() => openTransactionDetail(tx.id)}
+                      >
                         <View style={styles.transactionLeft}>
                           <Text style={styles.transactionMeta}>{formatDayLabel(tx.date)}</Text>
                           <Text style={styles.transactionName}>{tx.name}</Text>
@@ -516,7 +598,7 @@ export function CategoriesScreen() {
                         <Text style={styles.transactionAmount}>
                           -{formatCurrencyDetailed(Math.abs(tx.amount))}
                         </Text>
-                      </View>
+                      </Pressable>
                     ))}
                   </View>
                 ))
@@ -525,6 +607,77 @@ export function CategoriesScreen() {
           </ScrollView>
         ) : (
           <Text style={styles.emptyText}>No category selected.</Text>
+        )}
+      </ModalSheet>
+
+      <ModalSheet visible={transactionDetailOpen} onClose={() => setTransactionDetailOpen(false)}>
+        {transactionDetailLoading || !selectedTransaction ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={styles.loadingText}>Loading transaction...</Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.categoryDetailContent} showsVerticalScrollIndicator={false}>
+            <Text style={styles.modalTitle}>{selectedTransaction.name}</Text>
+            <Text style={styles.sectionSubtitle}>
+              {selectedTransaction.account?.institutionName ?? 'Account'} · {formatDayLabel(selectedTransaction.date)}
+            </Text>
+
+            {editingTransactionAmount ? (
+              <TextInput
+                value={transactionAmountInput}
+                onChangeText={(value) => setTransactionAmountInput(sanitizeAmountInput(value))}
+                style={styles.input}
+                keyboardType="decimal-pad"
+                autoFocus
+                selectTextOnFocus
+              />
+            ) : (
+              <Pressable onPress={() => setEditingTransactionAmount(true)}>
+                <Text style={styles.transactionDetailAmount}>
+                  {selectedTransaction.amount < 0 ? '-' : '+'}
+                  {formatCurrencyDetailed(Math.abs(selectedTransaction.amount))}
+                </Text>
+                <Text style={styles.transactionAmountHint}>Tap amount to edit</Text>
+              </Pressable>
+            )}
+
+            <Text style={styles.sheetSectionTitle}>Category</Text>
+            <TextInput
+              value={transactionCategoryInput}
+              onChangeText={setTransactionCategoryInput}
+              placeholder="Category"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+            />
+
+            <Text style={styles.sheetSectionTitle}>Transaction type</Text>
+            <View style={styles.typeRow}>
+              {(['REGULAR', 'INCOME', 'INTERNAL_TRANSFER'] as const).map((type) => (
+                <Pressable
+                  key={type}
+                  onPress={() => setTransactionTypeInput(type)}
+                  style={[
+                    styles.typeChip,
+                    transactionTypeInput === type && styles.typeChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.typeChipText,
+                      transactionTypeInput === type && styles.typeChipTextActive,
+                    ]}
+                  >
+                    {type.replace('_', ' ')}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Pressable style={styles.primaryButton} onPress={saveTransactionDetail} disabled={savingTransactionDetail}>
+              <Text style={styles.primaryLabel}>{savingTransactionDetail ? 'Saving...' : 'Save changes'}</Text>
+            </Pressable>
+          </ScrollView>
         )}
       </ModalSheet>
 
@@ -954,6 +1107,44 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 12,
     fontWeight: '600',
+  },
+  transactionDetailAmount: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  transactionAmountHint: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  typeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  typeChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  typeChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+  },
+  typeChipText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  typeChipTextActive: {
+    color: colors.text,
   },
   modalTitle: {
     color: colors.text,

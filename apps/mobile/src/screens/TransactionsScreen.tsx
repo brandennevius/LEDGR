@@ -74,6 +74,13 @@ const formatCurrency = (value: number) =>
     currency: 'USD',
   });
 
+const sanitizeAmountInput = (value: string) => {
+  const cleaned = value.replace(/[^0-9.]/g, '');
+  const [whole, ...decimals] = cleaned.split('.');
+  if (decimals.length === 0) return whole;
+  return `${whole}.${decimals.join('').slice(0, 2)}`;
+};
+
 export function TransactionsScreen() {
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,6 +108,8 @@ export function TransactionsScreen() {
   const [splits, setSplits] = useState<SplitDraft[]>([]);
   const [savingSplits, setSavingSplits] = useState(false);
   const [savingDetail, setSavingDetail] = useState(false);
+  const [amountInput, setAmountInput] = useState('');
+  const [editingAmount, setEditingAmount] = useState(false);
 
   const fetchRows = async () => {
     try {
@@ -197,6 +206,8 @@ export function TransactionsScreen() {
       const detail = await apiRequest<TransactionDetail>(`/api/transactions/${id}`);
       setSelected(detail);
       setCategoryInput(detail.category ?? '');
+      setAmountInput(String(Math.abs(detail.amount)));
+      setEditingAmount(false);
       setTransactionTypeInput(detail.transactionType ?? 'REGULAR');
       setSplits(
         (detail.splits ?? []).map((split) => ({
@@ -217,11 +228,19 @@ export function TransactionsScreen() {
 
   const saveDetail = async () => {
     if (!selected) return;
+    const parsedAmount = Number(amountInput);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+      setError('Enter a valid amount before saving.');
+      return;
+    }
+
+    const signedAmount = parsedAmount * (selected.amount < 0 ? -1 : 1);
     setSavingDetail(true);
     try {
       await apiRequest(`/api/transactions/${selected.id}`, {
         method: 'PATCH',
         body: {
+          amount: signedAmount,
           category: categoryInput,
           transactionType: transactionTypeInput,
           applyToSimilar,
@@ -233,6 +252,13 @@ export function TransactionsScreen() {
       });
       await fetchRows();
       setDetailOpen(false);
+      setError(null);
+    } catch (err) {
+      const message =
+        typeof err === 'object' && err && 'error' in err
+          ? String((err as { error?: string }).error)
+          : 'Unable to save transaction.';
+      setError(message);
     } finally {
       setSavingDetail(false);
     }
@@ -448,9 +474,23 @@ export function TransactionsScreen() {
             <Text style={styles.detailSubtitle}>
               {selected.account?.institutionName ?? 'Account'} · {selected.date}
             </Text>
-            <Text style={styles.detailAmount}>
-              {selected.amount < 0 ? '+' : '-'} {formatCurrency(Math.abs(selected.amount))}
-            </Text>
+            {editingAmount ? (
+              <TextInput
+                value={amountInput}
+                onChangeText={(value) => setAmountInput(sanitizeAmountInput(value))}
+                style={styles.amountInput}
+                keyboardType="decimal-pad"
+                autoFocus
+                selectTextOnFocus
+              />
+            ) : (
+              <Pressable onPress={() => setEditingAmount(true)}>
+                <Text style={styles.detailAmount}>
+                  {selected.amount < 0 ? '+' : '-'} {formatCurrency(Math.abs(selected.amount))}
+                </Text>
+                <Text style={styles.detailAmountHint}>Tap amount to edit</Text>
+              </Pressable>
+            )}
 
             <Text style={styles.detailSectionTitle}>Category</Text>
             <TextInput
@@ -773,6 +813,22 @@ const styles = StyleSheet.create({
   detailAmount: {
     color: colors.text,
     fontSize: 16,
+    fontWeight: '700',
+  },
+  detailAmountHint: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 4,
+  },
+  amountInput: {
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: colors.text,
+    backgroundColor: 'rgba(9, 13, 27, 0.7)',
+    fontSize: 18,
     fontWeight: '700',
   },
   detailSectionTitle: {
