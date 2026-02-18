@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { colors } from '../theme';
 
@@ -11,11 +11,15 @@ type ModalSheetProps = {
 
 export default function ModalSheet({ visible, onClose, children }: ModalSheetProps) {
   return (
-    <Modal transparent animationType="slide" visible={visible} onRequestClose={onClose}>
-      <View style={styles.overlay}>
+    <Modal transparent animationType="slide" presentationStyle="overFullScreen" visible={visible} onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+      >
         <Pressable style={styles.backdrop} onPress={onClose} />
         <View style={styles.sheet}>{children}</View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -32,6 +36,7 @@ const styles = StyleSheet.create({
   sheet: {
     backgroundColor: colors.surface,
     padding: 20,
+    paddingBottom: 28,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
