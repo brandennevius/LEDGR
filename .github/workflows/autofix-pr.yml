@@ -1,0 +1,218 @@
+name: Autofix PR Bootstrap
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Feedback issue number to bootstrap"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  bootstrap:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.label.name == 'autofix-ready' }}
+    runs-on: ubuntu-latest
+    outputs:
+      issue_number: ${{ steps.meta.outputs.issue_number }}
+      issue_title: ${{ steps.meta.outputs.issue_title }}
+      branch_name: ${{ steps.meta.outputs.branch_name }}
+      default_branch: ${{ steps.meta.outputs.default_branch }}
+      existing_pr_number: ${{ steps.meta.outputs.existing_pr_number }}
+    steps:
+      - name: Resolve issue metadata
+        id: meta
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = context.eventName === "workflow_dispatch"
+              ? Number(core.getInput("issue_number"))
+              : context.payload.issue.number;
+
+            const { data: issue } = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number: issueNumber
+            });
+
+            const slug = issue.title
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "")
+              .slice(0, 40);
+            const branch = `codex/issue-${issueNumber}-${slug || "autofix"}`;
+
+            const prs = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: "open",
+              head: `${owner}:${branch}`,
+              per_page: 1
+            });
+
+            core.setOutput("issue_number", String(issueNumber));
+            core.setOutput("issue_title", issue.title);
+            core.setOutput("issue_body", issue.body || "");
+            core.setOutput("branch_name", branch);
+            core.setOutput("default_branch", context.payload.repository.default_branch);
+            core.setOutput("existing_pr_number", prs.data.length ? String(prs.data[0].number) : "");
+
+      - name: Checkout repository
+        if: ${{ steps.meta.outputs.existing_pr_number == '' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create or update codex branch with work item
+        if: ${{ steps.meta.outputs.existing_pr_number == '' }}
+        id: branch
+        env:
+          ISSUE_NUMBER: ${{ steps.meta.outputs.issue_number }}
+          ISSUE_TITLE: ${{ steps.meta.outputs.issue_title }}
+          ISSUE_BODY: ${{ steps.meta.outputs.issue_body }}
+          BRANCH_NAME: ${{ steps.meta.outputs.branch_name }}
+          DEFAULT_BRANCH: ${{ steps.meta.outputs.default_branch }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin "${DEFAULT_BRANCH}"
+          if git ls-remote --exit-code --heads origin "${BRANCH_NAME}" >/dev/null 2>&1; then
+            git fetch origin "${BRANCH_NAME}"
+            git checkout -B "${BRANCH_NAME}" "origin/${BRANCH_NAME}"
+          else
+            git checkout -B "${BRANCH_NAME}" "origin/${DEFAULT_BRANCH}"
+          fi
+
+          mkdir -p .codex/queue
+          {
+            echo "# Autofix Work Item #${ISSUE_NUMBER}"
+            echo
+            echo "Issue: #${ISSUE_NUMBER}"
+            echo "Title: ${ISSUE_TITLE}"
+            echo
+            echo "## Source Context"
+            printf '%s\n' "${ISSUE_BODY}"
+            echo
+            echo "## Required Workflow"
+            echo "- Create a fix on this branch."
+            echo "- Run project checks (npm run lint at minimum)."
+            echo "- Update this file with a short changelog before marking complete."
+          } > ".codex/queue/issue-${ISSUE_NUMBER}.md"
+
+          git add ".codex/queue/issue-${ISSUE_NUMBER}.md"
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "chore: bootstrap autofix context for #${ISSUE_NUMBER}"
+            git push --set-upstream origin "${BRANCH_NAME}"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create draft pull request
+        if: ${{ steps.meta.outputs.existing_pr_number == '' }}
+        id: create_pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = Number(`${{ steps.meta.outputs.issue_number }}`);
+            const issueTitle = `${{ steps.meta.outputs.issue_title }}`;
+            const branch = `${{ steps.meta.outputs.branch_name }}`;
+            const base = `${{ steps.meta.outputs.default_branch }}`;
+
+            const { data: pr } = await github.rest.pulls.create({
+              owner,
+              repo,
+              title: `[Autofix] #${issueNumber} ${issueTitle}`,
+              head: branch,
+              base,
+              draft: true,
+              body: [
+                `Bootstrapped from feedback issue #${issueNumber}.`,
+                "",
+                "## Checklist",
+                "- [ ] Implement fix on this branch",
+                "- [ ] Run `npm run lint`",
+                "- [ ] Add a short validation note",
+                "",
+                `Closes #${issueNumber}`
+              ].join("\n")
+            });
+
+            core.setOutput("pr_number", String(pr.number));
+            core.setOutput("pr_url", pr.html_url);
+
+      - name: Mark issue in progress
+        if: ${{ steps.meta.outputs.existing_pr_number == '' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = Number(`${{ steps.meta.outputs.issue_number }}`);
+            const prUrl = `${{ steps.create_pr.outputs.pr_url }}`;
+
+            async function ensureLabel(name, color, description) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                await github.rest.issues.createLabel({ owner, repo, name, color, description });
+              }
+            }
+
+            await ensureLabel("autofix-in-progress", "1D76DB", "Codex autofix branch/PR in progress");
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              labels: ["autofix-in-progress"]
+            });
+            try {
+              await github.rest.issues.removeLabel({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                name: "autofix-ready"
+              });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              body: `Autofix branch and draft PR created: ${prUrl}`
+            });
+
+      - name: Comment if PR already exists
+        if: ${{ steps.meta.outputs.existing_pr_number != '' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = Number(`${{ steps.meta.outputs.issue_number }}`);
+            const prNumber = `${{ steps.meta.outputs.existing_pr_number }}`;
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              body: `Autofix already in progress in PR #${prNumber}.`
+            });
