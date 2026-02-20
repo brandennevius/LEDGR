@@ -15,7 +15,7 @@ export async function GET(
 
   const [transaction, settings] = await Promise.all([
     prisma.transaction.findFirst({
-      where: { id, userId: user.id, account: { syncEnabled: true } },
+      where: { id, userId: user.id },
       include: { account: true, splits: true },
     }),
     prisma.category.findMany({
@@ -89,7 +89,7 @@ export async function PATCH(
   };
 
   const transaction = await prisma.transaction.findFirst({
-    where: { id, userId: user.id, account: { syncEnabled: true } },
+    where: { id, userId: user.id },
   });
 
   if (!transaction) {

@@ -68,7 +68,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
     linkRequest.access_token = item.accessToken;
-    linkRequest.update = { account_selection_enabled: true };
   } else {
     linkRequest.products = [Products.Transactions];
   }

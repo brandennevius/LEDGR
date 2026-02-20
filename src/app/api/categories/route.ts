@@ -17,22 +17,12 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const categories = await prisma.transaction.findMany({
-    where: {
-      userId: client.id,
-      transactionType: "REGULAR",
-      account: { syncEnabled: true },
-    },
+    where: { userId: client.id, transactionType: "REGULAR" },
     select: { category: true },
     distinct: ["category"],
   });
   const splitCategories = await prisma.transactionSplit.findMany({
-    where: {
-      transaction: {
-        userId: client.id,
-        transactionType: "REGULAR",
-        account: { syncEnabled: true },
-      },
-    },
+    where: { transaction: { userId: client.id, transactionType: "REGULAR" } },
     select: { category: true },
     distinct: ["category"],
   });

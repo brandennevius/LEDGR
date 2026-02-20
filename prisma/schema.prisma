@@ -124,7 +124,6 @@ model Account {
   userId           String   @db.Uuid
   plaidItemId      String?  @db.Uuid
   plaidAccountId   String?  @unique
-  syncEnabled      Boolean  @default(true)
   name             String
   type             String
   subtype          String?

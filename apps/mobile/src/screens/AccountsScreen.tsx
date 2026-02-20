@@ -27,7 +27,6 @@ type Account = {
   mask?: string;
   institutionName?: string;
   balance: number;
-  syncEnabled?: boolean;
 };
 
 type Connection = {
@@ -141,21 +140,6 @@ export function AccountsScreen() {
     } finally {
       setRemovingId(null);
     }
-  };
-
-  const toggleSync = async (accountId: string, nextEnabled: boolean) => {
-    await apiRequest('/api/accounts', {
-      method: 'PATCH',
-      body: {
-        accountId,
-        syncEnabled: nextEnabled,
-      },
-    });
-    setAccounts((prev) =>
-      prev.map((account) =>
-        account.id === accountId ? { ...account, syncEnabled: nextEnabled } : account
-      )
-    );
   };
 
   const removeAll = async () => {
@@ -323,14 +307,6 @@ export function AccountsScreen() {
                   >
                     <Text style={styles.removeLabel}>
                       {removingId === account.id ? 'Removing...' : 'Remove'}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.repairButton}
-                    onPress={() => toggleSync(account.id, !account.syncEnabled)}
-                  >
-                    <Text style={styles.repairLabel}>
-                      {account.syncEnabled === false ? 'Include in dashboard' : 'Exclude from dashboard'}
                     </Text>
                   </Pressable>
                 </View>

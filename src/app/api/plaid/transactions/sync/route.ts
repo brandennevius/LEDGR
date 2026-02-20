@@ -63,9 +63,7 @@ export async function POST() {
     });
   }
 
-  const accounts = await prisma.account.findMany({
-    where: { userId: user.id, syncEnabled: true },
-  });
+  const accounts = await prisma.account.findMany({ where: { userId: user.id } });
   const rules = await prisma.categoryRule.findMany({
     where: { userId: user.id },
   });
