@@ -2,7 +2,7 @@
 
 - Procedure owner: Branden Nevius
 - Effective date: 2026-02-15
-- Last reviewed: 2026-02-15
+- Last reviewed: 2026-02-20
 
 This document operationalizes `/Users/brandennevius/Desktop/Financial Coaching/docs/security/information-security-policy.md`.
 
@@ -113,3 +113,18 @@ Evidence to retain:
 - Update procedures after major architecture or vendor changes.
 - Keep evidence logs for at least 12 months.
 
+## 8) AI Context Minimization Procedure (Per AI Feature/Change)
+
+Steps:
+
+1. Classify AI request intent (for example: transaction detail vs. cashflow summary).
+2. Build query scope to minimum required records for the request.
+3. Prefer aggregated financial context for AI prompts.
+4. Only include transaction-level details when the user question explicitly needs it.
+5. Validate prompt payload fields in code review before release.
+
+Evidence to retain:
+
+- API route/PR reference
+- Prompt payload field list
+- Reviewer confirmation that minimization rules were applied

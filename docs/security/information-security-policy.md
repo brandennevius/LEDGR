@@ -3,9 +3,9 @@
 - Document owner: Branden Nevius (Founder / Engineering)
 - Security contact: brandennevius@gmail.com
 - Effective date: 2026-02-15
-- Last reviewed: 2026-02-15
+- Last reviewed: 2026-02-20
 - Review cadence: At least annually, and after material architecture changes
-- Version: 1.0
+- Version: 1.1
 
 ## 1) Purpose
 
@@ -80,6 +80,8 @@ LEDGR development security requirements:
 - Keep framework and dependency versions current and patch known vulnerabilities
 - Review security impact for changes affecting Plaid, auth, payments, or data models
 - Verify webhook authenticity for security-sensitive integrations
+- For AI features, implement request-scoped data minimization and avoid sending
+  full-account ledgers when aggregate context is sufficient
 
 ## 8) Logging, Monitoring, and Alerting
 
@@ -135,6 +137,8 @@ Implemented now:
 - Plaid webhook signature verification route is implemented
 - Plaid access credentials are stored server-side, not client-side
 - Data deletion endpoints exist for account/transaction cleanup
+- AI chat context is request-scoped: aggregate context by default with
+  transaction-level context only for transaction-detail prompts
 
 In progress / requires formalization:
 

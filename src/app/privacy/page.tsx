@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: "How LEDGR collects, uses, and protects personal data.",
 };
 
-const updatedAt = "February 15, 2026";
+const updatedAt = "February 20, 2026";
 
 export default function PrivacyPage() {
   return (
@@ -66,7 +66,10 @@ export default function PrivacyPage() {
             <h2 className="text-lg font-semibold">2) How We Use Data</h2>
             <ul className="list-disc space-y-2 pl-5 text-sm text-[color:var(--ink-soft)]">
               <li>Provide account linking, financial dashboards, and coaching insights.</li>
-              <li>Power AI-generated summaries and recommendations in the app.</li>
+              <li>
+                Power AI-generated summaries and recommendations using request-scoped
+                context with minimum necessary financial data.
+              </li>
               <li>Secure the platform, detect abuse, and maintain reliability.</li>
               <li>Respond to support requests and communicate service updates.</li>
               <li>Comply with legal and regulatory obligations.</li>
@@ -82,7 +85,11 @@ export default function PrivacyPage() {
             <ul className="list-disc space-y-2 pl-5 text-sm text-[color:var(--ink-soft)]">
               <li>Plaid for financial account linking and data access.</li>
               <li>Supabase for authentication and managed database services.</li>
-              <li>OpenAI for AI analysis features used in the product.</li>
+              <li>
+                OpenAI for AI analysis features used in the product. For most
+                prompts we send aggregated financial context; transaction-level detail
+                is only sent when your prompt explicitly requires it.
+              </li>
             </ul>
             <p className="text-sm text-[color:var(--ink-soft)]">
               We may also disclose data when required by law or to protect rights,

@@ -29,6 +29,17 @@ type TxLike = {
   splits?: SplitLike[];
 };
 
+type Intent = {
+  asksTransactions: boolean;
+  asksCategories: boolean;
+  asksCashflow: boolean;
+  asksNetWorth: boolean;
+  asksDebt: boolean;
+  asksGoals: boolean;
+  needsPersonalData: boolean;
+  transactionDetailMode: boolean;
+};
+
 const debtPattern = /loan|debt|credit|card payment|mortgage|student/i;
 
 const normalizeCategory = (value?: string | null) =>
@@ -78,6 +89,52 @@ const extractTextDelta = (event: unknown): string => {
   return "";
 };
 
+const getLastUserMessage = (messages: ChatMessage[] = []) => {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.role === "user" && messages[i]?.content?.trim()) {
+      return messages[i].content.trim();
+    }
+  }
+  return "";
+};
+
+const detectIntent = (text: string): Intent => {
+  const query = text.toLowerCase();
+
+  const asksTransactions =
+    /transaction|merchant|charge|purchase|payment|split|refund|receipt/.test(query);
+  const asksCategories = /categor|budget|spend by|over budget|under budget/.test(query);
+  const asksCashflow = /cash flow|income|spend|surplus|monthly|trend/.test(query);
+  const asksNetWorth = /net worth|asset|liabilit|balance|account/.test(query);
+  const asksDebt = /debt|loan|credit card|payoff|interest|min payment/.test(query);
+  const asksGoals = /goal|target|progress|on track|off track/.test(query);
+
+  const needsPersonalData =
+    /\bmy\b|\bme\b|\bmine\b|this month|last month|my data/.test(query) ||
+    asksTransactions ||
+    asksCategories ||
+    asksCashflow ||
+    asksNetWorth ||
+    asksDebt ||
+    asksGoals;
+
+  const transactionDetailMode =
+    asksTransactions &&
+    (/which|show|list|find|what did i|where did i|largest|smallest/.test(query) ||
+      /merchant|transaction/.test(query));
+
+  return {
+    asksTransactions,
+    asksCategories,
+    asksCashflow,
+    asksNetWorth,
+    asksDebt,
+    asksGoals,
+    needsPersonalData,
+    transactionDetailMode,
+  };
+};
+
 export async function POST(request: Request) {
   const user = await getAuthedUser();
   if (!user) {
@@ -89,21 +146,97 @@ export async function POST(request: Request) {
     stream?: boolean;
   };
 
+  const latestUserPrompt = getLastUserMessage(body.messages ?? []);
+  const intent = detectIntent(latestUserPrompt);
+
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const sixMonthStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
-  const [transactions, categories, accounts, goals] = await Promise.all([
-    prisma.transaction.findMany({
-      where: { userId: user.id },
-      include: { splits: true },
-      orderBy: { date: "desc" },
-    }),
-    prisma.category.findMany({ where: { userId: user.id } }),
-    prisma.account.findMany({ where: { userId: user.id } }),
-    prisma.goal.findMany({ where: { userId: user.id } }),
-  ]);
+  let transactions: TxLike[] = [];
+  let categories: Array<{
+    id: string;
+    name: string;
+    essential: boolean;
+    monthlyBudget: number | null;
+  }> = [];
+  let accounts: Array<{
+    id: string;
+    name: string;
+    type: string;
+    subtype: string | null;
+    institutionName: string | null;
+    currentBalance: number | null;
+    availableBalance: number | null;
+  }> = [];
+  let goals: Array<{
+    id: string;
+    name: string;
+    type: string;
+    status: string;
+    target: number;
+    current: number;
+    minPayment: number | null;
+    interestRate: number | null;
+    termMonths: number | null;
+    endDate: Date | null;
+    accountId: string | null;
+  }> = [];
+
+  if (intent.needsPersonalData) {
+    const includeGoals = intent.asksGoals || intent.asksDebt;
+
+    const txWhere = intent.transactionDetailMode
+      ? {
+          userId: user.id,
+          date: { gte: new Date(now.getFullYear(), now.getMonth() - 11, 1) },
+        }
+      : { userId: user.id, date: { gte: sixMonthStart } };
+
+    [transactions, categories, accounts, goals] = await Promise.all([
+      prisma.transaction.findMany({
+        where: txWhere,
+        include: { splits: true },
+        orderBy: { date: "desc" },
+        take: intent.transactionDetailMode ? 300 : 200,
+      }) as Promise<TxLike[]>,
+      prisma.category.findMany({
+        where: { userId: user.id },
+        select: { id: true, name: true, essential: true, monthlyBudget: true },
+      }),
+      prisma.account.findMany({
+        where: { userId: user.id },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          subtype: true,
+          institutionName: true,
+          currentBalance: true,
+          availableBalance: true,
+        },
+      }),
+      includeGoals
+        ? prisma.goal.findMany({
+            where: { userId: user.id },
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              status: true,
+              target: true,
+              current: true,
+              minPayment: true,
+              interestRate: true,
+              termMonths: true,
+              endDate: true,
+              accountId: true,
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+  }
 
   const accountMap = new Map(
     accounts.map((account) => [
@@ -115,9 +248,7 @@ export async function POST(request: Request) {
     categories.map((item) => [normalizeCategory(item.name), item])
   );
 
-  const expandedTransactions = expandTransactionsWithSplits(
-    transactions as unknown as TxLike[]
-  );
+  const expandedTransactions = expandTransactionsWithSplits(transactions);
   const sixMonthTx = expandedTransactions.filter((tx) => tx.date >= sixMonthStart);
 
   const monthBuckets = new Map<
@@ -360,11 +491,16 @@ export async function POST(request: Request) {
       )
   );
 
-  const context = {
+  const context: Record<string, unknown> = {
     generatedAt: now.toISOString(),
-    period: {
-      currentMonth: monthLabel(now),
-      startDate: monthStart.toISOString().slice(0, 10),
+    userScope: {
+      mode: intent.transactionDetailMode
+        ? "transaction_detail"
+        : intent.needsPersonalData
+          ? "aggregated_financial_context"
+          : "general_education_only",
+      latestUserPrompt,
+      intent,
     },
     coverage: {
       transactions: transactions.length,
@@ -373,7 +509,19 @@ export async function POST(request: Request) {
       goals: goals.length,
       monthsAnalyzed: monthlySeries.length,
     },
-    cashflow: {
+    privacy: {
+      note:
+        "Use minimum necessary context per user request. Prefer aggregated financial context unless transaction-level detail is required.",
+      includesTransactionLevelData: intent.transactionDetailMode,
+    },
+    safety: {
+      reminder:
+        "For coaching only. No tax, legal, or investment product advice.",
+    },
+  };
+
+  if (intent.needsPersonalData) {
+    context.cashflow = {
       monthToDate: {
         income: monthSeries.income,
         spend: monthSeries.spend,
@@ -390,42 +538,64 @@ export async function POST(request: Request) {
       },
       monthlySeries,
       monthlyIncomeOverride: user.monthlyIncomeOverride ?? null,
-    },
-    debt: {
-      hasDebtData: debtAccounts.length > 0 || activeDebtGoals.length > 0,
-      totalBalance: debtTotal,
-      debtAccounts: debtAccounts.slice(0, 10),
-      activeDebtGoals,
-      estimatedMonthlyPayments: {
-        fromGoalMinimums: minPaymentsFromGoals,
-        fromInternalTransfersMonthToDate: roundMoney(transferToDebtMonth),
-        fromDebtTaggedTransactionsMonthToDate: debtPaymentsByCategory,
-      },
-    },
-    savingsAndInvestments: {
+    };
+
+    context.categories = {
+      topSpend: topCategories.slice(0, 10),
+      topFlexible,
+      risingCategories,
+      overBudgetCategories,
+      essentialCategoryCount: categories.filter((item) => item.essential).length,
+    };
+
+    context.transfers = {
+      internalTransferOutflowMonthToDate: monthSeries.internalTransferOutflow,
+      matchedInternalTransfers: transferMatch.internalIds.size,
+    };
+
+    context.savingsAndInvestments = {
       totalSavingsBalances: savingsAccountsTotal,
       totalInvestmentBalances: investmentAccountsTotal,
       totalNonDebtAssets: assetTotal,
       estimatedTransfersMonthToDate: {
         toSavingsOrInvestments: roundMoney(transferToSavingsMonth),
       },
-    },
-    categories: {
-      topSpend: topCategories.slice(0, 10),
-      topFlexible,
-      risingCategories,
-      overBudgetCategories,
-      essentialCategoryCount: categories.filter((item) => item.essential).length,
-    },
-    transfers: {
-      internalTransferOutflowMonthToDate: monthSeries.internalTransferOutflow,
-      matchedInternalTransfers: transferMatch.internalIds.size,
-    },
-    safety: {
-      reminder:
-        "For coaching only. No tax, legal, or investment product advice.",
-    },
-  };
+    };
+
+    if (intent.asksDebt || intent.asksGoals) {
+      context.debt = {
+        hasDebtData: debtAccounts.length > 0 || activeDebtGoals.length > 0,
+        totalBalance: debtTotal,
+        debtAccounts: debtAccounts.slice(0, 10),
+        activeDebtGoals,
+        estimatedMonthlyPayments: {
+          fromGoalMinimums: minPaymentsFromGoals,
+          fromInternalTransfersMonthToDate: roundMoney(transferToDebtMonth),
+          fromDebtTaggedTransactionsMonthToDate: debtPaymentsByCategory,
+        },
+      };
+    }
+
+    if (intent.transactionDetailMode) {
+      context.transactionDetails = {
+        note: "User requested transaction-level detail.",
+        recentTransactions: transactions.slice(0, 50).map((tx) => ({
+          id: tx.id,
+          date: tx.date.toISOString().slice(0, 10),
+          amount: roundMoney(tx.amount),
+          category: normalizeCategory(tx.category),
+          merchant: tx.merchantName ?? tx.name,
+          transactionType: tx.transactionType ?? null,
+          splits:
+            tx.splits?.map((split) => ({
+              id: split.id,
+              category: normalizeCategory(split.category),
+              amount: roundMoney(split.amount),
+            })) ?? [],
+        })),
+      };
+    }
+  }
 
   const openai = getOpenAI();
   if (!openai) {
@@ -444,9 +614,11 @@ export async function POST(request: Request) {
 
   const systemPrompt = [
     "You are LEDGR, a financial coaching assistant.",
-    "You can answer general finance education questions and personalized coaching questions using the provided clientDataContext.",
-    "When the user asks whether you have access to their data, answer based on clientDataContext.coverage and sections present.",
-    "For debt questions, use clientDataContext.debt first; do not claim you have no debt data when hasDebtData is true.",
+    "Answer with the minimum scope of user financial context required for the current question.",
+    "If userScope.mode is aggregated_financial_context, do not claim transaction-level certainty.",
+    "If userScope.mode is transaction_detail, you may reference recentTransactions from transactionDetails.",
+    "When asked about data access, answer from userScope, coverage, and privacy fields.",
+    "For debt questions, use debt section first when available.",
     "Use concise language and practical actions. Keep lists short.",
     "Do not provide tax advice, legal advice, or investment product recommendations.",
     "Treat clientDataContext as trusted facts; do not invent metrics that are not in context.",
