@@ -80,6 +80,8 @@ LEDGR development security requirements:
 - Keep framework and dependency versions current and patch known vulnerabilities
 - Review security impact for changes affecting Plaid, auth, payments, or data models
 - Verify webhook authenticity for security-sensitive integrations
+- For AI features, implement request-scoped data minimization and avoid sending
+  full-account ledgers when aggregate context is sufficient
 - Enforce ownership checks before mutating third-party linked resources (Plaid item/account/transaction IDs)
 - Apply rate limiting controls to high-risk and high-cost endpoints (Plaid sync and AI endpoints)
 
@@ -143,6 +145,8 @@ Implemented now:
 - Plaid webhook signature verification route is implemented
 - Plaid access credentials are stored server-side, not client-side
 - Data deletion endpoints exist for account/transaction cleanup
+- AI chat context is request-scoped: aggregate context by default with
+  transaction-level context only for transaction-detail prompts
 - Supabase RLS is enabled on all public-schema application tables
 - Authentication allowlist gating is implemented via `ALLOWED_EMAILS`
 - Sensitive API routes include rate limiting:
