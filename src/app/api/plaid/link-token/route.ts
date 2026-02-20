@@ -3,6 +3,7 @@ import { CountryCode, LinkTokenCreateRequest, Products } from "plaid";
 import { plaidClient } from "@/lib/plaid";
 import { getAuthedUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 type LinkTokenBody = {
   mode?: "create" | "update";
@@ -20,6 +21,17 @@ export async function POST(request: Request) {
   const user = await getAuthedUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const limit = checkRateLimit({
+    key: `plaid:link-token:${user.id}`,
+    limit: 30,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
   }
 
   const body = (await request.json().catch(() => ({}))) as LinkTokenBody;
@@ -63,8 +75,18 @@ export async function POST(request: Request) {
   try {
     const response = await plaidClient.linkTokenCreate(linkRequest);
     return NextResponse.json({ link_token: response.data.link_token });
-  } catch (error: any) {
-    const plaidError = error?.response?.data ?? { message: "Unknown Plaid error" };
+  } catch (error: unknown) {
+    const plaidError =
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      typeof (error as { response?: unknown }).response === "object"
+        ? (
+            (error as { response?: { data?: unknown } }).response?.data ?? {
+              message: "Unknown Plaid error",
+            }
+          )
+        : { message: "Unknown Plaid error" };
     return NextResponse.json(
       {
         error: "Plaid link-token failed",

@@ -8,7 +8,6 @@ import { categorizeTransactions } from "@/lib/categorize";
 import { computeCashOnHand, hydrateGoals } from "@/lib/goals";
 import { resolveCategoryColor } from "@/lib/categoryColors";
 import {
-  accountKind,
   detectInternalTransfers,
   classifyTransactionType,
   incomePattern,
@@ -203,7 +202,7 @@ const serializeGoal = (goal: {
 });
 
 export const getClientOverviewData = async (user: User) => {
-  let [accounts, goals, transactions, categorySettings, plaidItems] =
+  const [accounts, goals, initialTransactions, categorySettings, plaidItems] =
     await Promise.all([
     prisma.account.findMany({ where: { userId: user.id } }),
     prisma.goal.findMany({ where: { userId: user.id } }),
@@ -217,6 +216,7 @@ export const getClientOverviewData = async (user: User) => {
       orderBy: { updatedAt: "desc" },
     }),
   ]);
+  let transactions = initialTransactions;
   const latestReview = await prisma.coachReview.findFirst({
     where: { clientId: user.id },
     orderBy: { createdAt: "desc" },
@@ -726,9 +726,11 @@ type DistributionCategory = {
 export const getDistributionData = async (user: User) => {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lookbackStart = new Date(now);
+  lookbackStart.setDate(lookbackStart.getDate() - 730);
   const [transactions, accounts, categoryGroups] = await Promise.all([
     prisma.transaction.findMany({
-      where: { userId: user.id, date: { gte: monthStart } },
+      where: { userId: user.id, date: { gte: lookbackStart } },
       include: { splits: true },
       orderBy: { date: "desc" },
     }),
@@ -843,35 +845,50 @@ export const getDistributionData = async (user: User) => {
       !investmentTransactions.includes(tx)
   );
 
-  const incomeTotal = incomeTransactions.reduce(
+  const isCurrentMonth = (date: Date) => date >= monthStart;
+
+  const incomeTotal = incomeTransactions
+    .filter((tx) => isCurrentMonth(tx.date))
+    .reduce(
     (acc, tx) => acc + Math.abs(tx.amount),
     0
   );
-  const spendTotal = spendTransactions.reduce(
+  const spendTotal = spendTransactions
+    .filter((tx) => isCurrentMonth(tx.date))
+    .reduce(
     (acc, tx) => acc + Math.abs(tx.amount),
     0
   );
-  const investmentTotal = investmentTransactions.reduce(
+  const investmentTotal = investmentTransactions
+    .filter((tx) => isCurrentMonth(tx.date))
+    .reduce(
     (acc, tx) => acc + Math.abs(tx.amount),
     0
   );
-  const transferTotal = transferTransactions.reduce(
+  const transferTotal = transferTransactions
+    .filter((tx) => isCurrentMonth(tx.date))
+    .reduce(
     (acc, tx) => acc + Math.abs(tx.amount),
     0
   );
-  const pairedOutflowIds = new Set(internalTransferOutflows.map((tx) => tx.id));
   const unpairedInflows = internalTransferInflows.filter(
     (tx) => !internalTransferMatch.internalIds.has(tx.id)
   );
   const internalTransferTotal =
-    internalTransferOutflows.reduce((acc, tx) => acc + Math.abs(tx.amount), 0) +
-    unpairedInflows.reduce((acc, tx) => acc + Math.abs(tx.amount), 0);
+    internalTransferOutflows
+      .filter((tx) => isCurrentMonth(tx.date))
+      .reduce((acc, tx) => acc + Math.abs(tx.amount), 0) +
+    unpairedInflows
+      .filter((tx) => isCurrentMonth(tx.date))
+      .reduce((acc, tx) => acc + Math.abs(tx.amount), 0);
 
   const categoryMap = new Map<string, number>();
   const groupTotals = new Map<string, number>();
   const categoriesByGroup = new Map<string, Map<string, number>>();
 
-  spendTransactions.forEach((tx) => {
+  spendTransactions
+    .filter((tx) => isCurrentMonth(tx.date))
+    .forEach((tx) => {
     const rawCategory = tx.category?.trim() || "Uncategorized";
     const groupName = groupMap.get(rawCategory.toLowerCase()) ?? "Other";
 
@@ -892,7 +909,7 @@ export const getDistributionData = async (user: User) => {
       rawCategory,
       (groupMapEntry.get(rawCategory) ?? 0) + Math.abs(tx.amount)
     );
-  });
+    });
 
   const sortedCategories = Array.from(categoryMap.entries())
     .map(([name, value]) => ({ name, value }))
@@ -1245,6 +1262,39 @@ export const getDistributionData = async (user: User) => {
 
   const inflowLabel = inflowFallbackNeeded ? "Inflows" : "Income";
 
+  const internalIds = internalTransferMatch.internalIds;
+  const investmentIds = new Set(investmentTransactions.map((tx) => tx.id));
+  const transferIds = new Set(transferTransactions.map((tx) => tx.id));
+  const cashFlowTransactions = usableTransactions.map((tx) => {
+    const amount = Math.abs(tx.amount);
+    let type:
+      | "income"
+      | "spend"
+      | "internal_transfer"
+      | "transfer"
+      | "investment";
+    if (isIncomeTransaction(tx)) {
+      type = "income";
+    } else if (internalIds.has(tx.id) || tx.transactionType === "INTERNAL_TRANSFER") {
+      type = "internal_transfer";
+    } else if (investmentIds.has(tx.id)) {
+      type = "investment";
+    } else if (transferIds.has(tx.id) || isTransferTransaction(tx)) {
+      type = "transfer";
+    } else {
+      type = "spend";
+    }
+    return {
+      id: tx.id,
+      date: tx.date.toISOString(),
+      name: tx.merchantName ?? tx.name ?? "Transaction",
+      category: normalizeCategory(tx.category),
+      amount,
+      type,
+      excluded: false,
+    };
+  });
+
   return {
     clientName: getDisplayName(user),
     rangeLabel: "This month",
@@ -1259,5 +1309,6 @@ export const getDistributionData = async (user: User) => {
     categories,
     nodes,
     links,
+    cashFlowTransactions,
   };
 };

@@ -49,6 +49,14 @@ export async function GET(request: Request) {
       categoryName,
       settingsMap.get(categoryName.toLowerCase()) ?? null
     );
+  const displayCategory = (tx: {
+    category?: string | null;
+    transactionType?: string | null;
+  }) => {
+    if (tx.transactionType === "INTERNAL_TRANSFER") return "Internal transfer";
+    if (tx.transactionType === "INCOME") return "Income";
+    return tx.category ?? "Uncategorized";
+  };
 
   const data = transactions.flatMap((tx) => {
     const label = tx.merchantName ?? tx.name;
@@ -62,8 +70,8 @@ export async function GET(request: Request) {
           id: tx.id,
           baseId: tx.id,
           name: label,
-          category: tx.category ?? "Uncategorized",
-          categoryColor: resolveTxColor(tx.category ?? "Uncategorized"),
+          category: displayCategory(tx),
+          categoryColor: resolveTxColor(displayCategory(tx)),
           amount: Math.abs(tx.amount),
           isIncome: tx.amount < 0,
           transactionType: tx.transactionType,
@@ -100,8 +108,8 @@ export async function GET(request: Request) {
               id: `${tx.id}-remainder`,
               baseId: tx.id,
               name: `${label} (Remainder)`,
-              category: tx.category ?? "Uncategorized",
-              categoryColor: resolveTxColor(tx.category ?? "Uncategorized"),
+              category: displayCategory(tx),
+              categoryColor: resolveTxColor(displayCategory(tx)),
               amount: remaining,
               isIncome: sign < 0,
               transactionType: tx.transactionType,

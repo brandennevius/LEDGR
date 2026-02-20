@@ -168,10 +168,8 @@ export function CategoriesScreen() {
   const [groupCategories, setGroupCategories] = useState('');
   const [groupBudget, setGroupBudget] = useState('');
   const [groupDraft, setGroupDraft] = useState<string>('');
-  const [nameEditOpen, setNameEditOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [nameColorDraft, setNameColorDraft] = useState(CATEGORY_COLORS[0]);
-  const [nameEditError, setNameEditError] = useState<string | null>(null);
   const [transactionDetailOpen, setTransactionDetailOpen] = useState(false);
   const [transactionDetailLoading, setTransactionDetailLoading] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionDetail | null>(null);
@@ -184,6 +182,7 @@ export function CategoriesScreen() {
   const [editingTransactionAmount, setEditingTransactionAmount] = useState(false);
   const [categoryChoices, setCategoryChoices] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [deletingCategory, setDeletingCategory] = useState(false);
   const currentMonthLabel = useMemo(
     () => new Date().toLocaleDateString('en-US', { month: 'short' }),
     []
@@ -322,6 +321,8 @@ export function CategoriesScreen() {
 
   const openEdit = () => {
     if (!selectedRow) return;
+    setNameDraft(selectedRow.name);
+    setNameColorDraft(resolveCategoryColor(selectedRow));
     setBudgetDraft(selectedRow.budget ? String(selectedRow.budget) : '');
     setEssentialDraft(selectedRow.essential);
     setGroupDraft(selectedGroupId);
@@ -331,44 +332,9 @@ export function CategoriesScreen() {
   };
 
   const saveCategory = async () => {
-    if (!selectedRow) return;
-    setSaving(true);
-    try {
-      await apiRequest('/api/categories', {
-        method: 'POST',
-        body: {
-          name: selectedRow.name,
-          essential: essentialDraft,
-          monthlyBudget: budgetDraft ? Number(budgetDraft) : null,
-        },
-      });
-      await apiRequest('/api/category-groups', {
-        method: 'PATCH',
-        body: {
-          categoryName: selectedRow.name,
-          groupId: groupDraft || null,
-        },
-      });
-      await load();
-    } finally {
-      setSaving(false);
-      setEditOpen(false);
-    }
-  };
-
-  const openNameEditor = () => {
-    if (!selectedRow) return;
-    setNameDraft(selectedRow.name);
-    setNameColorDraft(resolveCategoryColor(selectedRow));
-    setNameEditError(null);
-    setCategoryDetailOpen(false);
-    setTimeout(() => setNameEditOpen(true), 180);
-  };
-
-  const saveNameAndColor = async () => {
     if (!selectedRow || !nameDraft.trim()) return;
-    setSaving(true);
     const nextName = nameDraft.trim();
+    setSaving(true);
     try {
       await apiRequest('/api/categories', {
         method: 'POST',
@@ -376,24 +342,41 @@ export function CategoriesScreen() {
           currentName: selectedRow.name,
           name: nextName,
           color: nameColorDraft,
-          essential: selectedRow.essential,
-          monthlyBudget: selectedRow.budget,
+          essential: essentialDraft,
+          monthlyBudget: budgetDraft ? Number(budgetDraft) : null,
         },
       });
-      await load();
-      await loadCategoryChoices();
+      await apiRequest('/api/category-groups', {
+        method: 'PATCH',
+        body: {
+          categoryName: nextName,
+          groupId: groupDraft || null,
+        },
+      });
       setSelected(nextName);
-      setNameEditOpen(false);
-      setCategoryDetailOpen(true);
-      setNameEditError(null);
-    } catch (err) {
-      const message =
-        typeof err === 'object' && err && 'error' in err
-          ? String((err as { error?: string }).error)
-          : 'Unable to update category name/color.';
-      setNameEditError(message);
+      await loadCategoryChoices();
+      await load();
     } finally {
       setSaving(false);
+      setEditOpen(false);
+    }
+  };
+
+  const deleteCategory = async () => {
+    if (!selectedRow) return;
+    setDeletingCategory(true);
+    try {
+      await apiRequest('/api/categories', {
+        method: 'DELETE',
+        body: { name: selectedRow.name },
+      });
+      setEditOpen(false);
+      setCategoryDetailOpen(false);
+      setSelected('');
+      await loadCategoryChoices();
+      await load();
+    } finally {
+      setDeletingCategory(false);
     }
   };
 
@@ -466,8 +449,9 @@ export function CategoriesScreen() {
 
   const saveTransactionDetail = async () => {
     if (!selectedTransaction) return;
+    const isCategorizationDisabled = transactionTypeInput !== 'REGULAR';
     const nextCategory = transactionCategoryInput.trim();
-    if (!nextCategory) return;
+    if (!isCategorizationDisabled && !nextCategory) return;
     const parsedAmount = Number(transactionAmountInput);
     if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
       setError('Enter a valid amount before saving.');
@@ -477,23 +461,25 @@ export function CategoriesScreen() {
     const signedAmount = parsedAmount * (selectedTransaction.amount < 0 ? -1 : 1);
     setSavingTransaction(true);
     try {
-      const existing = new Set((categoryChoices ?? []).map((name) => name.toLowerCase()));
-      if (!existing.has(nextCategory.toLowerCase())) {
-        await apiRequest('/api/categories', {
-          method: 'POST',
-          body: {
-            name: nextCategory,
-            color: fallbackCategoryColor(nextCategory),
-            essential: false,
-            monthlyBudget: null,
-          },
-        });
+      if (!isCategorizationDisabled) {
+        const existing = new Set((categoryChoices ?? []).map((name) => name.toLowerCase()));
+        if (!existing.has(nextCategory.toLowerCase())) {
+          await apiRequest('/api/categories', {
+            method: 'POST',
+            body: {
+              name: nextCategory,
+              color: fallbackCategoryColor(nextCategory),
+              essential: false,
+              monthlyBudget: null,
+            },
+          });
+        }
       }
       await apiRequest(`/api/transactions/${selectedTransaction.id}`, {
         method: 'PATCH',
         body: {
           amount: signedAmount,
-          category: nextCategory,
+          ...(isCategorizationDisabled ? {} : { category: nextCategory }),
           transactionType: transactionTypeInput,
         },
       });
@@ -514,7 +500,11 @@ export function CategoriesScreen() {
 
   return (
     <Screen title="Categories" subtitle="Monthly spend against budget." edgeToEdge>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.headerRow}>
           <View>
             <Text style={styles.headerTitle}>This month</Text>
@@ -621,8 +611,6 @@ export function CategoriesScreen() {
                     <Text
                       style={styles.compactAmount}
                       numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.7}
                     >
                       {formatCurrencyCompact(row.spend)}
                     </Text>
@@ -640,8 +628,6 @@ export function CategoriesScreen() {
                     <Text
                       style={styles.compactBudget}
                       numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.7}
                     >
                       {row.budget ? formatCurrencyCompact(row.budget) : '--'}
                     </Text>
@@ -656,12 +642,16 @@ export function CategoriesScreen() {
 
       <ModalSheet visible={categoryDetailOpen} onClose={() => setCategoryDetailOpen(false)}>
         {selectedRow ? (
-          <ScrollView contentContainerStyle={styles.categoryDetailContent} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.categoryDetailContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={styles.detailHeader}>
               <View>
                 <View style={styles.detailTitleWrap}>
                   <View style={[styles.categoryDot, { backgroundColor: selectedCategoryColor }]} />
-                  <Pressable onPress={openNameEditor} hitSlop={10} style={styles.nameEditButton}>
+                  <Pressable onPress={openEdit} hitSlop={10} style={styles.nameEditButton}>
                     <Text style={[styles.sectionTitle, { color: selectedCategoryColor }]}>
                       {selectedRow.name}
                     </Text>
@@ -670,7 +660,7 @@ export function CategoriesScreen() {
                 <Text style={styles.sectionSubtitle}>
                   {selectedRow.essential ? 'Essential' : 'Flexible'} · {selectedRow.status}
                 </Text>
-                <Pressable onPress={openNameEditor} hitSlop={8}>
+                <Pressable onPress={openEdit} hitSlop={8}>
                   <Text style={styles.tapHint}>Edit name and color</Text>
                 </Pressable>
               </View>
@@ -681,7 +671,12 @@ export function CategoriesScreen() {
 
             <Text style={styles.sheetSectionTitle}>By month</Text>
             <View style={styles.chartCard}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chartRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chartRow}
+                keyboardShouldPersistTaps="handled"
+              >
                 {monthlySeries.map((month) => {
                   const height = Math.max(4, (month.value / chartMax) * 96);
                   return (
@@ -754,6 +749,18 @@ export function CategoriesScreen() {
 
       <ModalSheet visible={editOpen} onClose={() => setEditOpen(false)}>
         <Text style={styles.modalTitle}>Update category</Text>
+        <Text style={styles.modalSubLabel}>Category name</Text>
+        <TextInput
+          value={nameDraft}
+          onChangeText={setNameDraft}
+          placeholder="Category name"
+          placeholderTextColor={colors.textMuted}
+          style={styles.input}
+          blurOnSubmit={false}
+        />
+        <Text style={styles.modalSubLabel}>Category color</Text>
+        <ColorPalettePicker selected={nameColorDraft} onSelect={setNameColorDraft} />
+        <Text style={styles.modalSubLabel}>Monthly budget</Text>
         <TextInput
           value={budgetDraft}
           onChangeText={setBudgetDraft}
@@ -771,7 +778,12 @@ export function CategoriesScreen() {
           </Text>
         </Pressable>
         <Text style={styles.modalSubLabel}>Category group</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.groupChipsRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.groupChipsRow}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.groupChipWrap}>
             <Chip label="No group" active={!groupDraft} onPress={() => setGroupDraft('')} />
           </View>
@@ -788,21 +800,12 @@ export function CategoriesScreen() {
         <Pressable style={styles.primaryButton} onPress={saveCategory} disabled={saving}>
           <Text style={styles.primaryLabel}>{saving ? 'Saving...' : 'Save'}</Text>
         </Pressable>
-      </ModalSheet>
-
-      <ModalSheet visible={nameEditOpen} onClose={() => setNameEditOpen(false)}>
-        <Text style={styles.modalTitle}>Edit category identity</Text>
-        <TextInput
-          value={nameDraft}
-          onChangeText={setNameDraft}
-          placeholder="Category name"
-          placeholderTextColor={colors.textMuted}
-          style={styles.input}
-        />
-        <ColorPalettePicker selected={nameColorDraft} onSelect={setNameColorDraft} />
-        {nameEditError ? <Text style={styles.errorText}>{nameEditError}</Text> : null}
-        <Pressable style={styles.primaryButton} onPress={saveNameAndColor} disabled={saving}>
-          <Text style={styles.primaryLabel}>{saving ? 'Saving...' : 'Save name and color'}</Text>
+        <Pressable
+          style={styles.dangerButton}
+          onPress={deleteCategory}
+          disabled={deletingCategory || saving}
+        >
+          <Text style={styles.dangerLabel}>{deletingCategory ? 'Deleting...' : 'Delete category'}</Text>
         </Pressable>
       </ModalSheet>
 
@@ -813,7 +816,11 @@ export function CategoriesScreen() {
             <Text style={styles.loadingText}>Loading details...</Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={styles.transactionDetailContent} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.transactionDetailContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             <Text style={styles.modalTitle}>{selectedTransaction.name}</Text>
             <Text style={styles.sectionSubtitle}>
               {selectedTransaction.account?.institutionName ?? 'Account'} · {formatDayLabel(selectedTransaction.date)}
@@ -827,6 +834,7 @@ export function CategoriesScreen() {
                 keyboardType="decimal-pad"
                 autoFocus
                 selectTextOnFocus
+                blurOnSubmit={false}
               />
             ) : (
               <Pressable onPress={() => setEditingTransactionAmount(true)}>
@@ -838,31 +846,48 @@ export function CategoriesScreen() {
             )}
 
             <Text style={styles.modalSubLabel}>Category</Text>
-            <TextInput
-              value={transactionCategoryInput}
-              onChangeText={setTransactionCategoryInput}
-              placeholder="Set or create category"
-              placeholderTextColor={colors.textMuted}
-              style={styles.input}
-            />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.groupChipsRow}>
-              {categoryChoices.map((category) => (
-                <View key={category} style={styles.groupChipWrap}>
-                  <Chip
-                    label={category}
-                    active={transactionCategoryInput.trim().toLowerCase() === category.toLowerCase()}
-                    onPress={() => setTransactionCategoryInput(category)}
-                  />
-                </View>
-              ))}
-            </ScrollView>
+            {transactionTypeInput !== 'REGULAR' ? (
+              <Text style={styles.emptyText}>Categories are only available for regular transactions.</Text>
+            ) : (
+              <>
+                <TextInput
+                  value={transactionCategoryInput}
+                  onChangeText={setTransactionCategoryInput}
+                  placeholder="Set or create category"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
+                  blurOnSubmit={false}
+                />
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.groupChipsRow}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {categoryChoices.map((category) => (
+                    <View key={category} style={styles.groupChipWrap}>
+                      <Chip
+                        label={category}
+                        active={transactionCategoryInput.trim().toLowerCase() === category.toLowerCase()}
+                        onPress={() => setTransactionCategoryInput(category)}
+                      />
+                    </View>
+                  ))}
+                </ScrollView>
+              </>
+            )}
 
             <Text style={styles.modalSubLabel}>Transaction type</Text>
             <View style={styles.typeRow}>
               {(['REGULAR', 'INCOME', 'INTERNAL_TRANSFER'] as const).map((type) => (
                 <Pressable
                   key={type}
-                  onPress={() => setTransactionTypeInput(type)}
+                  onPress={() => {
+                    setTransactionTypeInput(type);
+                    if (type !== 'REGULAR') {
+                      setTransactionCategoryInput('');
+                    }
+                  }}
                   style={[styles.typeChip, transactionTypeInput === type && styles.typeChipActive]}
                 >
                   <Text style={[styles.typeChipText, transactionTypeInput === type && styles.typeChipTextActive]}>
@@ -1063,6 +1088,19 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontWeight: '700',
   },
+  dangerButton: {
+    borderRadius: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.danger,
+    marginTop: 8,
+  },
+  dangerLabel: {
+    color: colors.danger,
+    fontWeight: '700',
+    fontSize: 12,
+  },
   secondaryButton: {
     borderRadius: 12,
     paddingHorizontal: 12,
@@ -1230,12 +1268,12 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   compactAmount: {
-    width: 56,
+    width: 66,
     color: colors.text,
-    fontSize: 14,
-    lineHeight: 17,
+    fontSize: 15,
+    lineHeight: 18,
     textAlign: 'right',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   compactBarTrack: {
     flex: 1,
@@ -1250,12 +1288,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   compactBudget: {
-    width: 56,
+    width: 66,
     color: colors.text,
-    fontSize: 14,
-    lineHeight: 17,
+    fontSize: 15,
+    lineHeight: 18,
     textAlign: 'right',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   detailHeader: {
     flexDirection: 'row',

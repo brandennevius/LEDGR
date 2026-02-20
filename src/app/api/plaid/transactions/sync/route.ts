@@ -9,11 +9,23 @@ import {
   detectInternalTransfers,
   normalizeName,
 } from "@/lib/transactionRules";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 export async function POST() {
   const user = await getAuthedUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const limit = checkRateLimit({
+    key: `plaid:transactions-sync:${user.id}`,
+    limit: 20,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
   }
   const items = await prisma.plaidItem.findMany({
     where: { userId: user.id, status: "active" },
@@ -85,6 +97,15 @@ export async function POST() {
     );
     const ruleCategory = matchedRule?.category ?? null;
     const ruleType = matchedRule?.transactionType ?? null;
+
+    const existingTx = await prisma.transaction.findUnique({
+      where: { plaidTransactionId: tx.transaction_id },
+      select: { userId: true },
+    });
+    if (existingTx && existingTx.userId !== user.id) {
+      continue;
+    }
+
     await prisma.transaction.upsert({
       where: { plaidTransactionId: tx.transaction_id },
       update: {

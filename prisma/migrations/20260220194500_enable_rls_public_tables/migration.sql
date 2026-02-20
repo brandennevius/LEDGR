@@ -1,0 +1,18 @@
+-- Enable RLS on all app tables exposed in public schema.
+-- No policies are added here; this intentionally blocks anon/authenticated PostgREST access
+-- until explicit policies are created.
+
+ALTER TABLE IF EXISTS public."_prisma_migrations" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public."User" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public."Goal" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public."CoachClient" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public."PlaidItem" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public."CoachReview" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public."Thread" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public."Message" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public."Transaction" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public."Account" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public."CategoryGroup" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public."CategoryRule" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public."TransactionSplit" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public."Category" ENABLE ROW LEVEL SECURITY;

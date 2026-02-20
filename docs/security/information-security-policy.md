@@ -3,9 +3,9 @@
 - Document owner: Branden Nevius (Founder / Engineering)
 - Security contact: brandennevius@gmail.com
 - Effective date: 2026-02-15
-- Last reviewed: 2026-02-15
+- Last reviewed: 2026-02-20
 - Review cadence: At least annually, and after material architecture changes
-- Version: 1.0
+- Version: 1.1
 
 ## 1) Purpose
 
@@ -80,6 +80,8 @@ LEDGR development security requirements:
 - Keep framework and dependency versions current and patch known vulnerabilities
 - Review security impact for changes affecting Plaid, auth, payments, or data models
 - Verify webhook authenticity for security-sensitive integrations
+- Enforce ownership checks before mutating third-party linked resources (Plaid item/account/transaction IDs)
+- Apply rate limiting controls to high-risk and high-cost endpoints (Plaid sync and AI endpoints)
 
 ## 8) Logging, Monitoring, and Alerting
 
@@ -90,6 +92,12 @@ LEDGR will maintain operational visibility for:
 - Production incidents affecting data synchronization or user access
 
 Monitoring sources may include hosted platform logs and provider dashboards.
+
+Current baseline includes:
+
+- Supabase security advisor checks and alerts
+- Vercel runtime/error logs
+- Endpoint-level 429 responses for rate-limit events
 
 ## 9) Incident Response
 
@@ -125,7 +133,7 @@ Any exception to this policy must include:
 - Risk acceptance by the document owner
 - Expiration date and remediation plan
 
-## 13) Policy Operational Status (as of 2026-02-15)
+## 13) Policy Operational Status (as of 2026-02-20)
 
 This section is included so external compliance responses remain accurate.
 
@@ -135,6 +143,12 @@ Implemented now:
 - Plaid webhook signature verification route is implemented
 - Plaid access credentials are stored server-side, not client-side
 - Data deletion endpoints exist for account/transaction cleanup
+- Supabase RLS is enabled on all public-schema application tables
+- Authentication allowlist gating is implemented via `ALLOWED_EMAILS`
+- Sensitive API routes include rate limiting:
+  - Plaid link/exchange/sync routes
+  - AI insight and recategorization routes
+- Plaid sync/exchange includes ownership conflict guards to prevent cross-user reassignment of linked resources
 
 In progress / requires formalization:
 
@@ -142,3 +156,4 @@ In progress / requires formalization:
 - Written risk register and periodic risk review log
 - Formal vulnerability management runbook and patch cadence log
 - Formal incident-response playbook with contact tree
+- Centralized alert routing (email/pager) for auth anomalies and repeated 429/5xx patterns

@@ -12,6 +12,13 @@ const normalizeCategory = (value?: string | null) => {
   if (trimmed.toLowerCase() === "split") return "Uncategorized";
   return trimmed;
 };
+const isTransferCategoryName = (value?: string | null) => {
+  const key = String(value ?? "").trim().toLowerCase();
+  if (!key) return false;
+  return /(transfer[_\s-]*out|transfer[_\s-]*in|internal[_\s-]*transfer)/i.test(
+    key
+  );
+};
 
 export async function GET() {
   const user = await getAuthedUser();
@@ -47,9 +54,12 @@ export async function GET() {
   const spendEntries: SpendEntry[] = [];
   transactions.forEach((tx) => {
     if (tx.amount <= 0) return;
+    if (tx.transactionType !== "REGULAR") return;
     if (tx.splits.length === 0) {
+      const category = normalizeCategory(tx.category);
+      if (isTransferCategoryName(category)) return;
       spendEntries.push({
-        category: normalizeCategory(tx.category),
+        category,
         amount: tx.amount,
         date: tx.date,
       });
@@ -61,7 +71,7 @@ export async function GET() {
         category: normalizeCategory(split.category),
         amount: Math.max(0, Math.abs(split.amount)),
       }))
-      .filter((row) => row.amount > 0);
+      .filter((row) => row.amount > 0 && !isTransferCategoryName(row.category));
     const splitTotal = splitRows.reduce((sum, row) => sum + row.amount, 0);
     splitRows.forEach((row) => {
       spendEntries.push({
@@ -73,8 +83,10 @@ export async function GET() {
 
     const remainder = Math.max(0, Math.abs(tx.amount) - splitTotal);
     if (remainder > 0.01) {
+      const category = normalizeCategory(tx.category);
+      if (isTransferCategoryName(category)) return;
       spendEntries.push({
-        category: normalizeCategory(tx.category),
+        category,
         amount: remainder,
         date: tx.date,
       });
@@ -97,7 +109,9 @@ export async function GET() {
   const categoryNames = new Set([
     ...Array.from(currentSpend.keys()),
     ...Array.from(prevSpend.keys()),
-    ...settings.map((item) => item.name),
+    ...settings
+      .map((item) => item.name)
+      .filter((name) => !isTransferCategoryName(name)),
   ]);
 
   const categories = Array.from(categoryNames)
@@ -180,6 +194,9 @@ export async function GET() {
   });
 
   const transactionsData = transactions.flatMap((tx) => {
+    if (tx.transactionType !== "REGULAR") {
+      return [];
+    }
     if (tx.splits.length === 0) {
       return [
         {
@@ -200,7 +217,7 @@ export async function GET() {
         category: normalizeCategory(split.category),
         date: tx.date.toISOString(),
       }))
-      .filter((row) => row.amount > 0);
+      .filter((row) => row.amount > 0 && !isTransferCategoryName(row.category));
 
     const splitTotal = splitRows.reduce((sum, row) => sum + row.amount, 0);
     const remainder = Math.max(0, Math.abs(tx.amount) - splitTotal);
@@ -217,7 +234,10 @@ export async function GET() {
           ]
         : [];
 
-    return [...splitRows, ...remainderRow];
+    return [
+      ...splitRows,
+      ...remainderRow.filter((row) => !isTransferCategoryName(row.category)),
+    ];
   });
 
   return NextResponse.json({

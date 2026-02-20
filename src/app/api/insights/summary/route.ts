@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth";
 import { getClientOverviewData } from "@/lib/dashboardData";
 import { getOpenAI } from "@/lib/openai";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 const summarySchema = {
   type: "object",
@@ -18,6 +19,17 @@ export async function POST() {
   const user = await getAuthedUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const limit = checkRateLimit({
+    key: `insights:summary:${user.id}`,
+    limit: 20,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
   }
 
   const { snapshot, goals, clientName, budgetSnapshot, budgetRecommendations } =
@@ -78,7 +90,7 @@ export async function POST() {
       ...parsed,
       source: "openai",
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({
       summary: "AI summary failed. Showing rule-based insights.",
       highlights: snapshot.aiHighlights,
