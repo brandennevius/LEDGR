@@ -83,6 +83,12 @@ npm run run:ios:prod
 npm run start:prod
 ```
 
+If you switch environments and still see old data:
+
+1. Delete the app from simulator/device (clears stored session).
+2. Re-run `npm run run:ios:dev` (or prod).
+3. Start Metro with matching script (`start:dev` or `start:prod`).
+
 The app intentionally blocks OAuth in Expo Go to avoid non-production redirect behavior.
 
 ## 5) EAS builds (App Store / Play)
