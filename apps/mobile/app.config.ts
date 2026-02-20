@@ -54,6 +54,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       'expo-font',
       'expo-secure-store',
       'expo-web-browser',
+      [
+        'expo-local-authentication',
+        {
+          faceIDPermission: 'Allow LEDGR to use Face ID to unlock the app.',
+        },
+      ],
       './plugins/with-path-safe-ios-scripts',
     ],
     extra: {
