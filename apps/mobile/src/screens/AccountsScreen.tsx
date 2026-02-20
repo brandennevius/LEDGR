@@ -64,6 +64,21 @@ export function AccountsScreen() {
   const [removingAll, setRemovingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const getErrorMessage = (err: unknown, fallback: string) => {
+    if (typeof err === 'object' && err !== null) {
+      const maybe = err as { error?: unknown; plaid?: unknown };
+      const apiError =
+        typeof maybe.error === 'string' && maybe.error.length > 0 ? maybe.error : null;
+      const plaidError =
+        typeof maybe.plaid === 'object' && maybe.plaid !== null
+          ? JSON.stringify(maybe.plaid)
+          : null;
+      if (apiError && plaidError) return `${apiError}: ${plaidError}`;
+      if (apiError) return apiError;
+    }
+    return fallback;
+  };
+
   const load = async () => {
     try {
       const data = await apiRequest<OverviewResponse>('/api/client/overview');
@@ -167,8 +182,8 @@ export function AccountsScreen() {
           }
         },
       });
-    } catch {
-      setError('Unable to start Plaid Link on this build.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Unable to start Plaid Link on this build.'));
     } finally {
       setLinking(false);
     }
@@ -196,15 +211,15 @@ export function AccountsScreen() {
           }
         },
       });
-    } catch {
-      setError('Unable to update this connection right now.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Unable to update this connection right now.'));
     } finally {
       setRepairingItemId(null);
     }
   };
 
   return (
-    <Screen title="Accounts" subtitle="Manage connected banks and sync status." edgeToEdge>
+    <Screen edgeToEdge>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <View>

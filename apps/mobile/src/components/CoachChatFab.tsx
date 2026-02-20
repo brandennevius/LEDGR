@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -20,6 +20,16 @@ type ChatMessage = {
   role: 'user' | 'assistant';
   content: string;
 };
+
+const INITIAL_CHAT: ChatMessage[] = [
+  {
+    role: 'assistant',
+    content:
+      "I'm Penny. Ask about spending patterns, categories, or where to cut this month.",
+  },
+];
+
+let persistedMessages: ChatMessage[] = [...INITIAL_CHAT];
 
 type TextSegment = {
   text: string;
@@ -61,13 +71,11 @@ export function CoachChatFab({ variant = 'fab' }: CoachChatFabProps) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'assistant',
-      content:
-        "I'm Penny. Ask about spending patterns, categories, or where to cut this month.",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(persistedMessages);
+
+  useEffect(() => {
+    persistedMessages = messages;
+  }, [messages]);
 
   const bottomOffset = useMemo(() => Math.max(24, insets.bottom + 12), [insets.bottom]);
 
@@ -156,13 +164,8 @@ export function CoachChatFab({ variant = 'fab' }: CoachChatFabProps) {
   };
 
   const clearThread = () => {
-    setMessages([
-      {
-        role: 'assistant',
-        content:
-          "I'm Penny. Ask about spending patterns, categories, or where to cut this month.",
-      },
-    ]);
+    persistedMessages = [...INITIAL_CHAT];
+    setMessages([...INITIAL_CHAT]);
   };
 
   const trigger =

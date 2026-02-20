@@ -266,7 +266,7 @@ export function GoalsScreen() {
   };
 
   return (
-    <Screen title="Goals" subtitle="Set goals and track progress." edgeToEdge>
+    <Screen edgeToEdge>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <Pressable

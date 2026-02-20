@@ -416,7 +416,7 @@ export function DistributionScreen() {
   }, [selectedBucket, selectedMetric]);
 
   return (
-    <Screen title="Cash Flow" subtitle="Income, spending, and net flow." edgeToEdge>
+    <Screen edgeToEdge>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingCard}>
