@@ -9,7 +9,21 @@ const BUNDLE_SCRIPT_PATCH =
   'RN_XCODE_SCRIPT_PATH="$("$NODE_BINARY" --print "require(\'path\').dirname(require.resolve(\'react-native/package.json\')) + \'/scripts/react-native-xcode.sh\'")"\\n"$RN_XCODE_SCRIPT_PATH"';
 
 const PODFILE_MARKER = '# Path-safe script patch for folders containing spaces';
-const PODFILE_PATCH = `\n    ${PODFILE_MARKER}\n    installer.pods_project.targets.each do |target|\n      next unless target.name == 'EXConstants'\n\n      target.shell_script_build_phases.each do |phase|\n        next unless phase.name&.include?('Generate app.config')\n\n        phase.shell_script = 'bash -l -c "\\\\"$PODS_TARGET_SRCROOT/../scripts/get-app-config-ios.sh\\\\""'\n      end\n    end\n\n    installer.pods_project.save`;
+const PODFILE_PATCH = `
+    ${PODFILE_MARKER}
+    installer.pods_project.targets.each do |target|
+      target.shell_script_build_phases.each do |phase|
+        if target.name == 'EXConstants' && phase.name&.include?('Generate app.config')
+          phase.shell_script = 'bash -l -c "\\"$PODS_TARGET_SRCROOT/../scripts/get-app-config-ios.sh\\""'
+        end
+
+        if target.name == 'EXUpdates' && phase.name&.include?('Generate updates resources')
+          phase.shell_script = 'bash -l -c "\\"$PODS_TARGET_SRCROOT/../scripts/create-updates-resources-ios.sh\\""'
+        end
+      end
+    end
+
+    installer.pods_project.save`;
 
 function patchBundleBuildPhase(config) {
   return withXcodeProject(config, (cfg) => {
