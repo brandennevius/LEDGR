@@ -499,7 +499,7 @@ export function CategoriesScreen() {
   };
 
   return (
-    <Screen title="Categories" subtitle="Monthly spend against budget." edgeToEdge>
+    <Screen edgeToEdge>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -570,8 +570,11 @@ export function CategoriesScreen() {
 
         <View style={styles.listHeader}>
           <Text style={styles.listHeaderCategory}>Category</Text>
-          <Text style={styles.listHeaderAmount}>Spent</Text>
-          <Text style={styles.listHeaderBudget}>Budget</Text>
+          <View style={styles.listHeaderMetrics}>
+            <Text style={styles.listHeaderAmount}>Spent</Text>
+            <View style={styles.listHeaderBarSpacer} />
+            <Text style={styles.listHeaderBudget}>Budget</Text>
+          </View>
         </View>
 
         {(overview?.categories ?? []).length === 0 ? (
@@ -1183,15 +1186,22 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   listHeaderCategory: {
-    flex: 1,
+    flex: 0.39,
     color: colors.textMuted,
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.7,
   },
+  listHeaderMetrics: {
+    flex: 0.61,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+  },
   listHeaderAmount: {
-    width: 64,
+    width: 66,
     color: colors.textMuted,
     fontSize: 11,
     fontWeight: '700',
@@ -1199,8 +1209,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
     textAlign: 'right',
   },
+  listHeaderBarSpacer: {
+    flex: 1,
+    minWidth: 62,
+  },
   listHeaderBudget: {
-    width: 64,
+    width: 66,
     color: colors.textMuted,
     fontSize: 11,
     fontWeight: '700',

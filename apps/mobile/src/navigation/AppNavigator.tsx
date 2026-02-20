@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { AppState, AppStateStatus, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { Ionicons } from '@expo/vector-icons';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { NavigationContainer } from '@react-navigation/native';
 
 import { CoachChatFab } from '../components/CoachChatFab';
 import { AccountsScreen } from '../screens/AccountsScreen';
@@ -16,141 +17,155 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { TransactionsScreen } from '../screens/TransactionsScreen';
 import { colors, navigationTheme } from '../theme';
 
-const FACE_ID_REQUIRED_KEY = 'settings.faceIdRequired';
-
-const Tab = createBottomTabNavigator();
+const TopTab = createMaterialTopTabNavigator();
+const Stack = createNativeStackNavigator();
+const chrome = colors.chrome as string;
+const chromeText = colors.chromeText as string;
+const cardBorder = colors.cardBorder as string;
+const primary = colors.primary as string;
+const text = colors.text as string;
+const textMuted = colors.textMuted as string;
 
 function MainTabs() {
   return (
-    <Tab.Navigator
-      screenOptions={({ route, navigation }) => ({
-        tabBarShowLabel: false,
-        headerShown: true,
-        headerTransparent: false,
-        headerStyle: styles.headerBar,
-        headerShadowVisible: false,
-        headerTitleAlign: 'center',
-        headerTitle: () => <Text style={styles.headerTitle}>LEDGR</Text>,
-        headerLeft: () => (
-          <Pressable
-            onPress={() =>
-              route.name === 'Settings'
-                ? navigation.navigate('Dashboard')
-                : navigation.navigate('Settings')
-            }
-            style={styles.headerIconButton}
-          >
-            <Ionicons
-              name={route.name === 'Settings' ? 'settings' : 'settings-outline'}
-              size={20}
-              color={colors.chromeText}
-            />
-          </Pressable>
-        ),
-        headerRight: () => <CoachChatFab variant="icon" />,
-        headerLeftContainerStyle: styles.headerSideContainer,
-        headerRightContainerStyle: styles.headerSideContainer,
-        tabBarStyle: {
-          backgroundColor: colors.chrome,
-          borderTopColor: colors.cardBorder,
-          height: 64,
-          display: route.name === 'Settings' ? 'none' : 'flex',
-        },
-        tabBarActiveTintColor: colors.primary as unknown as string,
-        tabBarInactiveTintColor: colors.textMuted as unknown as string,
-        tabBarIcon: ({ color, size }) => {
-          const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
-            Dashboard: 'grid',
-            Distribution: 'analytics',
-            Transactions: 'swap-vertical',
-            Goals: 'flag',
-            Accounts: 'wallet',
-            Categories: 'layers',
-          };
-          const name = iconMap[route.name] ?? 'ellipse';
-          return <Ionicons name={name} size={size ?? 22} color={color} />;
-        },
-      })}
+    <TopTab.Navigator
+      initialRouteName="Dashboard"
+      screenOptions={{
+        swipeEnabled: true,
+        animationEnabled: true,
+        tabBarScrollEnabled: true,
+        tabBarItemStyle: styles.topTabItem,
+        tabBarStyle: styles.topTabBar,
+        tabBarIndicatorStyle: styles.topTabIndicator,
+        tabBarActiveTintColor: text,
+        tabBarInactiveTintColor: textMuted,
+        tabBarPressColor: 'transparent',
+        tabBarLabelStyle: styles.topTabLabel,
+        lazy: true,
+      }}
     >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Distribution" component={DistributionScreen} />
-      <Tab.Screen name="Transactions" component={TransactionsScreen} />
-      <Tab.Screen name="Goals" component={GoalsScreen} />
-      <Tab.Screen name="Accounts" component={AccountsScreen} />
-      <Tab.Screen name="Categories" component={CategoriesScreen} />
-      <Tab.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{ tabBarButton: () => null }}
-      />
-    </Tab.Navigator>
+      <TopTab.Screen name="Dashboard" component={DashboardScreen} />
+      <TopTab.Screen name="Transactions" component={TransactionsScreen} />
+      <TopTab.Screen name="Categories" component={CategoriesScreen} />
+      <TopTab.Screen name="Distribution" component={DistributionScreen} options={{ title: 'Cash flow' }} />
+      <TopTab.Screen name="Goals" component={GoalsScreen} />
+      <TopTab.Screen name="Accounts" component={AccountsScreen} />
+    </TopTab.Navigator>
   );
 }
 
 export function AppNavigator() {
-  const [isLocked, setIsLocked] = useState(false);
-  const [checkingLock, setCheckingLock] = useState(true);
-  const appState = useRef<AppStateStatus>(AppState.currentState);
+  const [faceIdRequired, setFaceIdRequired] = useState(false);
+  const [unlocked, setUnlocked] = useState(true);
+  const appStateRef = useRef(AppState.currentState);
 
-  const authenticateIfRequired = async (mode: 'boot' | 'resume') => {
-    const enabled = (await AsyncStorage.getItem(FACE_ID_REQUIRED_KEY)) === 'true';
-
-    if (!enabled) {
-      setIsLocked(false);
-      setCheckingLock(false);
+  const promptUnlock = useCallback(async () => {
+    if (!faceIdRequired) {
+      setUnlocked(true);
       return;
     }
-
-    if (mode === 'resume') {
-      setIsLocked(true);
-    }
-
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-
-    if (!hasHardware || !isEnrolled) {
-      setIsLocked(false);
-      setCheckingLock(false);
-      await AsyncStorage.setItem(FACE_ID_REQUIRED_KEY, 'false');
+    const enrolled = await LocalAuthentication.isEnrolledAsync();
+    if (!hasHardware || !enrolled) {
+      setUnlocked(true);
       return;
     }
-
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: 'Unlock LEDGR',
+      fallbackLabel: 'Use device passcode',
       cancelLabel: 'Cancel',
       disableDeviceFallback: false,
     });
-
-    setIsLocked(!result.success);
-    setCheckingLock(false);
-  };
+    setUnlocked(result.success);
+  }, [faceIdRequired]);
 
   useEffect(() => {
-    authenticateIfRequired('boot');
-
-    const sub = AppState.addEventListener('change', (nextState) => {
-      const previousState = appState.current;
-      appState.current = nextState;
-
-      if (previousState.match(/inactive|background/) && nextState === 'active') {
-        authenticateIfRequired('resume');
-      }
-    });
-
+    let mounted = true;
+    AsyncStorage.getItem('settings.faceIdRequired')
+      .then((value) => {
+        if (!mounted) return;
+        const enabled = value === 'true';
+        setFaceIdRequired(enabled);
+        setUnlocked(!enabled);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setFaceIdRequired(false);
+        setUnlocked(true);
+      });
     return () => {
-      sub.remove();
+      mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      const prev = appStateRef.current;
+      appStateRef.current = nextState;
+      if (prev.match(/inactive|background/) && nextState === 'active') {
+        const enabled = (await AsyncStorage.getItem('settings.faceIdRequired')) === 'true';
+        setFaceIdRequired(enabled);
+        if (enabled) {
+          setUnlocked(false);
+          await promptUnlock();
+        }
+      }
+    });
+    return () => sub.remove();
+  }, [promptUnlock]);
+
+  useEffect(() => {
+    if (faceIdRequired && !unlocked) {
+      promptUnlock();
+    }
+  }, [faceIdRequired, unlocked, promptUnlock]);
 
   return (
     <NavigationContainer theme={navigationTheme}>
       <View style={styles.container}>
-        <MainTabs />
-        {!checkingLock && isLocked ? (
+        <Stack.Navigator
+          initialRouteName="Tabs"
+          screenOptions={({ navigation }) => ({
+            headerShown: true,
+            headerShadowVisible: false,
+            headerTitleAlign: 'center',
+            headerStyle: styles.headerBar,
+            headerTitle: () => <Text style={styles.headerTitle}>LEDGR</Text>,
+            headerLeft: () => (
+              <Pressable
+                onPress={() => {
+                  if (navigation.getState().routes[navigation.getState().index]?.name === 'Settings') {
+                    navigation.navigate('Tabs' as never);
+                    return;
+                  }
+                  navigation.navigate('Settings' as never);
+                }}
+                style={styles.headerIconButton}
+              >
+                <Ionicons
+                  name={
+                    navigation.getState().routes[navigation.getState().index]?.name === 'Settings'
+                      ? 'settings'
+                      : 'settings-outline'
+                  }
+                  size={20}
+                  color={chromeText}
+                />
+              </Pressable>
+            ),
+            headerRight: () => <CoachChatFab variant="icon" />,
+            headerLeftContainerStyle: styles.headerSideContainer,
+            headerRightContainerStyle: styles.headerSideContainer,
+          })}
+        >
+          <Stack.Screen name="Tabs" component={MainTabs} options={{ headerTitle: () => <Text style={styles.headerTitle}>LEDGR</Text> }} />
+          <Stack.Screen name="Settings" component={SettingsScreen} />
+        </Stack.Navigator>
+        {faceIdRequired && !unlocked ? (
           <View style={styles.lockOverlay}>
-            <Text style={styles.lockTitle}>Locked</Text>
-            <Text style={styles.lockSubtitle}>Use Face ID to continue.</Text>
-            <Pressable style={styles.unlockButton} onPress={() => authenticateIfRequired('resume')}>
+            <Text style={styles.lockTitle}>Face ID Required</Text>
+            <Text style={styles.lockSubtitle}>Authenticate to continue.</Text>
+            <Pressable style={styles.unlockButton} onPress={promptUnlock}>
               <Text style={styles.unlockLabel}>Unlock</Text>
             </Pressable>
           </View>
@@ -165,10 +180,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerBar: {
-    backgroundColor: colors.chrome,
+    backgroundColor: chrome,
   },
   headerTitle: {
-    color: colors.chromeText,
+    color: chromeText,
     fontSize: 26,
     fontWeight: '800',
     letterSpacing: 0.5,
@@ -186,33 +201,56 @@ const styles = StyleSheet.create({
   headerSideContainer: {
     paddingHorizontal: 12,
   },
+  topTabBar: {
+    backgroundColor: chrome,
+    borderBottomWidth: 1,
+    borderBottomColor: cardBorder,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  topTabItem: {
+    width: 'auto',
+    paddingHorizontal: 2,
+  },
+  topTabIndicator: {
+    height: 2,
+    backgroundColor: primary,
+    borderRadius: 999,
+  },
+  topTabLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'none',
+    letterSpacing: 0.2,
+  },
   lockOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(4, 8, 22, 0.93)',
+    backgroundColor: 'rgba(2, 6, 23, 0.95)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    padding: 24,
+    gap: 10,
+    zIndex: 50,
   },
   lockTitle: {
     color: colors.text,
-    fontSize: 30,
+    fontSize: 22,
     fontWeight: '800',
   },
   lockSubtitle: {
     color: colors.textMuted,
-    fontSize: 15,
-    marginTop: 8,
-    marginBottom: 18,
+    fontSize: 14,
   },
   unlockButton: {
+    marginTop: 8,
+    borderRadius: 999,
     backgroundColor: colors.primary,
-    borderRadius: 14,
-    paddingHorizontal: 28,
-    paddingVertical: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
   },
   unlockLabel: {
     color: colors.background,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
 });
