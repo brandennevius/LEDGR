@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import { config as loadEnv } from 'dotenv';
 import type { ExpoConfig } from 'expo/config';
 
 type ConfigContext = {
@@ -6,6 +6,17 @@ type ConfigContext = {
 };
 
 export default ({ config }: ConfigContext): ExpoConfig => {
+  const appEnv =
+    process.env.APP_ENV === 'production' ? 'production' : 'development';
+  const isEasBuild = process.env.EAS_BUILD === 'true';
+
+  // Local runs: load env file by selected app environment.
+  // EAS builds: rely on EAS environment variables and do not override here.
+  if (!isEasBuild) {
+    loadEnv({ path: `.env.${appEnv}`, override: true });
+    loadEnv({ path: `.env.${appEnv}.local`, override: true });
+  }
+
   const bundleIdentifier =
     process.env.EXPO_IOS_BUNDLE_IDENTIFIER ?? 'com.brandennevius.ledgr';
   const androidPackage =
