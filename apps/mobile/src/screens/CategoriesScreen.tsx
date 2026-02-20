@@ -759,6 +759,9 @@ export function CategoriesScreen() {
           placeholder="Category name"
           placeholderTextColor={colors.textMuted}
           style={styles.input}
+          autoFocus
+          autoCorrect={false}
+          autoCapitalize="none"
           blurOnSubmit={false}
         />
         <Text style={styles.modalSubLabel}>Category color</Text>

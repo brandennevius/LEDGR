@@ -29,7 +29,17 @@ export async function GET(request: Request) {
         userId: client.id,
         date: { gte: since },
         ...categoryFilter,
-        ...(needsReview ? { categoryNeedsReview: true } : {}),
+        ...(needsReview
+          ? {
+              OR: [
+                { categoryNeedsReview: true },
+                {
+                  transactionType: "REGULAR",
+                  categorySource: "PLAID",
+                },
+              ],
+            }
+          : {}),
       },
       orderBy: { date: "desc" },
       take: 200,

@@ -118,7 +118,7 @@ export async function POST() {
           tx.personal_finance_category?.primary ??
           tx.category?.[0] ??
           null,
-        categoryNeedsReview: false,
+        categoryNeedsReview: (ruleType ?? transactionType) === "REGULAR",
         categorySource: matchedRule ? "RULE" : "PLAID",
         transactionType: ruleType ?? transactionType,
         date: new Date(tx.date),
@@ -137,7 +137,7 @@ export async function POST() {
           tx.personal_finance_category?.primary ??
           tx.category?.[0] ??
           null,
-        categoryNeedsReview: false,
+        categoryNeedsReview: (ruleType ?? transactionType) === "REGULAR",
         categorySource: matchedRule ? "RULE" : "PLAID",
         transactionType: ruleType ?? transactionType,
         date: new Date(tx.date),

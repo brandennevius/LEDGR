@@ -145,6 +145,16 @@ const formatAxisCurrency = (value: number) =>
     maximumFractionDigits: 0,
   });
 
+const formatReviewDay = (value: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
 export function DashboardScreen() {
   const navigation = useNavigation<any>();
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
@@ -268,11 +278,15 @@ export function DashboardScreen() {
       map.set(key, list);
     });
 
-    return Array.from(map.entries()).map(([day, items]) => ({
-      day,
-      items,
-    }));
+    return Array.from(map.entries())
+      .sort(([a], [b]) => (a < b ? 1 : -1))
+      .map(([day, items]) => ({
+        day,
+        items,
+      }));
   }, [reviewRows]);
+
+  const latestReviewGroup = groupedReviewRows[0] ?? null;
 
   const budgetItems = useMemo(
     () =>
@@ -522,45 +536,43 @@ export function DashboardScreen() {
             </Pressable>
           </View>
 
-          {groupedReviewRows.length === 0 ? (
+          {groupedReviewRows.length === 0 || !latestReviewGroup ? (
             <Text style={styles.emptyText}>No transactions need review right now.</Text>
           ) : (
-            groupedReviewRows.map((group) => (
-              <View key={group.day} style={styles.reviewDayCard}>
-                <Text style={styles.reviewDay}>{group.day}</Text>
-                {group.items.map((item) => (
-                  <View key={item.id} style={styles.reviewItemWrap}>
-                    <Pressable onPress={() => openDetail(item.id)} style={styles.reviewRow}>
-                      <View style={styles.reviewMeta}>
-                        <Text style={styles.reviewName} numberOfLines={1}>
-                          {item.name}
-                        </Text>
-                        <View style={styles.categoryChip}>
-                          <Text style={styles.categoryChipText} numberOfLines={1}>
-                            {item.category}
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.reviewAmount, item.isIncome ? styles.positive : styles.negative]}>
-                        {item.isIncome ? '+' : '-'}
-                        {formatCurrency(item.amount, 2)}
+            <View key={latestReviewGroup.day} style={styles.reviewDayCard}>
+              <Text style={styles.reviewDay}>{formatReviewDay(latestReviewGroup.day)}</Text>
+              {latestReviewGroup.items.map((item) => (
+                <View key={item.id} style={styles.reviewItemWrap}>
+                  <Pressable onPress={() => openDetail(item.id)} style={styles.reviewRow}>
+                    <View style={styles.reviewMeta}>
+                      <Text style={styles.reviewName} numberOfLines={1}>
+                        {item.name}
                       </Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.reviewButton}
-                      onPress={() => markReviewed(item.id, item.category)}
-                    >
-                      <Text style={styles.reviewButtonLabel}>Mark as reviewed</Text>
-                    </Pressable>
-                  </View>
-                ))}
-                {group.items.length > 1 ? (
-                  <Pressable style={styles.groupReviewButton} onPress={() => markGroupReviewed(group.items)}>
-                    <Text style={styles.groupReviewLabel}>Mark day as reviewed</Text>
+                      <View style={styles.categoryChip}>
+                        <Text style={styles.categoryChipText} numberOfLines={1}>
+                          {item.category}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.reviewAmount, item.isIncome ? styles.positive : styles.negative]}>
+                      {item.isIncome ? '+' : '-'}
+                      {formatCurrency(item.amount, 2)}
+                    </Text>
                   </Pressable>
-                ) : null}
-              </View>
-            ))
+                  <Pressable
+                    style={styles.reviewButton}
+                    onPress={() => markReviewed(item.id, item.category)}
+                  >
+                    <Text style={styles.reviewButtonLabel}>Mark as reviewed</Text>
+                  </Pressable>
+                </View>
+              ))}
+              {latestReviewGroup.items.length > 1 ? (
+                <Pressable style={styles.groupReviewButton} onPress={() => markGroupReviewed(latestReviewGroup.items)}>
+                  <Text style={styles.groupReviewLabel}>Mark day as reviewed</Text>
+                </Pressable>
+              ) : null}
+            </View>
           )}
         </View>
 
@@ -744,7 +756,7 @@ export function DashboardScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingTop: 76,
+    paddingTop: 8,
     paddingHorizontal: 14,
     paddingBottom: 26,
     gap: 14,
