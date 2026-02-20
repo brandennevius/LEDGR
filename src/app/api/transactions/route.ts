@@ -23,33 +23,31 @@ export async function GET(request: Request) {
       ? { category }
       : {};
 
-  const [transactions, settings] = await Promise.all([
-    prisma.transaction.findMany({
-      where: {
-        userId: client.id,
-        date: { gte: since },
-        ...categoryFilter,
-        ...(needsReview
-          ? {
-              OR: [
-                { categoryNeedsReview: true },
-                {
-                  transactionType: "REGULAR",
-                  categorySource: "PLAID",
-                },
-              ],
-            }
-          : {}),
-      },
-      orderBy: { date: "desc" },
-      take: 200,
-      include: { splits: true },
-    }),
-    prisma.category.findMany({
-      where: { userId: client.id },
-      select: { name: true, color: true },
-    }),
-  ]);
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      userId: client.id,
+      date: { gte: since },
+      ...categoryFilter,
+      ...(needsReview
+        ? {
+            OR: [
+              { categoryNeedsReview: true },
+              {
+                transactionType: "REGULAR",
+                categorySource: "PLAID",
+              },
+            ],
+          }
+        : {}),
+    },
+    orderBy: { date: "desc" },
+    take: 200,
+    include: { splits: true },
+  });
+  const settings = await prisma.category.findMany({
+    where: { userId: client.id },
+    select: { name: true, color: true },
+  });
 
   const settingsMap = new Map(
     settings.map((setting) => [setting.name.toLowerCase(), setting.color])

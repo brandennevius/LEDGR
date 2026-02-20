@@ -202,20 +202,19 @@ const serializeGoal = (goal: {
 });
 
 export const getClientOverviewData = async (user: User) => {
-  const [accounts, goals, initialTransactions, categorySettings, plaidItems] =
-    await Promise.all([
-    prisma.account.findMany({ where: { userId: user.id } }),
-    prisma.goal.findMany({ where: { userId: user.id } }),
-    prisma.transaction.findMany({
-      where: { userId: user.id },
-      include: { splits: true },
-    }),
-    prisma.category.findMany({ where: { userId: user.id } }),
-    prisma.plaidItem.findMany({
-      where: { userId: user.id },
-      orderBy: { updatedAt: "desc" },
-    }),
-  ]);
+  const accounts = await prisma.account.findMany({ where: { userId: user.id } });
+  const goals = await prisma.goal.findMany({ where: { userId: user.id } });
+  const initialTransactions = await prisma.transaction.findMany({
+    where: { userId: user.id },
+    include: { splits: true },
+  });
+  const categorySettings = await prisma.category.findMany({
+    where: { userId: user.id },
+  });
+  const plaidItems = await prisma.plaidItem.findMany({
+    where: { userId: user.id },
+    orderBy: { updatedAt: "desc" },
+  });
   let transactions = initialTransactions;
   const latestReview = await prisma.coachReview.findFirst({
     where: { clientId: user.id },
@@ -643,15 +642,13 @@ export const getClientOverviewData = async (user: User) => {
 };
 
 export const getCoachDashboardData = async (user: User) => {
-  const [accounts, transactions] = await Promise.all([
-    prisma.account.findMany({ where: { userId: user.id } }),
-    prisma.transaction.findMany({
-      where: { userId: user.id },
-      include: { splits: true },
-      orderBy: { date: "desc" },
-      take: 5,
-    }),
-  ]);
+  const accounts = await prisma.account.findMany({ where: { userId: user.id } });
+  const transactions = await prisma.transaction.findMany({
+    where: { userId: user.id },
+    include: { splits: true },
+    orderBy: { date: "desc" },
+    take: 5,
+  });
 
   if (transactions.length === 0 || accounts.length === 0) {
     return {
@@ -728,15 +725,15 @@ export const getDistributionData = async (user: User) => {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const lookbackStart = new Date(now);
   lookbackStart.setDate(lookbackStart.getDate() - 730);
-  const [transactions, accounts, categoryGroups] = await Promise.all([
-    prisma.transaction.findMany({
-      where: { userId: user.id, date: { gte: lookbackStart } },
-      include: { splits: true },
-      orderBy: { date: "desc" },
-    }),
-    prisma.account.findMany({ where: { userId: user.id } }),
-    prisma.categoryGroup.findMany({ where: { userId: user.id } }),
-  ]);
+  const transactions = await prisma.transaction.findMany({
+    where: { userId: user.id, date: { gte: lookbackStart } },
+    include: { splits: true },
+    orderBy: { date: "desc" },
+  });
+  const accounts = await prisma.account.findMany({ where: { userId: user.id } });
+  const categoryGroups = await prisma.categoryGroup.findMany({
+    where: { userId: user.id },
+  });
 
   const usingMock = transactions.length === 0;
   const accountMap = new Map(

@@ -167,6 +167,7 @@ export function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chartWidth, setChartWidth] = useState(0);
+  const [categoryChoices, setCategoryChoices] = useState<string[]>([]);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -185,11 +186,12 @@ export function DashboardScreen() {
   const loadDashboard = useCallback(async () => {
     try {
       setLoading(true);
-      const [overviewData, reviewData, categoriesData] = await Promise.all([
-        apiRequest<OverviewResponse>('/api/client/overview'),
-        apiRequest<TransactionsResponse>('/api/transactions?days=60&needsReview=true'),
-        apiRequest<CategoriesResponse>('/api/categories'),
-      ]);
+      // Keep requests serial to avoid saturating low-connection backend pool.
+      const overviewData = await apiRequest<OverviewResponse>('/api/client/overview');
+      const reviewData = await apiRequest<TransactionsResponse>(
+        '/api/transactions?days=60&needsReview=true'
+      );
+      const categoriesData = await apiRequest<CategoriesResponse>('/api/categories');
       setOverview(overviewData);
       setReviewRows(reviewData.transactions ?? []);
       setCategoryChoices((categoriesData.categories ?? []).filter((name) => Boolean(name)));

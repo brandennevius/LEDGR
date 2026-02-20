@@ -26,15 +26,13 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [settings, groups, transactions] = await Promise.all([
-    prisma.category.findMany({ where: { userId: user.id } }),
-    prisma.categoryGroup.findMany({ where: { userId: user.id } }),
-    prisma.transaction.findMany({
-      where: { userId: user.id },
-      orderBy: { date: "desc" },
-      include: { splits: true },
-    }),
-  ]);
+  const settings = await prisma.category.findMany({ where: { userId: user.id } });
+  const groups = await prisma.categoryGroup.findMany({ where: { userId: user.id } });
+  const transactions = await prisma.transaction.findMany({
+    where: { userId: user.id },
+    orderBy: { date: "desc" },
+    include: { splits: true },
+  });
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
