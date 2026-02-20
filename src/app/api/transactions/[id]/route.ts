@@ -132,17 +132,33 @@ export async function PATCH(
     return NextResponse.json({ error: "No updates provided." }, { status: 400 });
   }
 
-  if (body.applyToSimilar && typeof classificationUpdates.category === "string") {
-    const nameMatch = transaction.merchantName?.trim()
-      ? { merchantName: transaction.merchantName }
-      : { name: transaction.name };
-    await prisma.transaction.updateMany({
-      where: {
-        userId: user.id,
-        ...nameMatch,
-      },
-      data: classificationUpdates,
-    });
+  const ruleMatchValue = body.ruleMatchValue?.trim();
+  const similarMatchValue =
+    ruleMatchValue || transaction.merchantName?.trim() || transaction.name;
+  const similarMode =
+    body.createRule && body.ruleMatchType === "PARTIAL" ? "PARTIAL" : "EXACT";
+
+  const similarWhere =
+    similarMatchValue.length > 0
+      ? similarMode === "PARTIAL"
+        ? {
+            userId: user.id,
+            OR: [
+              { merchantName: { contains: similarMatchValue, mode: "insensitive" as const } },
+              { name: { contains: similarMatchValue, mode: "insensitive" as const } },
+            ],
+          }
+        : {
+            userId: user.id,
+            OR: [
+              { merchantName: { equals: similarMatchValue, mode: "insensitive" as const } },
+              { name: { equals: similarMatchValue, mode: "insensitive" as const } },
+            ],
+          }
+      : null;
+
+  if (body.applyToSimilar && similarWhere && Object.keys(classificationUpdates).length > 0) {
+    await prisma.transaction.updateMany({ where: similarWhere, data: classificationUpdates });
   } else if (body.applyToCategory && typeof classificationUpdates.category === "string") {
     const currentCategory = transaction.category ?? "Uncategorized";
     await prisma.transaction.updateMany({
@@ -162,7 +178,7 @@ export async function PATCH(
     },
   });
 
-  if (body.createRule && typeof classificationUpdates.category === "string") {
+  if (body.createRule) {
     const matchValue =
       body.ruleMatchValue?.trim() ||
       transaction.merchantName ||
@@ -173,10 +189,25 @@ export async function PATCH(
           userId: user.id,
           matchType: body.ruleMatchType ?? "EXACT",
           matchValue,
-          category: classificationUpdates.category,
-          transactionType: classificationUpdates.transactionType ?? "REGULAR",
+          category:
+            classificationUpdates.transactionType === "REGULAR"
+              ? classificationUpdates.category ?? transaction.category ?? "Uncategorized"
+              : "Uncategorized",
+          transactionType:
+            classificationUpdates.transactionType ?? transaction.transactionType ?? "REGULAR",
         },
       });
+
+      if (
+        !body.applyToSimilar &&
+        similarWhere &&
+        Object.keys(classificationUpdates).length > 0
+      ) {
+        await prisma.transaction.updateMany({
+          where: similarWhere,
+          data: classificationUpdates,
+        });
+      }
     }
   }
 

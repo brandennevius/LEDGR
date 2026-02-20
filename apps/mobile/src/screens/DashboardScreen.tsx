@@ -57,6 +57,10 @@ type TransactionsResponse = {
   transactions: TransactionRow[];
 };
 
+type CategoriesResponse = {
+  categories?: string[];
+};
+
 type TransactionDetail = {
   id: string;
   name: string;
@@ -159,6 +163,7 @@ export function DashboardScreen() {
   const navigation = useNavigation<any>();
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [reviewRows, setReviewRows] = useState<TransactionRow[]>([]);
+  const [categoryChoices, setCategoryChoices] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chartWidth, setChartWidth] = useState(0);
@@ -180,12 +185,14 @@ export function DashboardScreen() {
   const loadDashboard = useCallback(async () => {
     try {
       setLoading(true);
-      const [overviewData, reviewData] = await Promise.all([
+      const [overviewData, reviewData, categoriesData] = await Promise.all([
         apiRequest<OverviewResponse>('/api/client/overview'),
         apiRequest<TransactionsResponse>('/api/transactions?days=60&needsReview=true'),
+        apiRequest<CategoriesResponse>('/api/categories'),
       ]);
       setOverview(overviewData);
       setReviewRows(reviewData.transactions ?? []);
+      setCategoryChoices((categoriesData.categories ?? []).filter((name) => Boolean(name)));
       setError(null);
     } catch (err) {
       const message =
@@ -661,14 +668,31 @@ export function DashboardScreen() {
             {transactionTypeInput !== 'REGULAR' ? (
               <Text style={styles.loadingText}>Categories are only available for regular transactions.</Text>
             ) : (
-              <TextInput
-                value={categoryInput}
-                onChangeText={setCategoryInput}
-                placeholder="Category"
-                placeholderTextColor={colors.textMuted}
-                style={styles.input}
-                blurOnSubmit={false}
-              />
+              <>
+                <TextInput
+                  value={categoryInput}
+                  onChangeText={setCategoryInput}
+                  placeholder="Category"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
+                  blurOnSubmit={false}
+                />
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.filterRow}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {categoryChoices.map((category) => (
+                    <Chip
+                      key={category}
+                      label={category}
+                      active={categoryInput.trim().toLowerCase() === category.toLowerCase()}
+                      onPress={() => setCategoryInput(category)}
+                    />
+                  ))}
+                </ScrollView>
+              </>
             )}
 
             <Text style={styles.detailSectionTitle}>Transaction type</Text>

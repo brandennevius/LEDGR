@@ -125,8 +125,7 @@ export const detectInternalTransfers = (
       transferHintPattern.test(category) ||
       transferHintPattern.test(name) ||
       kind === "investment" ||
-      kind === "savings" ||
-      kind === "debt";
+      kind === "savings";
     return { ...tx, isCandidate };
   });
 
