@@ -53,8 +53,9 @@ export async function GET() {
   type SpendEntry = { category: string; amount: number; date: Date };
   const spendEntries: SpendEntry[] = [];
   transactions.forEach((tx) => {
-    if (tx.amount <= 0) return;
     if (tx.transactionType !== "REGULAR") return;
+    const isCredit = tx.amount < 0;
+    const sign = isCredit ? -1 : 1;
     if (tx.splits.length === 0) {
       const category = normalizeCategory(tx.category);
       if (isTransferCategoryName(category)) return;
@@ -69,10 +70,10 @@ export async function GET() {
     const splitRows = tx.splits
       .map((split) => ({
         category: normalizeCategory(split.category),
-        amount: Math.max(0, Math.abs(split.amount)),
+        amount: sign * Math.max(0, Math.abs(split.amount)),
       }))
-      .filter((row) => row.amount > 0 && !isTransferCategoryName(row.category));
-    const splitTotal = splitRows.reduce((sum, row) => sum + row.amount, 0);
+      .filter((row) => Math.abs(row.amount) > 0 && !isTransferCategoryName(row.category));
+    const splitTotal = splitRows.reduce((sum, row) => sum + Math.abs(row.amount), 0);
     splitRows.forEach((row) => {
       spendEntries.push({
         category: row.category,
@@ -87,7 +88,7 @@ export async function GET() {
       if (isTransferCategoryName(category)) return;
       spendEntries.push({
         category,
-        amount: remainder,
+        amount: sign * remainder,
         date: tx.date,
       });
     }
@@ -213,13 +214,13 @@ export async function GET() {
       .map((split) => ({
         id: `${tx.id}:split:${split.id}`,
         name: tx.merchantName ?? tx.name,
-        amount: Math.abs(split.amount),
+        amount: (tx.amount < 0 ? -1 : 1) * Math.abs(split.amount),
         category: normalizeCategory(split.category),
         date: tx.date.toISOString(),
       }))
-      .filter((row) => row.amount > 0 && !isTransferCategoryName(row.category));
+      .filter((row) => Math.abs(row.amount) > 0 && !isTransferCategoryName(row.category));
 
-    const splitTotal = splitRows.reduce((sum, row) => sum + row.amount, 0);
+    const splitTotal = splitRows.reduce((sum, row) => sum + Math.abs(row.amount), 0);
     const remainder = Math.max(0, Math.abs(tx.amount) - splitTotal);
     const remainderRow =
       remainder > 0.01
@@ -227,7 +228,7 @@ export async function GET() {
             {
               id: `${tx.id}:remainder`,
               name: tx.merchantName ?? tx.name,
-              amount: remainder,
+              amount: (tx.amount < 0 ? -1 : 1) * remainder,
               category: normalizeCategory(tx.category),
               date: tx.date.toISOString(),
             },

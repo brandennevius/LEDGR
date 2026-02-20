@@ -254,7 +254,7 @@ export function CategoriesScreen() {
   const filteredTransactions = useMemo(() => {
     if (!selectedRow || !overview?.transactions) return [];
     return overview.transactions
-      .filter((tx) => tx.category === selectedRow.name && tx.amount > 0)
+      .filter((tx) => tx.category === selectedRow.name)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [overview, selectedRow]);
 
@@ -276,7 +276,7 @@ export function CategoriesScreen() {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       const index = monthIndex.get(key);
       if (index !== undefined) {
-        months[index].value += Math.abs(tx.amount);
+        months[index].value += tx.amount;
       }
     });
 
@@ -291,7 +291,7 @@ export function CategoriesScreen() {
     const monthIndex = now.getMonth() + 1;
     const totalSpend = filteredTransactions
       .filter((tx) => new Date(tx.date).getFullYear() === year)
-      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+      .reduce((sum, tx) => sum + tx.amount, 0);
 
     return {
       year,
@@ -709,7 +709,10 @@ export function CategoriesScreen() {
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Total spend this year</Text>
-                <Text style={styles.detailValue}>-{formatCurrencyDetailed(yearlyMetrics.totalSpend)}</Text>
+                <Text style={styles.detailValue}>
+                  {yearlyMetrics.totalSpend < 0 ? '+' : '-'}
+                  {formatCurrencyDetailed(Math.abs(yearlyMetrics.totalSpend))}
+                </Text>
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Average per month this year</Text>
@@ -736,7 +739,8 @@ export function CategoriesScreen() {
                           <Text style={styles.transactionName}>{tx.name}</Text>
                         </View>
                         <Text style={styles.transactionAmount}>
-                          -{formatCurrencyDetailed(Math.abs(tx.amount))}
+                          {tx.amount < 0 ? '+' : '-'}
+                          {formatCurrencyDetailed(Math.abs(tx.amount))}
                         </Text>
                       </Pressable>
                     ))}
