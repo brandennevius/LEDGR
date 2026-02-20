@@ -1,0 +1,2 @@
+ALTER TABLE "Account"
+ADD COLUMN "syncEnabled" BOOLEAN NOT NULL DEFAULT true;

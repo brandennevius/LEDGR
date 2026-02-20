@@ -27,6 +27,7 @@ export async function GET(request: Request) {
     prisma.transaction.findMany({
       where: {
         userId: client.id,
+        account: { syncEnabled: true },
         date: { gte: since },
         ...categoryFilter,
         ...(needsReview

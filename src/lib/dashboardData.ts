@@ -202,7 +202,7 @@ const serializeGoal = (goal: {
 });
 
 export const getClientOverviewData = async (user: User) => {
-  const [accounts, goals, initialTransactions, categorySettings, plaidItems] =
+  const [allAccounts, goals, initialTransactions, categorySettings, plaidItems] =
     await Promise.all([
     prisma.account.findMany({ where: { userId: user.id } }),
     prisma.goal.findMany({ where: { userId: user.id } }),
@@ -216,7 +216,11 @@ export const getClientOverviewData = async (user: User) => {
       orderBy: { updatedAt: "desc" },
     }),
   ]);
-  let transactions = initialTransactions;
+  const accounts = allAccounts.filter((account) => account.syncEnabled);
+  const syncedAccountIds = new Set(accounts.map((account) => account.id));
+  let transactions = initialTransactions.filter((tx) =>
+    syncedAccountIds.has(tx.accountId)
+  );
   const latestReview = await prisma.coachReview.findFirst({
     where: { clientId: user.id },
     orderBy: { createdAt: "desc" },
@@ -296,10 +300,11 @@ export const getClientOverviewData = async (user: User) => {
   const categorizedCount = transactions.filter((tx) => tx.category).length;
   if (categorizedCount === 0 && process.env.OPENAI_API_KEY) {
     await categorizeTransactions({ userId: user.id, limit: 80 });
-    transactions = await prisma.transaction.findMany({
+    const recategorized = await prisma.transaction.findMany({
       where: { userId: user.id },
       include: { splits: true },
     });
+    transactions = recategorized.filter((tx) => syncedAccountIds.has(tx.accountId));
   }
 
   const expandedTransactions = expandTransactionsWithSplits(transactions);
@@ -600,7 +605,7 @@ export const getClientOverviewData = async (user: User) => {
       status: item.status,
       updatedAt: item.updatedAt.toISOString(),
     })),
-    accounts: accounts.map((account) => ({
+    accounts: allAccounts.map((account) => ({
       id: account.id,
       plaidItemId: account.plaidItemId ?? undefined,
       name: account.name,
@@ -608,6 +613,7 @@ export const getClientOverviewData = async (user: User) => {
       mask: account.mask ?? undefined,
       institutionName: account.institutionName ?? undefined,
       balance: account.currentBalance ?? account.availableBalance ?? 0,
+      syncEnabled: account.syncEnabled,
     })),
     review,
     budgetSnapshot: {

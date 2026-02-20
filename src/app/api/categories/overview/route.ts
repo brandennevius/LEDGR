@@ -30,7 +30,7 @@ export async function GET() {
     prisma.category.findMany({ where: { userId: user.id } }),
     prisma.categoryGroup.findMany({ where: { userId: user.id } }),
     prisma.transaction.findMany({
-      where: { userId: user.id },
+      where: { userId: user.id, account: { syncEnabled: true } },
       orderBy: { date: "desc" },
       include: { splits: true },
     }),
