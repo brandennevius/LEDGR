@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isEmailAllowed } from "@/lib/allowlist";
 
 const getSupabaseConfig = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -53,6 +54,9 @@ export const getAuthedUser = async () => {
 
   const email = authedUser.email;
   if (!email) {
+    return null;
+  }
+  if (!isEmailAllowed(email)) {
     return null;
   }
 

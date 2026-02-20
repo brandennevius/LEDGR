@@ -4,7 +4,7 @@
 - Effective date: 2026-02-15
 - Last reviewed: 2026-02-20
 
-This document operationalizes `/Users/brandennevius/Desktop/Financial Coaching/docs/security/information-security-policy.md`.
+This document operationalizes `/Users/brandennevius/Desktop/LEDGR/docs/security/information-security-policy.md`.
 
 ## 1) Access Review Procedure (Quarterly)
 
@@ -49,6 +49,8 @@ Checklist:
 - No secrets in code or client bundles
 - Data minimization reviewed for new fields/integrations
 - Rollback strategy documented
+- RLS state validated for any new public-schema tables
+- Rate-limit coverage validated for new high-risk endpoints
 
 Evidence to retain:
 
@@ -92,7 +94,40 @@ Evidence to retain:
 - Data shared
 - Decision and conditions
 
-## 6) Data Deletion Procedure (On Request / Account Closure)
+## 6) API Authorization Audit Procedure (Per Release + Quarterly Deep Audit)
+
+Steps:
+
+1. Enumerate all `src/app/api/**/route.ts` handlers.
+2. Verify each route requires authenticated user context unless intentionally public (for example, verified webhooks).
+3. Verify all database reads/writes are scoped to the authenticated user (`userId`) or explicit ownership checks.
+4. Verify third-party identifier upserts (Plaid item/account/transaction IDs) cannot reassign cross-user ownership.
+5. Document findings and patch references before release.
+
+Evidence to retain:
+
+- Route inventory reviewed
+- Findings list with severity and file references
+- Commit/PR links for remediations
+
+## 7) Rate Limiting and Abuse Procedure (Per Release)
+
+Steps:
+
+1. Confirm rate limits exist on sensitive endpoints:
+   - Plaid linking/sync endpoints
+   - AI/LLM endpoints
+   - Any high-cost mutation endpoint
+2. Validate response behavior on threshold breach (HTTP 429 + `Retry-After`).
+3. Review logs for repeated violations and tune thresholds.
+
+Evidence to retain:
+
+- Endpoint list and thresholds
+- Test evidence of 429 behavior
+- Tuning log (date, old/new limit, reason)
+
+## 8) Data Deletion Procedure (On Request / Account Closure)
 
 Steps:
 
@@ -107,13 +142,13 @@ Evidence to retain:
 - Completion date
 - Data categories deleted
 
-## 7) Procedure Review and Maintenance
+## 9) Procedure Review and Maintenance
 
 - Review this document at least annually.
 - Update procedures after major architecture or vendor changes.
 - Keep evidence logs for at least 12 months.
 
-## 8) AI Context Minimization Procedure (Per AI Feature/Change)
+## 10) AI Context Minimization Procedure (Per AI Feature/Change)
 
 Steps:
 
@@ -128,3 +163,4 @@ Evidence to retain:
 - API route/PR reference
 - Prompt payload field list
 - Reviewer confirmation that minimization rules were applied
+

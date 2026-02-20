@@ -3,18 +3,26 @@ import { prisma } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { normalizeHexColor, resolveCategoryColor } from "@/lib/categoryColors";
 
+const isTransferCategoryName = (value?: string | null) => {
+  const key = String(value ?? "").trim().toLowerCase();
+  if (!key) return false;
+  return /(transfer[_\s-]*out|transfer[_\s-]*in|internal[_\s-]*transfer)/i.test(
+    key
+  );
+};
+
 export async function GET() {
   const client = await getAuthedUser();
   if (!client) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const categories = await prisma.transaction.findMany({
-    where: { userId: client.id },
+    where: { userId: client.id, transactionType: "REGULAR" },
     select: { category: true },
     distinct: ["category"],
   });
   const splitCategories = await prisma.transactionSplit.findMany({
-    where: { transaction: { userId: client.id } },
+    where: { transaction: { userId: client.id, transactionType: "REGULAR" } },
     select: { category: true },
     distinct: ["category"],
   });
@@ -31,9 +39,13 @@ export async function GET() {
     new Set([
       ...categories
         .map((item) => item.category ?? "Uncategorized")
-        .filter(Boolean),
-      ...splitCategories.map((item) => item.category).filter(Boolean),
-      ...settings.map((item) => item.name),
+        .filter((name) => Boolean(name) && !isTransferCategoryName(name)),
+      ...splitCategories
+        .map((item) => item.category)
+        .filter((name) => Boolean(name) && !isTransferCategoryName(name)),
+      ...settings
+        .map((item) => item.name)
+        .filter((name) => Boolean(name) && !isTransferCategoryName(name)),
     ])
   ).sort((a, b) => a.localeCompare(b));
 
@@ -61,6 +73,54 @@ export async function GET() {
   });
 }
 
+export async function DELETE(request: Request) {
+  const client = await getAuthedUser();
+  if (!client) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = (await request.json()) as { name?: string };
+  const name = String(body?.name ?? "").trim();
+  if (!name) {
+    return NextResponse.json({ error: "Name is required." }, { status: 400 });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await Promise.all([
+      tx.transaction.updateMany({
+        where: { userId: client.id, category: name },
+        data: { category: null, categoryNeedsReview: true, categorySource: "USER" },
+      }),
+      tx.transactionSplit.updateMany({
+        where: { transaction: { userId: client.id }, category: name },
+        data: { category: "Uncategorized" },
+      }),
+      tx.goal.updateMany({
+        where: { userId: client.id, category: name },
+        data: { category: null },
+      }),
+      tx.categoryRule.deleteMany({
+        where: { userId: client.id, category: name },
+      }),
+      tx.category.deleteMany({
+        where: { userId: client.id, name },
+      }),
+    ]);
+
+    const groupsWithCategory = await tx.categoryGroup.findMany({
+      where: { userId: client.id, categories: { has: name } },
+    });
+    for (const group of groupsWithCategory) {
+      await tx.categoryGroup.update({
+        where: { id: group.id },
+        data: { categories: group.categories.filter((item) => item !== name) },
+      });
+    }
+  });
+
+  return NextResponse.json({ ok: true });
+}
+
 export async function POST(request: Request) {
   const client = await getAuthedUser();
   if (!client) {
@@ -79,6 +139,12 @@ export async function POST(request: Request) {
   const currentName = String(body?.currentName ?? name).trim();
   if (!name || !currentName) {
     return NextResponse.json({ error: "Name is required." }, { status: 400 });
+  }
+  if (isTransferCategoryName(name)) {
+    return NextResponse.json(
+      { error: "Transfer categories are managed by Internal Transfer transaction type." },
+      { status: 400 }
+    );
   }
 
   const monthlyBudget =

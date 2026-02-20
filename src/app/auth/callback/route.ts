@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isEmailAllowed } from "@/lib/allowlist";
 
 export async function GET(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -32,6 +33,13 @@ export async function GET(request: NextRequest) {
     });
 
     await supabase.auth.exchangeCodeForSession(code);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.email || !isEmailAllowed(user.email)) {
+      await supabase.auth.signOut();
+      return NextResponse.redirect(new URL("/login?reason=unauthorized", origin));
+    }
     return response;
   }
 

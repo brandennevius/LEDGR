@@ -110,6 +110,7 @@ export function TransactionsScreen() {
   const [savingDetail, setSavingDetail] = useState(false);
   const [amountInput, setAmountInput] = useState('');
   const [editingAmount, setEditingAmount] = useState(false);
+  const [activeSplitIndex, setActiveSplitIndex] = useState<number | null>(null);
 
   const fetchRows = async () => {
     try {
@@ -189,6 +190,27 @@ export function TransactionsScreen() {
     return count;
   }, [categoryFilter, days, needsReviewOnly, sortBy, typeFilter]);
 
+  const existingCategoryNames = useMemo(
+    () => categoryList.filter((name) => name !== 'All'),
+    [categoryList]
+  );
+
+  const ensureCategoryExists = async (name: string) => {
+    const nextCategory = name.trim();
+    if (!nextCategory) return;
+    const existing = new Set(existingCategoryNames.map((item) => item.toLowerCase()));
+    if (existing.has(nextCategory.toLowerCase())) return;
+    await apiRequest('/api/categories', {
+      method: 'POST',
+      body: {
+        name: nextCategory,
+        color: null,
+        essential: false,
+        monthlyBudget: null,
+      },
+    });
+  };
+
   const openDetail = async (id: string) => {
     setDetailOpen(true);
     setDetailLoading(true);
@@ -206,6 +228,7 @@ export function TransactionsScreen() {
           note: split.note ?? '',
         }))
       );
+      setActiveSplitIndex(null);
       setApplyToSimilar(false);
       setApplyToCategory(false);
       setCreateRule(false);
@@ -218,8 +241,9 @@ export function TransactionsScreen() {
 
   const saveDetail = async () => {
     if (!selected) return;
+    const isCategorizationDisabled = transactionTypeInput !== 'REGULAR';
     const nextCategory = categoryInput.trim();
-    if (!nextCategory) return;
+    if (!isCategorizationDisabled && !nextCategory) return;
     const parsedAmount = Number(amountInput);
     if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
       setError('Enter a valid amount before saving.');
@@ -229,29 +253,18 @@ export function TransactionsScreen() {
     const signedAmount = parsedAmount * (selected.amount < 0 ? -1 : 1);
     setSavingDetail(true);
     try {
-      const existing = new Set(
-        categoryList.filter((name) => name !== 'All').map((name) => name.toLowerCase())
-      );
-      if (!existing.has(nextCategory.toLowerCase())) {
-        await apiRequest('/api/categories', {
-          method: 'POST',
-          body: {
-            name: nextCategory,
-            color: null,
-            essential: false,
-            monthlyBudget: null,
-          },
-        });
+      if (!isCategorizationDisabled) {
+        await ensureCategoryExists(nextCategory);
       }
       await apiRequest(`/api/transactions/${selected.id}`, {
         method: 'PATCH',
         body: {
           amount: signedAmount,
-          category: nextCategory,
+          ...(isCategorizationDisabled ? {} : { category: nextCategory }),
           transactionType: transactionTypeInput,
           applyToSimilar,
-          applyToCategory,
-          createRule,
+          applyToCategory: isCategorizationDisabled ? false : applyToCategory,
+          createRule: isCategorizationDisabled ? false : createRule,
           ruleMatchType,
           ruleMatchValue,
         },
@@ -275,6 +288,15 @@ export function TransactionsScreen() {
     if (!selected) return;
     setSavingSplits(true);
     try {
+      const uniqueSplitCategories = Array.from(
+        new Set(
+          splits
+            .map((split) => split.category.trim())
+            .filter(Boolean)
+        )
+      );
+      await Promise.all(uniqueSplitCategories.map((category) => ensureCategoryExists(category)));
+
       await apiRequest(`/api/transactions/${selected.id}/splits`, {
         method: 'PUT',
         body: {
@@ -288,7 +310,9 @@ export function TransactionsScreen() {
         },
       });
       await fetchRows();
+      await fetchCategories();
       setDetailOpen(false);
+      setActiveSplitIndex(null);
     } finally {
       setSavingSplits(false);
     }
@@ -375,7 +399,11 @@ export function TransactionsScreen() {
       </ScrollView>
 
       <ModalSheet visible={filtersOpen} onClose={() => setFiltersOpen(false)}>
-        <ScrollView contentContainerStyle={styles.filterSheetContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.filterSheetContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <Text style={styles.sheetTitle}>Filters</Text>
 
           <Text style={styles.sheetSection}>Filter by month</Text>
@@ -391,7 +419,12 @@ export function TransactionsScreen() {
           </View>
 
           <Text style={styles.sheetSection}>Filter by category</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryScroll}
+            keyboardShouldPersistTaps="handled"
+          >
             {(categoryList.length ? categoryList : ['All']).map((name) => (
               <View key={name}>
                 <Chip label={name} active={categoryFilter === name} onPress={() => setCategoryFilter(name)} />
@@ -465,7 +498,7 @@ export function TransactionsScreen() {
             <Text style={styles.loadingText}>Loading details...</Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={styles.detailContent}>
+          <ScrollView contentContainerStyle={styles.detailContent} keyboardShouldPersistTaps="handled">
             <Text style={styles.detailTitle}>{selected.name}</Text>
             <Text style={styles.detailSubtitle}>
               {selected.account?.institutionName ?? 'Account'} · {selected.date}
@@ -489,26 +522,38 @@ export function TransactionsScreen() {
             )}
 
             <Text style={styles.detailSectionTitle}>Category</Text>
-            <TextInput
-              value={categoryInput}
-              onChangeText={setCategoryInput}
-              placeholder="Category"
-              placeholderTextColor={colors.textMuted}
-              style={styles.input}
-            />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-              {categoryList
-                .filter((name) => name !== 'All')
-                .map((name) => (
-                  <View key={name}>
-                    <Chip
-                      label={name}
-                      active={categoryInput.trim().toLowerCase() === name.toLowerCase()}
-                      onPress={() => setCategoryInput(name)}
-                    />
-                  </View>
-                ))}
-            </ScrollView>
+            {transactionTypeInput !== 'REGULAR' ? (
+              <Text style={styles.emptyText}>Categories are only available for regular transactions.</Text>
+            ) : (
+              <>
+                <TextInput
+                  value={categoryInput}
+                  onChangeText={setCategoryInput}
+                  placeholder="Category"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
+                  blurOnSubmit={false}
+                />
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.categoryScroll}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {categoryList
+                    .filter((name) => name !== 'All')
+                    .map((name) => (
+                      <View key={name}>
+                        <Chip
+                          label={name}
+                          active={categoryInput.trim().toLowerCase() === name.toLowerCase()}
+                          onPress={() => setCategoryInput(name)}
+                        />
+                      </View>
+                    ))}
+                </ScrollView>
+              </>
+            )}
 
             <Text style={styles.detailSectionTitle}>Transaction type</Text>
             <View style={styles.filterRow}>
@@ -517,7 +562,14 @@ export function TransactionsScreen() {
                   key={type}
                   label={type.replace('_', ' ')}
                   active={transactionTypeInput === type}
-                  onPress={() => setTransactionTypeInput(type)}
+                  onPress={() => {
+                    setTransactionTypeInput(type);
+                    if (type !== 'REGULAR') {
+                      setCategoryInput('');
+                      setApplyToCategory(false);
+                      setCreateRule(false);
+                    }
+                  }}
                 />
               ))}
             </View>
@@ -528,19 +580,23 @@ export function TransactionsScreen() {
                   {applyToSimilar ? 'Apply to similar ✓' : 'Apply to similar'}
                 </Text>
               </Pressable>
-              <Pressable onPress={() => setApplyToCategory((prev) => !prev)} style={styles.toggleButton}>
-                <Text style={styles.toggleLabel}>
-                  {applyToCategory ? 'Apply to category ✓' : 'Apply to category'}
-                </Text>
-              </Pressable>
+              {transactionTypeInput === 'REGULAR' ? (
+                <Pressable onPress={() => setApplyToCategory((prev) => !prev)} style={styles.toggleButton}>
+                  <Text style={styles.toggleLabel}>
+                    {applyToCategory ? 'Apply to category ✓' : 'Apply to category'}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
 
-            <Pressable onPress={() => setCreateRule((prev) => !prev)} style={styles.toggleButton}>
-              <Text style={styles.toggleLabel}>
-                {createRule ? 'Create rule ✓' : 'Create rule'}
-              </Text>
-            </Pressable>
-            {createRule ? (
+            {transactionTypeInput === 'REGULAR' ? (
+              <Pressable onPress={() => setCreateRule((prev) => !prev)} style={styles.toggleButton}>
+                <Text style={styles.toggleLabel}>
+                  {createRule ? 'Create rule ✓' : 'Create rule'}
+                </Text>
+              </Pressable>
+            ) : null}
+            {createRule && transactionTypeInput === 'REGULAR' ? (
               <View style={styles.ruleBox}>
                 <View style={styles.filterRow}>
                   <Chip
@@ -579,7 +635,8 @@ export function TransactionsScreen() {
               <Text style={styles.emptyText}>No splits yet.</Text>
             ) : null}
             {splits.map((split, index) => (
-              <View key={`${split.category}-${index}`} style={styles.splitRow}>
+              <View key={`split-${index}`} style={styles.splitGroup}>
+                <View style={styles.splitRow}>
                 <TextInput
                   value={split.category}
                   onChangeText={(value) => {
@@ -587,9 +644,11 @@ export function TransactionsScreen() {
                       prev.map((item, idx) => (idx === index ? { ...item, category: value } : item))
                     );
                   }}
+                  onFocus={() => setActiveSplitIndex(index)}
                   placeholder="Category"
                   placeholderTextColor={colors.textMuted}
                   style={[styles.input, styles.splitInput]}
+                  blurOnSubmit={false}
                 />
                 <TextInput
                   value={split.amount}
@@ -603,11 +662,37 @@ export function TransactionsScreen() {
                   keyboardType="numeric"
                   style={[styles.input, styles.splitInput]}
                 />
+                </View>
+                {activeSplitIndex === index ? (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.categoryScroll}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {existingCategoryNames.map((name) => (
+                      <View key={`split-choice-${index}-${name}`}>
+                        <Chip
+                          label={name}
+                          active={split.category.trim().toLowerCase() === name.toLowerCase()}
+                          onPress={() =>
+                            setSplits((prev) =>
+                              prev.map((item, idx) => (idx === index ? { ...item, category: name } : item))
+                            )
+                          }
+                        />
+                      </View>
+                    ))}
+                  </ScrollView>
+                ) : null}
               </View>
             ))}
             <Pressable
               style={styles.secondaryButton}
-              onPress={() => setSplits((prev) => [...prev, { category: '', amount: '' }])}
+              onPress={() => {
+                setSplits((prev) => [...prev, { category: '', amount: '' }]);
+                setActiveSplitIndex(splits.length);
+              }}
             >
               <Text style={styles.secondaryLabel}>Add split</Text>
             </Pressable>
@@ -868,6 +953,9 @@ const styles = StyleSheet.create({
   },
   splitRow: {
     flexDirection: 'row',
+    gap: 8,
+  },
+  splitGroup: {
     gap: 8,
   },
   splitInput: {

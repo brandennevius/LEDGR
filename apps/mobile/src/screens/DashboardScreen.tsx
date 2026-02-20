@@ -9,7 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Svg, { Circle, Line, Polyline } from 'react-native-svg';
+import Svg, { Line, Polyline } from 'react-native-svg';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 import Chip from '../components/Chip';
@@ -138,13 +138,12 @@ const toPolylinePoints = (values: number[], totalPoints: number, width: number, 
     .join(' ');
 };
 
-const initials = (label: string) => {
-  const trimmed = label.trim();
-  if (!trimmed) return '?';
-  const parts = trimmed.split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
-};
+const formatAxisCurrency = (value: number) =>
+  value.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  });
 
 export function DashboardScreen() {
   const navigation = useNavigation<any>();
@@ -197,6 +196,7 @@ export function DashboardScreen() {
 
   const chartSeries = useMemo(() => buildSeries(overview), [overview]);
   const chartHeight = 172;
+  const yAxisWidth = 56;
   const maxChartValue = useMemo(() => {
     const spendPeak = Math.max(...chartSeries.spend, 0);
     const incomePeak = Math.max(...chartSeries.income, 0);
@@ -285,7 +285,7 @@ export function DashboardScreen() {
           if (bOver > 0 && aOver <= 0) return 1;
           return b.spend - a.spend;
         })
-        .slice(0, 8),
+        .slice(0, 5),
     [overview]
   );
 
@@ -311,6 +311,7 @@ export function DashboardScreen() {
 
   const saveDetail = async () => {
     if (!selected) return;
+    const isCategorizationDisabled = transactionTypeInput !== 'REGULAR';
     const parsedAmount = Number(amountInput);
     if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
       setError('Enter a valid amount before saving.');
@@ -324,11 +325,11 @@ export function DashboardScreen() {
         method: 'PATCH',
         body: {
           amount: signedAmount,
-          category: categoryInput,
+          ...(isCategorizationDisabled ? {} : { category: categoryInput.trim() }),
           transactionType: transactionTypeInput,
           applyToSimilar,
-          applyToCategory,
-          createRule,
+          applyToCategory: isCategorizationDisabled ? false : applyToCategory,
+          createRule: isCategorizationDisabled ? false : createRule,
           ruleMatchType,
           ruleMatchValue,
         },
@@ -368,9 +369,24 @@ export function DashboardScreen() {
   };
 
   const onChartLayout = (event: LayoutChangeEvent) => {
-    const width = Math.max(0, event.nativeEvent.layout.width - 8);
+    const width = Math.max(0, event.nativeEvent.layout.width - yAxisWidth - 12);
     if (width !== chartWidth) setChartWidth(width);
   };
+
+  const yAxisTicks = useMemo(
+    () => [maxChartValue, maxChartValue * 0.75, maxChartValue * 0.5, maxChartValue * 0.25].map((value) => formatAxisCurrency(value)),
+    [maxChartValue]
+  );
+  const xAxisTicks = useMemo(() => {
+    const now = new Date();
+    const days = chartSeries.daysInMonth;
+    const midDay = Math.max(1, Math.round(days / 2));
+    return [
+      `${now.toLocaleDateString('en-US', { month: 'short' })} 1`,
+      `${now.toLocaleDateString('en-US', { month: 'short' })} ${midDay}`,
+      `${now.toLocaleDateString('en-US', { month: 'short' })} ${days}`,
+    ];
+  }, [chartSeries.daysInMonth]);
 
   const spent = overview?.monthSpendTotal ?? 0;
   const budget = overview?.monthBudgetTotal ?? 0;
@@ -378,7 +394,11 @@ export function DashboardScreen() {
 
   return (
     <Screen edgeToEdge>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {loading ? (
           <View style={styles.loadingCard}>
             <ActivityIndicator color={colors.primary} />
@@ -405,62 +425,78 @@ export function DashboardScreen() {
                 : `${formatCurrency(Math.abs(budgetDiff))} over ${formatCurrency(budget)} budget`
               : 'No monthly budget set yet'}
           </Text>
-          <View style={styles.chartFrame} onLayout={onChartLayout}>
-            {chartWidth > 20 ? (
-              <Svg width={chartWidth} height={chartHeight + 18}>
-                {[0.25, 0.5, 0.75, 1].map((ratio) => {
-                  const y = chartHeight - ratio * chartHeight;
-                  return (
-                    <Line
-                      key={`grid-${ratio}`}
-                      x1={0}
-                      y1={y}
-                      x2={chartWidth}
-                      y2={y}
-                      stroke="rgba(255,255,255,0.08)"
-                      strokeWidth={1}
+          <View style={styles.chartFrame}>
+            <View style={styles.chartBody} onLayout={onChartLayout}>
+              <View style={[styles.yAxisColumn, { width: yAxisWidth }]}>
+                {yAxisTicks.map((tick, index) => (
+                  <Text key={`y-${index}-${tick}`} style={styles.yAxisTickLabel}>
+                    {tick}
+                  </Text>
+                ))}
+              </View>
+              {chartWidth > 20 ? (
+                <Svg width={chartWidth} height={chartHeight + 18}>
+                  {[0.25, 0.5, 0.75, 1].map((ratio) => {
+                    const y = chartHeight - ratio * chartHeight;
+                    return (
+                      <Line
+                        key={`grid-${ratio}`}
+                        x1={0}
+                        y1={y}
+                        x2={chartWidth}
+                        y2={y}
+                        stroke="rgba(255,255,255,0.08)"
+                        strokeWidth={1}
+                      />
+                    );
+                  })}
+
+                  {budget > 0 ? (
+                    <Polyline
+                      points={budgetPoints}
+                      fill="none"
+                      stroke="rgba(99, 102, 241, 0.95)"
+                      strokeWidth={2}
+                      strokeDasharray="4,5"
                     />
-                  );
-                })}
+                  ) : null}
 
-                {budget > 0 ? (
-                  <Polyline
-                    points={budgetPoints}
-                    fill="none"
-                    stroke="rgba(99, 102, 241, 0.95)"
-                    strokeWidth={2}
-                    strokeDasharray="4,5"
-                  />
-                ) : null}
+                  {(overview?.incomeSummary?.expected ?? 0) > 0 ? (
+                    <Polyline
+                      points={expectedIncomePoints}
+                      fill="none"
+                      stroke="rgba(56, 189, 248, 0.95)"
+                      strokeWidth={2}
+                      strokeDasharray="8,6"
+                    />
+                  ) : null}
 
-                {(overview?.incomeSummary?.expected ?? 0) > 0 ? (
-                  <Polyline
-                    points={expectedIncomePoints}
-                    fill="none"
-                    stroke="rgba(56, 189, 248, 0.95)"
-                    strokeWidth={2}
-                    strokeDasharray="8,6"
-                  />
-                ) : null}
-
-                {incomePoints ? (
-                  <Polyline
-                    points={incomePoints}
-                    fill="none"
-                    stroke={colors.success}
-                    strokeWidth={3}
-                  />
-                ) : null}
-                {spendPoints ? (
-                  <Polyline
-                    points={spendPoints}
-                    fill="none"
-                    stroke="#fb7185"
-                    strokeWidth={3}
-                  />
-                ) : null}
-              </Svg>
-            ) : null}
+                  {incomePoints ? (
+                    <Polyline
+                      points={incomePoints}
+                      fill="none"
+                      stroke={colors.success}
+                      strokeWidth={3}
+                    />
+                  ) : null}
+                  {spendPoints ? (
+                    <Polyline
+                      points={spendPoints}
+                      fill="none"
+                      stroke="#fb7185"
+                      strokeWidth={3}
+                    />
+                  ) : null}
+                </Svg>
+              ) : null}
+            </View>
+            <View style={styles.xAxisRow}>
+              {xAxisTicks.map((tick, index) => (
+                <Text key={`x-${index}-${tick}`} style={styles.xAxisTickLabel}>
+                  {tick}
+                </Text>
+              ))}
+            </View>
           </View>
           <View style={styles.legendRow}>
             <Text style={styles.legendText}>
@@ -538,56 +574,40 @@ export function DashboardScreen() {
           {budgetItems.length === 0 ? (
             <Text style={styles.emptyText}>Set category budgets to track month-to-date pacing.</Text>
           ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.budgetScroll}>
+            <View style={styles.budgetList}>
               {budgetItems.map((item) => {
                 const ratio = item.budget > 0 ? item.spend / item.budget : 0;
                 const progress = Math.max(0, Math.min(1, ratio));
-                const over = item.spend > item.budget;
-                const ringColor = over ? '#ef4444' : '#22c55e';
-                const overUnderAmount = Math.abs(item.spend - item.budget);
-                const center = 45;
-                const radius = 32;
-                const circumference = 2 * Math.PI * radius;
-                const dashoffset = circumference * (1 - progress);
+                const remaining = item.budget - item.spend;
+                const over = remaining < 0;
+                const barColor = ratio > 1 ? '#ef4444' : ratio > 0.75 ? '#f59e0b' : '#22c55e';
+                const remainingAmount = Math.abs(remaining);
 
                 return (
-                  <View key={item.name} style={styles.budgetCard}>
-                    <Svg width={90} height={90}>
-                      <Circle
-                        cx={center}
-                        cy={center}
-                        r={radius}
-                        stroke="rgba(255,255,255,0.18)"
-                        strokeWidth={8}
-                        fill="transparent"
-                      />
-                      <Circle
-                        cx={center}
-                        cy={center}
-                        r={radius}
-                        stroke={ringColor}
-                        strokeWidth={8}
-                        fill="transparent"
-                        strokeDasharray={`${circumference} ${circumference}`}
-                        strokeDashoffset={dashoffset}
-                        strokeLinecap="round"
-                        transform={`rotate(-90 ${center} ${center})`}
-                      />
-                    </Svg>
-                    <View style={styles.budgetInitialBadge}>
-                      <Text style={styles.budgetInitialText}>{initials(item.name)}</Text>
+                  <View key={item.name} style={styles.budgetRow}>
+                    <View style={styles.budgetRowTop}>
+                      <Text style={styles.budgetCategory} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.budgetAmounts}>
+                        {formatCurrency(item.spend)} / {formatCurrency(item.budget)}
+                      </Text>
                     </View>
-                    <Text numberOfLines={1} style={styles.budgetName}>
-                      {item.name}
-                    </Text>
+                    <View style={styles.budgetTrack}>
+                      <View
+                        style={[
+                          styles.budgetFill,
+                          { width: `${Math.max(4, progress * 100)}%`, backgroundColor: barColor },
+                        ]}
+                      />
+                    </View>
                     <Text style={[styles.budgetDelta, over ? styles.negative : styles.positive]}>
-                      {formatCurrency(overUnderAmount)}
+                      {formatCurrency(remainingAmount)} {over ? 'over' : 'left'}
                     </Text>
-                    <Text style={styles.budgetState}>{over ? 'over' : 'under'}</Text>
                   </View>
                 );
               })}
-            </ScrollView>
+            </View>
           )}
         </View>
       </ScrollView>
@@ -599,7 +619,7 @@ export function DashboardScreen() {
             <Text style={styles.loadingText}>Loading details...</Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={styles.detailContent}>
+          <ScrollView contentContainerStyle={styles.detailContent} keyboardShouldPersistTaps="handled">
             <Text style={styles.detailHeader}>Transaction to review</Text>
             <Text style={styles.detailDate}>{new Date(selected.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</Text>
             <Text style={styles.detailTitle}>{selected.name}</Text>
@@ -626,13 +646,18 @@ export function DashboardScreen() {
             </Text>
 
             <Text style={styles.detailSectionTitle}>Category</Text>
-            <TextInput
-              value={categoryInput}
-              onChangeText={setCategoryInput}
-              placeholder="Category"
-              placeholderTextColor={colors.textMuted}
-              style={styles.input}
-            />
+            {transactionTypeInput !== 'REGULAR' ? (
+              <Text style={styles.loadingText}>Categories are only available for regular transactions.</Text>
+            ) : (
+              <TextInput
+                value={categoryInput}
+                onChangeText={setCategoryInput}
+                placeholder="Category"
+                placeholderTextColor={colors.textMuted}
+                style={styles.input}
+                blurOnSubmit={false}
+              />
+            )}
 
             <Text style={styles.detailSectionTitle}>Transaction type</Text>
             <View style={styles.filterRow}>
@@ -641,7 +666,14 @@ export function DashboardScreen() {
                   key={type}
                   label={type.replace('_', ' ')}
                   active={transactionTypeInput === type}
-                  onPress={() => setTransactionTypeInput(type)}
+                  onPress={() => {
+                    setTransactionTypeInput(type);
+                    if (type !== 'REGULAR') {
+                      setCategoryInput('');
+                      setApplyToCategory(false);
+                      setCreateRule(false);
+                    }
+                  }}
                 />
               ))}
             </View>
@@ -652,19 +684,23 @@ export function DashboardScreen() {
                 active={applyToSimilar}
                 onPress={() => setApplyToSimilar((prev) => !prev)}
               />
-              <Chip
-                label={applyToCategory ? 'Apply category ✓' : 'Apply category'}
-                active={applyToCategory}
-                onPress={() => setApplyToCategory((prev) => !prev)}
-              />
-              <Chip
-                label={createRule ? 'Create rule ✓' : 'Create rule'}
-                active={createRule}
-                onPress={() => setCreateRule((prev) => !prev)}
-              />
+              {transactionTypeInput === 'REGULAR' ? (
+                <Chip
+                  label={applyToCategory ? 'Apply category ✓' : 'Apply category'}
+                  active={applyToCategory}
+                  onPress={() => setApplyToCategory((prev) => !prev)}
+                />
+              ) : null}
+              {transactionTypeInput === 'REGULAR' ? (
+                <Chip
+                  label={createRule ? 'Create rule ✓' : 'Create rule'}
+                  active={createRule}
+                  onPress={() => setCreateRule((prev) => !prev)}
+                />
+              ) : null}
             </View>
 
-            {createRule ? (
+            {createRule && transactionTypeInput === 'REGULAR' ? (
               <View style={styles.ruleWrap}>
                 <View style={styles.filterRow}>
                   <Chip
@@ -780,6 +816,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 6,
   },
+  chartBody: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  yAxisColumn: {
+    height: 190,
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    paddingBottom: 22,
+  },
+  yAxisTickLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+  },
+  xAxisRow: {
+    marginTop: 2,
+    marginLeft: 64,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingRight: 4,
+  },
+  xAxisTickLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+  },
   legendRow: {
     marginTop: 4,
     flexDirection: 'row',
@@ -885,47 +947,43 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 12,
   },
-  budgetScroll: {
-    gap: 12,
-    paddingRight: 8,
+  budgetList: {
+    gap: 8,
   },
-  budgetCard: {
-    width: 108,
+  budgetRow: {
+    gap: 5,
+  },
+  budgetRowTop: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'space-between',
+    gap: 10,
   },
-  budgetInitialBadge: {
-    marginTop: -62,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  budgetInitialText: {
+  budgetCategory: {
     color: colors.text,
     fontSize: 12,
     fontWeight: '700',
-  },
-  budgetName: {
-    color: colors.textMuted,
-    marginTop: 24,
-    fontSize: 11,
-    width: '100%',
-    textAlign: 'center',
+    flex: 1,
     textTransform: 'uppercase',
   },
-  budgetDelta: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  budgetState: {
+  budgetAmounts: {
     color: colors.textMuted,
-    fontSize: 12,
-    textTransform: 'lowercase',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  budgetTrack: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    overflow: 'hidden',
+  },
+  budgetFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  budgetDelta: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   positive: {
     color: colors.success,

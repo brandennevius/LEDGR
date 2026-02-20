@@ -31,7 +31,12 @@ export async function GET(
   const settingsMap = new Map(
     settings.map((setting) => [setting.name.toLowerCase(), setting.color])
   );
-  const categoryName = transaction.category ?? "Uncategorized";
+  const categoryName =
+    transaction.transactionType === "INTERNAL_TRANSFER"
+      ? "Internal transfer"
+      : transaction.transactionType === "INCOME"
+      ? "Income"
+      : transaction.category ?? "Uncategorized";
 
   return NextResponse.json({
     id: transaction.id,
@@ -92,13 +97,19 @@ export async function PATCH(
   }
 
   const classificationUpdates: {
-    category?: string;
+    category?: string | null;
     categoryNeedsReview?: boolean;
     categorySource?: "USER";
     transactionType?: "INCOME" | "INTERNAL_TRANSFER" | "REGULAR";
   } = {};
 
-  if (body.category?.trim()) {
+  const nextTransactionType = body.transactionType ?? transaction.transactionType;
+
+  if (nextTransactionType !== "REGULAR") {
+    classificationUpdates.category = null;
+    classificationUpdates.categoryNeedsReview = false;
+    classificationUpdates.categorySource = "USER";
+  } else if (body.category?.trim()) {
     classificationUpdates.category = body.category.trim();
     classificationUpdates.categoryNeedsReview = false;
     classificationUpdates.categorySource = "USER";
@@ -121,7 +132,7 @@ export async function PATCH(
     return NextResponse.json({ error: "No updates provided." }, { status: 400 });
   }
 
-  if (body.applyToSimilar && classificationUpdates.category) {
+  if (body.applyToSimilar && typeof classificationUpdates.category === "string") {
     const nameMatch = transaction.merchantName?.trim()
       ? { merchantName: transaction.merchantName }
       : { name: transaction.name };
@@ -132,7 +143,7 @@ export async function PATCH(
       },
       data: classificationUpdates,
     });
-  } else if (body.applyToCategory && classificationUpdates.category) {
+  } else if (body.applyToCategory && typeof classificationUpdates.category === "string") {
     const currentCategory = transaction.category ?? "Uncategorized";
     await prisma.transaction.updateMany({
       where: {
@@ -143,15 +154,15 @@ export async function PATCH(
     });
   }
 
-  await prisma.transaction.update({
-    where: { id },
+  await prisma.transaction.updateMany({
+    where: { id, userId: user.id },
     data: {
       ...classificationUpdates,
       ...(typeof amountUpdate !== "undefined" ? { amount: amountUpdate } : {}),
     },
   });
 
-  if (body.createRule && classificationUpdates.category) {
+  if (body.createRule && typeof classificationUpdates.category === "string") {
     const matchValue =
       body.ruleMatchValue?.trim() ||
       transaction.merchantName ||

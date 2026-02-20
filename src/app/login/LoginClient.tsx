@@ -12,6 +12,7 @@ export default function LoginClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next") ?? "/client";
+  const reason = searchParams.get("reason");
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -145,6 +146,11 @@ export default function LoginClient() {
           </div>
 
           <form className="space-y-4" onSubmit={handleEmailAuth}>
+            {reason === "unauthorized" ? (
+              <p className="rounded-2xl bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                This account is not approved for this beta.
+              </p>
+            ) : null}
             <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
               Email
             </label>

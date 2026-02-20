@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getOpenAI } from "@/lib/openai";
+import { checkRateLimit } from "@/lib/rateLimit";
 import {
   accountKind,
   classifyTransactionType,
@@ -139,6 +140,17 @@ export async function POST(request: Request) {
   const user = await getAuthedUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const limit = checkRateLimit({
+    key: `insights:chat:${user.id}`,
+    limit: 40,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
   }
 
   const body = (await request.json()) as {
