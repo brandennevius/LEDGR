@@ -118,16 +118,18 @@ export const detectInternalTransfers = (
     const name = (tx.merchantName ?? tx.name ?? "").toLowerCase();
     const acct = accountMap.get(tx.accountId);
     const kind = accountKind(acct);
-    const isCandidate =
-      tx.transactionType === "INTERNAL_TRANSFER" ||
+    const keywordCandidate =
       transferPattern.test(category) ||
       transferPattern.test(name) ||
       transferHintPattern.test(category) ||
-      transferHintPattern.test(name) ||
-      kind === "investment" ||
-      kind === "savings" ||
-      kind === "debt";
-    return { ...tx, isCandidate };
+      transferHintPattern.test(name);
+    const explicitCandidate = tx.transactionType === "INTERNAL_TRANSFER";
+    // Savings/investment account movements are commonly internal transfers.
+    // Debt accounts include normal purchases, so we do not auto-candidate on debt alone.
+    const accountKindCandidate = kind === "investment" || kind === "savings";
+    const isCandidate =
+      explicitCandidate || keywordCandidate || accountKindCandidate;
+    return { ...tx, isCandidate, keywordCandidate, explicitCandidate };
   });
 
   const inflows = candidates.filter((tx) => tx.amount < 0);
@@ -149,7 +151,13 @@ export const detectInternalTransfers = (
         const dayDiff =
           Math.abs(inflow.date.getTime() - outflow.date.getTime()) / 86400000;
         if (dayDiff > windowDays) return false;
-        return outflow.isCandidate || inflow.isCandidate;
+        // Avoid matching ordinary card purchases/refunds by requiring an explicit/keyword hint.
+        return (
+          outflow.explicitCandidate ||
+          inflow.explicitCandidate ||
+          outflow.keywordCandidate ||
+          inflow.keywordCandidate
+        );
       })
       .sort(
         (a, b) =>

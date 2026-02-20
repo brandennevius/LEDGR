@@ -154,6 +154,51 @@ export async function PATCH(
     });
   }
 
+  const shouldPersistRule =
+    (body.applyToSimilar || body.createRule) &&
+    typeof classificationUpdates.category === "string";
+  if (shouldPersistRule) {
+    const ruleCategory = classificationUpdates.category;
+    if (typeof ruleCategory === "string") {
+      const matchType = body.ruleMatchType ?? "EXACT";
+      const matchValueRaw =
+        body.ruleMatchValue?.trim() ||
+        transaction.merchantName ||
+        transaction.name;
+      const matchValue = matchValueRaw?.trim();
+
+      if (matchValue) {
+        const existingRule = await prisma.categoryRule.findFirst({
+          where: {
+            userId: user.id,
+            matchType,
+            matchValue,
+          },
+        });
+
+        if (existingRule) {
+          await prisma.categoryRule.update({
+            where: { id: existingRule.id },
+            data: {
+              category: ruleCategory,
+              transactionType: classificationUpdates.transactionType ?? "REGULAR",
+            },
+          });
+        } else {
+          await prisma.categoryRule.create({
+            data: {
+              userId: user.id,
+              matchType,
+              matchValue,
+              category: ruleCategory,
+              transactionType: classificationUpdates.transactionType ?? "REGULAR",
+            },
+          });
+        }
+      }
+    }
+  }
+
   await prisma.transaction.updateMany({
     where: { id, userId: user.id },
     data: {
@@ -161,24 +206,6 @@ export async function PATCH(
       ...(typeof amountUpdate !== "undefined" ? { amount: amountUpdate } : {}),
     },
   });
-
-  if (body.createRule && typeof classificationUpdates.category === "string") {
-    const matchValue =
-      body.ruleMatchValue?.trim() ||
-      transaction.merchantName ||
-      transaction.name;
-    if (matchValue) {
-      await prisma.categoryRule.create({
-        data: {
-          userId: user.id,
-          matchType: body.ruleMatchType ?? "EXACT",
-          matchValue,
-          category: classificationUpdates.category,
-          transactionType: classificationUpdates.transactionType ?? "REGULAR",
-        },
-      });
-    }
-  }
 
   return NextResponse.json({ ok: true });
 }

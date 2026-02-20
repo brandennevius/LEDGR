@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { useRoute } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Pressable,
@@ -82,6 +83,7 @@ const sanitizeAmountInput = (value: string) => {
 };
 
 export function TransactionsScreen() {
+  const route = useRoute<any>();
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -146,6 +148,12 @@ export function TransactionsScreen() {
   useEffect(() => {
     fetchRows();
   }, [days, categoryFilter, needsReviewOnly]);
+
+  useEffect(() => {
+    if (route.params?.openNeedsReview) {
+      setNeedsReviewOnly(true);
+    }
+  }, [route.params?.openNeedsReview]);
 
   useEffect(() => {
     fetchCategories();
@@ -329,7 +337,7 @@ export function TransactionsScreen() {
   };
 
   return (
-    <Screen title="Transactions" subtitle="Review, filter, and recategorize." edgeToEdge>
+    <Screen edgeToEdge>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -622,7 +630,7 @@ export function TransactionsScreen() {
 
             {selected.needsReview ? (
               <Pressable style={styles.secondaryButton} onPress={markReviewed}>
-                <Text style={styles.secondaryLabel}>Mark reviewed</Text>
+                <Text style={styles.secondaryLabel}>Review</Text>
               </Pressable>
             ) : null}
 
