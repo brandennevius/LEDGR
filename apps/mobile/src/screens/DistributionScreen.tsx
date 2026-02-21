@@ -163,7 +163,7 @@ const buildIntervals = (start: Date, end: Date, granularity: Granularity) => {
       const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
       const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
       const clippedStart = monthStart < start ? start : monthStart;
-      const clippedEnd = monthEnd > end ? end : monthEnd;
+      const clippedEnd = monthEnd > end ? endOfDay(end) : endOfDay(monthEnd);
       intervals.push({
         start: clippedStart,
         end: clippedEnd,
@@ -180,7 +180,7 @@ const buildIntervals = (start: Date, end: Date, granularity: Granularity) => {
     let weekIndex = 1;
     while (cursor <= end) {
       const bucketStart = cursor;
-      const bucketEnd = addDays(bucketStart, 6) > end ? end : addDays(bucketStart, 6);
+      const bucketEnd = addDays(bucketStart, 6) > end ? endOfDay(end) : endOfDay(addDays(bucketStart, 6));
       intervals.push({
         start: bucketStart,
         end: bucketEnd,
@@ -197,7 +197,7 @@ const buildIntervals = (start: Date, end: Date, granularity: Granularity) => {
   while (cursor <= end) {
     intervals.push({
       start: cursor,
-      end: cursor,
+      end: endOfDay(cursor),
       key: cursor.toISOString(),
       label: cursor.toLocaleDateString('en-US', { day: 'numeric' }),
     });
