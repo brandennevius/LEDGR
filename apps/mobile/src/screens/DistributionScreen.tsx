@@ -97,6 +97,13 @@ const addDays = (date: Date, days: number) => {
   return next;
 };
 
+// Server dates are ISO/UTC; normalize to local calendar-day noon to avoid timezone
+// shifts pushing rows into the wrong month/week bucket.
+const normalizeTxDate = (raw: string) => {
+  const day = raw.slice(0, 10);
+  return new Date(`${day}T12:00:00`);
+};
+
 const daysBetweenInclusive = (start: Date, end: Date) =>
   Math.max(1, Math.floor((endOfDay(end).getTime() - startOfDay(start).getTime()) / 86400000) + 1);
 
@@ -212,7 +219,7 @@ const buildBuckets = (transactions: CashFlowTx[], start: Date, end: Date, granul
   }));
 
   const inRangeTransactions = transactions
-    .map((tx) => ({ ...tx, parsedDate: new Date(tx.date) }))
+    .map((tx) => ({ ...tx, parsedDate: normalizeTxDate(tx.date) }))
     .filter((tx) => tx.parsedDate >= start && tx.parsedDate <= end);
 
   inRangeTransactions.forEach((tx) => {
