@@ -644,6 +644,24 @@ export function DistributionScreen() {
 
   const currentRangeText = formatDateRange(rangeData.start, rangeData.end);
   const previousRangeText = formatDateRange(rangeData.prevStart, rangeData.prevEnd);
+  const debugStats = useMemo(() => {
+    const inWindow = rows.filter((tx) => {
+      const parsed = normalizeTxDate(tx.date);
+      return parsed >= rangeData.start && parsed <= rangeData.end;
+    });
+    const inWindowIncome = inWindow.filter((tx) => tx.type === 'income').length;
+    const inWindowSpend = inWindow.filter((tx) => tx.type === 'spend').length;
+    const bucketIncomeTotal = rangeData.current.reduce((sum, bucket) => sum + bucket.income, 0);
+    const bucketSpendTotal = rangeData.current.reduce((sum, bucket) => sum + bucket.spend, 0);
+    return {
+      totalRows: rows.length,
+      rangeRows: inWindow.length,
+      rangeIncomeRows: inWindowIncome,
+      rangeSpendRows: inWindowSpend,
+      bucketIncomeTotal,
+      bucketSpendTotal,
+    };
+  }, [rangeData.current, rangeData.end, rangeData.start, rows]);
 
   return (
     <Screen edgeToEdge>
@@ -660,6 +678,13 @@ export function DistributionScreen() {
           ) : null}
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          <Text style={styles.debugText}>
+            DEBUG {range.toUpperCase()} | anchor {rangeAnchor.toISOString().slice(0, 10)} |{' '}
+            {rangeData.start.toISOString().slice(0, 10)}→{rangeData.end.toISOString().slice(0, 10)} | rows{' '}
+            {debugStats.rangeRows}/{debugStats.totalRows} (i:{debugStats.rangeIncomeRows} s:
+            {debugStats.rangeSpendRows}) | totals i:{Math.round(debugStats.bucketIncomeTotal)} s:
+            {Math.round(debugStats.bucketSpendTotal)}
+          </Text>
 
           <MetricCard
             metric="net"
@@ -808,6 +833,12 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.danger,
     fontSize: 12,
+    paddingHorizontal: 2,
+  },
+  debugText: {
+    color: '#fda4af',
+    fontSize: 10,
+    lineHeight: 14,
     paddingHorizontal: 2,
   },
   card: {
