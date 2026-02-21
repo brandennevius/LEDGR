@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -16,6 +16,7 @@ import {
 } from 'react-native-plaid-link-sdk';
 
 import { Screen } from '../components/Screen';
+import { useAppOnboarding } from '../context/AppOnboardingContext';
 import { apiRequest } from '../lib/api';
 import { colors } from '../theme';
 
@@ -53,6 +54,8 @@ const formatCurrency = (value: number) =>
   });
 
 export function AccountsScreen() {
+  const connectButtonRef = useRef<View | null>(null);
+  const { registerAnchor, unregisterAnchor } = useAppOnboarding();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [clientName, setClientName] = useState('');
@@ -100,6 +103,25 @@ export function AccountsScreen() {
   useEffect(() => {
     load();
   }, []);
+
+  const measureConnectButton = useCallback(() => {
+    requestAnimationFrame(() => {
+      connectButtonRef.current?.measureInWindow((x, y, width, height) => {
+        if (width <= 0 || height <= 0) return;
+        registerAnchor('accounts-connect', { x, y, width, height });
+      });
+    });
+  }, [registerAnchor]);
+
+  useEffect(() => {
+    measureConnectButton();
+  }, [measureConnectButton, loading, accounts.length, connections.length]);
+
+  useEffect(() => {
+    return () => {
+      unregisterAnchor('accounts-connect');
+    };
+  }, [unregisterAnchor]);
 
   const connectionCounts = useMemo(() => {
     const itemIdByInternal = new Map(connections.map((connection) => [connection.id, connection.itemId]));
@@ -228,9 +250,11 @@ export function AccountsScreen() {
               {clientName || 'Client'} · {accounts.length} accounts · {connections.length} connections
             </Text>
           </View>
-          <Pressable style={styles.primaryButton} onPress={startLink}>
-            <Text style={styles.primaryLabel}>{linking ? 'Opening...' : 'Connect'}</Text>
-          </Pressable>
+          <View ref={connectButtonRef} onLayout={measureConnectButton}>
+            <Pressable style={styles.primaryButton} onPress={startLink}>
+              <Text style={styles.primaryLabel}>{linking ? 'Opening...' : 'Connect'}</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.actionRow}>

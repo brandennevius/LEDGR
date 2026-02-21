@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ModalSheet from '../components/ModalSheet';
@@ -454,32 +455,35 @@ export function DistributionScreen() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [detailOpen, setDetailOpen] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    const load = async () => {
-      try {
-        const response = await apiRequest<DistributionResponse>('/api/distribution');
-        if (isMounted) {
-          setData(response);
-          setError(null);
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      const load = async () => {
+        setLoading(true);
+        try {
+          const response = await apiRequest<DistributionResponse>('/api/distribution');
+          if (isMounted) {
+            setData(response);
+            setError(null);
+          }
+        } catch (err) {
+          if (isMounted) {
+            const message =
+              typeof err === 'object' && err && 'error' in err
+                ? String((err as { error?: string }).error)
+                : 'Unable to load cash flow.';
+            setError(message);
+          }
+        } finally {
+          if (isMounted) setLoading(false);
         }
-      } catch (err) {
-        if (isMounted) {
-          const message =
-            typeof err === 'object' && err && 'error' in err
-              ? String((err as { error?: string }).error)
-              : 'Unable to load cash flow.';
-          setError(message);
-        }
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-    load();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+      };
+      void load();
+      return () => {
+        isMounted = false;
+      };
+    }, [])
+  );
 
   const rows = useMemo(() => data?.cashFlowTransactions ?? [], [data?.cashFlowTransactions]);
   const rangeAnchor = useMemo(() => {

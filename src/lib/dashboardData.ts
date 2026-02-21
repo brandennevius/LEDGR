@@ -1,16 +1,10 @@
 import { prisma } from "@/lib/db";
-import {
-  mockClient,
-  mockTransactions,
-} from "@/data/mockData";
 import { buildClientSnapshot } from "@/utils/trends";
 import { categorizeTransactions } from "@/lib/categorize";
 import { computeCashOnHand, hydrateGoals } from "@/lib/goals";
 import { resolveCategoryColor } from "@/lib/categoryColors";
 import {
   detectInternalTransfers,
-  classifyTransactionType,
-  incomePattern,
   investmentPattern,
   isIncomeTransaction,
   isTransferTransaction,
@@ -624,22 +618,6 @@ export const getCoachDashboardData = async (user: User) => {
     take: 5,
   });
 
-  if (transactions.length === 0 || accounts.length === 0) {
-    return {
-      clientName: getDisplayName(user) ?? mockClient.name,
-      netWorth: 38240,
-      monthlySurplus: 420,
-      bufferDays: 12.4,
-      recentTransactions: mockTransactions.slice(0, 5).map((tx) => ({
-        name: tx.merchant,
-        category: tx.category,
-        amount: Math.abs(tx.amount),
-        isIncome: tx.amount > 0,
-        day: "Recent",
-      })),
-    };
-  }
-
   const netWorth = accounts.reduce((acc, account) => {
     const balance = account.currentBalance ?? 0;
     if (account.type === "credit") return acc - balance;
@@ -733,7 +711,6 @@ export const getDistributionData = async (user: User) => {
     where: { userId: user.id },
   });
 
-  const usingMock = transactions.length === 0;
   const accountMap = new Map(
     accounts.map((account) => [account.id, account])
   );
@@ -745,33 +722,8 @@ export const getDistributionData = async (user: User) => {
     });
   });
 
-  let fallbackTransactions: SplitAwareTransaction[];
-  if (usingMock) {
-    fallbackTransactions = mockTransactions.map((tx) => {
-      const category = tx.category ?? "Uncategorized";
-      const isMockIncome =
-        incomePattern.test(category.toLowerCase()) ||
-        incomePattern.test(tx.merchant.toLowerCase());
-      return {
-        id: tx.id,
-        amount: isMockIncome ? -Math.abs(tx.amount) : Math.abs(tx.amount),
-        category,
-        name: tx.merchant,
-        merchantName: null,
-        transactionType: classifyTransactionType({
-          amount: isMockIncome ? -Math.abs(tx.amount) : Math.abs(tx.amount),
-          category,
-          name: tx.merchant,
-          accountType: accountMap.get(tx.accountId)?.type ?? null,
-          accountSubtype: accountMap.get(tx.accountId)?.subtype ?? null,
-        }),
-        accountId: tx.accountId,
-        date: new Date(tx.date),
-        splits: [],
-      };
-    });
-  } else {
-    fallbackTransactions = transactions.map((tx) => ({
+  const usableTransactions = expandTransactionsWithSplits(
+    transactions.map((tx) => ({
       id: tx.id,
       amount: tx.amount,
       category: tx.category ?? "Uncategorized",
@@ -781,10 +733,8 @@ export const getDistributionData = async (user: User) => {
       accountId: tx.accountId,
       date: tx.date,
       splits: tx.splits ?? [],
-    }));
-  }
-
-  const usableTransactions = expandTransactionsWithSplits(fallbackTransactions);
+    }))
+  );
 
   const incomeTransactions = usableTransactions.filter((tx) =>
     isIncomeTransaction(tx)

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Pressable,
@@ -112,7 +113,7 @@ export function TransactionsScreen() {
   const [editingAmount, setEditingAmount] = useState(false);
   const [activeSplitIndex, setActiveSplitIndex] = useState<number | null>(null);
 
-  const fetchRows = async () => {
+  const fetchRows = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -132,24 +133,23 @@ export function TransactionsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [categoryFilter, days, needsReviewOnly]);
 
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       const data = await apiRequest<CategoriesResponse>('/api/categories');
       setCategoryList(['All', ...(data.categories ?? [])]);
     } catch {
       setCategoryList(['All']);
     }
-  };
-
-  useEffect(() => {
-    fetchRows();
-  }, [days, categoryFilter, needsReviewOnly]);
-
-  useEffect(() => {
-    fetchCategories();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchRows();
+      void fetchCategories();
+    }, [fetchCategories, fetchRows])
+  );
 
   const filteredRows = useMemo(() => {
     let rows = [...transactions];

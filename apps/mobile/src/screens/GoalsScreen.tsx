@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Pressable,
@@ -54,6 +55,34 @@ type InsightResponse = {
   error?: string;
 };
 
+type SetupGoalKey = 'DEBT' | 'EMERGENCY' | 'SAVINGS';
+
+type SetupDetailBase = {
+  name: string;
+  target: string;
+  startDate: string;
+  endDate: string;
+};
+
+type DebtSetupDetail = SetupDetailBase & {
+  accountId: string;
+  minPayment: string;
+  interestRate: string;
+  termMonths: string;
+};
+
+type EmergencySetupDetail = SetupDetailBase & {
+  complete: boolean;
+};
+
+type SavingsSetupDetail = SetupDetailBase;
+
+type SetupDetails = {
+  DEBT: DebtSetupDetail;
+  EMERGENCY: EmergencySetupDetail;
+  SAVINGS: SavingsSetupDetail;
+};
+
 const goalTypeOptions = [
   { value: 'SAVINGS', label: 'Savings target' },
   { value: 'SPEND_LIMIT', label: 'Spending limit' },
@@ -98,9 +127,9 @@ export function GoalsScreen() {
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupStep, setSetupStep] = useState(1);
   const [setupData, setSetupData] = useState<SetupDataResponse | null>(null);
-  const [selectedGoals, setSelectedGoals] = useState<Array<'DEBT' | 'EMERGENCY' | 'SAVINGS'>>([]);
+  const [selectedGoals, setSelectedGoals] = useState<SetupGoalKey[]>([]);
   const [replaceExisting, setReplaceExisting] = useState(false);
-  const [setupDetails, setSetupDetails] = useState<Record<string, any>>({
+  const [setupDetails, setSetupDetails] = useState<SetupDetails>({
     DEBT: {
       name: 'Debt payoff',
       target: '',
@@ -126,7 +155,7 @@ export function GoalsScreen() {
     },
   });
 
-  const loadGoals = async () => {
+  const loadGoals = useCallback(async () => {
     try {
       const data = await apiRequest<GoalsResponse>('/api/goals');
       setGoals(data.goals ?? []);
@@ -140,7 +169,7 @@ export function GoalsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const loadSetupData = async () => {
     const data = await apiRequest<SetupDataResponse>('/api/goals/setup-data');
@@ -148,9 +177,11 @@ export function GoalsScreen() {
     setReplaceExisting(data.hasExistingGoals);
   };
 
-  useEffect(() => {
-    loadGoals();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      void loadGoals();
+    }, [loadGoals])
+  );
 
   const activeGoals = useMemo(
     () => goals.filter((goal) => goal.status !== 'COMPLETED'),
@@ -214,7 +245,7 @@ export function GoalsScreen() {
     }
   };
 
-  const toggleGoal = (key: 'DEBT' | 'EMERGENCY' | 'SAVINGS') => {
+  const toggleGoal = (key: SetupGoalKey) => {
     setSelectedGoals((prev) => {
       if (prev.includes(key)) return prev.filter((item) => item !== key);
       if (prev.length >= 3) return prev;
@@ -222,7 +253,7 @@ export function GoalsScreen() {
     });
   };
 
-  const updateSetupDetails = (key: string, patch: Record<string, any>) => {
+  const updateSetupDetails = <K extends SetupGoalKey>(key: K, patch: Partial<SetupDetails[K]>) => {
     setSetupDetails((prev) => ({
       ...prev,
       [key]: { ...prev[key], ...patch },
@@ -239,23 +270,66 @@ export function GoalsScreen() {
     }
     for (let index = 0; index < selectedGoals.length; index += 1) {
       const key = selectedGoals[index];
-      const info = setupDetails[key];
-      const type = key === 'DEBT' ? 'DEBT' : 'SAVINGS';
+      if (key === 'DEBT') {
+        const info = setupDetails.DEBT;
+        await apiRequest('/api/goals', {
+          method: 'POST',
+          body: {
+            name: info.name,
+            type: 'DEBT',
+            cadence: 'MONTHLY',
+            target: Number(info.target),
+            startDate: info.startDate || null,
+            endDate: info.endDate || null,
+            priority: index + 1,
+            accountId: info.accountId !== 'manual' ? info.accountId : null,
+            minPayment: info.minPayment ? Number(info.minPayment) : null,
+            interestRate: info.interestRate ? Number(info.interestRate) : null,
+            termMonths: info.termMonths ? Number(info.termMonths) : null,
+            status: 'ACTIVE',
+          },
+        });
+        continue;
+      }
+
+      if (key === 'EMERGENCY') {
+        const info = setupDetails.EMERGENCY;
+        await apiRequest('/api/goals', {
+          method: 'POST',
+          body: {
+            name: info.name,
+            type: 'SAVINGS',
+            cadence: 'MONTHLY',
+            target: Number(info.target),
+            startDate: info.startDate || null,
+            endDate: info.complete ? todayISO() : info.endDate || null,
+            priority: index + 1,
+            accountId: null,
+            minPayment: null,
+            interestRate: null,
+            termMonths: null,
+            status: info.complete ? 'COMPLETED' : 'ACTIVE',
+          },
+        });
+        continue;
+      }
+
+      const info = setupDetails.SAVINGS;
       await apiRequest('/api/goals', {
         method: 'POST',
         body: {
           name: info.name,
-          type,
+          type: 'SAVINGS',
           cadence: 'MONTHLY',
           target: Number(info.target),
           startDate: info.startDate || null,
-          endDate: info.complete ? todayISO() : info.endDate || null,
+          endDate: info.endDate || null,
           priority: index + 1,
-          accountId: key === 'DEBT' && info.accountId !== 'manual' ? info.accountId : null,
-          minPayment: key === 'DEBT' && info.minPayment ? Number(info.minPayment) : null,
-          interestRate: key === 'DEBT' && info.interestRate ? Number(info.interestRate) : null,
-          termMonths: key === 'DEBT' && info.termMonths ? Number(info.termMonths) : null,
-          status: info.complete ? 'COMPLETED' : 'ACTIVE',
+          accountId: null,
+          minPayment: null,
+          interestRate: null,
+          termMonths: null,
+          status: 'ACTIVE',
         },
       });
     }

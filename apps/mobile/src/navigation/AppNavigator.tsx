@@ -1,13 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
-import { NavigationContainer } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  type NavigationContainerRef,
+  type NavigatorScreenParams,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 
+import { AppOnboardingOverlay } from '../components/AppOnboardingOverlay';
 import { CoachChatFab } from '../components/CoachChatFab';
+import { AppOnboardingProvider, type AppTabName } from '../context/AppOnboardingContext';
 import { AccountsScreen } from '../screens/AccountsScreen';
 import { CategoriesScreen } from '../screens/CategoriesScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
@@ -17,8 +23,22 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { TransactionsScreen } from '../screens/TransactionsScreen';
 import { colors, navigationTheme } from '../theme';
 
-const TopTab = createMaterialTopTabNavigator();
-const Stack = createNativeStackNavigator();
+type TopTabParamList = {
+  Dashboard: undefined;
+  Transactions: undefined;
+  Categories: undefined;
+  Distribution: undefined;
+  Goals: undefined;
+  Accounts: undefined;
+};
+
+type RootStackParamList = {
+  Tabs: NavigatorScreenParams<TopTabParamList>;
+  Settings: undefined;
+};
+
+const TopTab = createMaterialTopTabNavigator<TopTabParamList>();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 const chrome = colors.chrome as string;
 const chromeText = colors.chromeText as string;
 const cardBorder = colors.cardBorder as string;
@@ -54,16 +74,17 @@ function MainTabs() {
   );
 }
 
-export function AppNavigator() {
+export function AppNavigator({ userId }: { userId: string }) {
   const [faceIdRequired, setFaceIdRequired] = useState(false);
   const [unlocked, setUnlocked] = useState(true);
   const appStateRef = useRef(AppState.currentState);
+  const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
+
+  const navigateToTab = useCallback((tab: AppTabName) => {
+    navigationRef.current?.navigate('Tabs', { screen: tab });
+  }, []);
 
   const promptUnlock = useCallback(async () => {
-    if (!faceIdRequired) {
-      setUnlocked(true);
-      return;
-    }
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const enrolled = await LocalAuthentication.isEnrolledAsync();
     if (!hasHardware || !enrolled) {
@@ -77,7 +98,7 @@ export function AppNavigator() {
       disableDeviceFallback: false,
     });
     setUnlocked(result.success);
-  }, [faceIdRequired]);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -86,7 +107,12 @@ export function AppNavigator() {
         if (!mounted) return;
         const enabled = value === 'true';
         setFaceIdRequired(enabled);
-        setUnlocked(!enabled);
+        if (!enabled) {
+          setUnlocked(true);
+          return;
+        }
+        setUnlocked(false);
+        void promptUnlock();
       })
       .catch(() => {
         if (!mounted) return;
@@ -96,7 +122,7 @@ export function AppNavigator() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [promptUnlock]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (nextState) => {
@@ -107,60 +133,63 @@ export function AppNavigator() {
         setFaceIdRequired(enabled);
         if (enabled) {
           setUnlocked(false);
-          await promptUnlock();
+          void promptUnlock();
+          return;
         }
+        setUnlocked(true);
       }
     });
     return () => sub.remove();
   }, [promptUnlock]);
 
-  useEffect(() => {
-    if (faceIdRequired && !unlocked) {
-      promptUnlock();
-    }
-  }, [faceIdRequired, unlocked, promptUnlock]);
-
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <View style={styles.container}>
-        <Stack.Navigator
-          initialRouteName="Tabs"
-          screenOptions={({ navigation }) => ({
-            headerShown: true,
-            headerShadowVisible: false,
-            headerTitleAlign: 'center',
-            headerStyle: styles.headerBar,
-            headerTitle: () => <Text style={styles.headerTitle}>LEDGR</Text>,
-            headerLeft: () => (
-              <Pressable
-                onPress={() => {
-                  if (navigation.getState().routes[navigation.getState().index]?.name === 'Settings') {
-                    navigation.navigate('Tabs' as never);
-                    return;
-                  }
-                  navigation.navigate('Settings' as never);
-                }}
-                style={styles.headerIconButton}
-              >
-                <Ionicons
-                  name={
-                    navigation.getState().routes[navigation.getState().index]?.name === 'Settings'
-                      ? 'settings'
-                      : 'settings-outline'
-                  }
-                  size={20}
-                  color={chromeText}
-                />
-              </Pressable>
-            ),
-            headerRight: () => <CoachChatFab variant="icon" />,
-            headerLeftContainerStyle: styles.headerSideContainer,
-            headerRightContainerStyle: styles.headerSideContainer,
-          })}
-        >
-          <Stack.Screen name="Tabs" component={MainTabs} options={{ headerTitle: () => <Text style={styles.headerTitle}>LEDGR</Text> }} />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
-        </Stack.Navigator>
+        <AppOnboardingProvider navigateToTab={navigateToTab} userId={userId}>
+          <Stack.Navigator
+            initialRouteName="Tabs"
+            screenOptions={({ navigation }) => ({
+              headerShown: true,
+              headerShadowVisible: false,
+              headerTitleAlign: 'center',
+              headerStyle: styles.headerBar,
+              headerTitle: () => <Text style={styles.headerTitle}>LEDGR</Text>,
+              headerLeft: () => (
+                <Pressable
+                  onPress={() => {
+                    if (navigation.getState().routes[navigation.getState().index]?.name === 'Settings') {
+                      navigation.navigate('Tabs' as never);
+                      return;
+                    }
+                    navigation.navigate('Settings' as never);
+                  }}
+                  style={styles.headerIconButton}
+                >
+                  <Ionicons
+                    name={
+                      navigation.getState().routes[navigation.getState().index]?.name === 'Settings'
+                        ? 'settings'
+                        : 'settings-outline'
+                    }
+                    size={20}
+                    color={chromeText}
+                  />
+                </Pressable>
+              ),
+              headerRight: () => <CoachChatFab variant="icon" />,
+              headerLeftContainerStyle: styles.headerSideContainer,
+              headerRightContainerStyle: styles.headerSideContainer,
+            })}
+          >
+            <Stack.Screen
+              name="Tabs"
+              component={MainTabs}
+              options={{ headerTitle: () => <Text style={styles.headerTitle}>LEDGR</Text> }}
+            />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+          </Stack.Navigator>
+          <AppOnboardingOverlay disabled={faceIdRequired && !unlocked} />
+        </AppOnboardingProvider>
         {faceIdRequired && !unlocked ? (
           <View style={styles.lockOverlay}>
             <Text style={styles.lockTitle}>Face ID Required</Text>

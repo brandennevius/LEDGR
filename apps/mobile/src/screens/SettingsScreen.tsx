@@ -21,6 +21,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { LegalDocumentModal } from '../components/LegalDocumentModal';
 import { type LegalDocType } from '../content/legal';
 import { Screen } from '../components/Screen';
+import { useAppOnboarding } from '../context/AppOnboardingContext';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../lib/api';
 import { supabase } from '../lib/supabase';
@@ -101,6 +102,7 @@ function ToggleRow({
 
 export function SettingsScreen() {
   const { user, signOut } = useAuth();
+  const { restart } = useAppOnboarding();
   const [overrideValue, setOverrideValue] = useState('');
   const [savedValue, setSavedValue] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -305,6 +307,11 @@ export function SettingsScreen() {
     await signOut();
   };
 
+  const handleReplayTour = async () => {
+    await restart();
+    setStatus('App walkthrough restarted.');
+  };
+
   return (
     <Screen edgeToEdge>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -346,6 +353,7 @@ export function SettingsScreen() {
             label="Visit our website"
             onPress={() => Linking.openURL('https://ledgr-henna.vercel.app')}
           />
+          <Row label="Replay app walkthrough" onPress={handleReplayTour} />
           <Row label="Terms of service" onPress={() => setLegalDoc('terms')} />
           <Row label="Privacy policy" onPress={() => setLegalDoc('privacy')} />
         </View>

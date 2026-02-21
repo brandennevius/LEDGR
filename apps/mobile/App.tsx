@@ -77,7 +77,7 @@ function RootNavigator() {
     );
   }
 
-  return <AppNavigator />;
+  return <AppNavigator userId={sessionUserId} />;
 }
 
 export default function App() {
