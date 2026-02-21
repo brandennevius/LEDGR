@@ -1,0 +1,13 @@
+# Keep EAS archive lean; native dependencies are reinstalled in cloud builds.
+node_modules
+.expo
+npm-debug.*
+
+ios/Pods
+ios/build
+ios/.symlinks
+ios/DerivedData
+
+android/.gradle
+android/app/build
+android/build
