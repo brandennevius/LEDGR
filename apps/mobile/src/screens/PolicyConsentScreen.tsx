@@ -31,8 +31,12 @@ export function PolicyConsentScreen({
         body: { acceptTerms: true, acceptPrivacy: true },
       });
       onAccepted();
-    } catch {
-      setError('Unable to save policy acceptance. Please try again.');
+    } catch (err) {
+      const message =
+        typeof err === 'object' && err && 'error' in err
+          ? String((err as { error?: string }).error)
+          : 'Unable to save policy acceptance. Please try again.';
+      setError(message);
     } finally {
       setSaving(false);
     }

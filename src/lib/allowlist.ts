@@ -1,7 +1,13 @@
-const normalizeEmail = (value: string) => value.trim().toLowerCase();
+const normalizeEmail = (value: string) =>
+  value
+    .trim()
+    .replace(/^["']+|["']+$/g, "")
+    .toLowerCase();
 
 export const getAllowedEmails = () =>
   String(process.env.ALLOWED_EMAILS ?? "")
+    .trim()
+    .replace(/^["']+|["']+$/g, "")
     .split(",")
     .map((email) => normalizeEmail(email))
     .filter(Boolean);
