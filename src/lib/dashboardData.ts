@@ -73,7 +73,6 @@ const getDisplayName = (user: User) => {
   if (user.email?.includes("@")) return user.email.split("@")[0];
   return "Client";
 };
-
 const computeIncomeForecast = (
   transactions: Array<{
     amount: number;
