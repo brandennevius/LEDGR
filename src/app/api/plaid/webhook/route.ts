@@ -3,6 +3,8 @@ import { createHash, timingSafeEqual } from "crypto";
 import { decodeProtectedHeader, importJWK, jwtVerify } from "jose";
 import { prisma } from "@/lib/db";
 import { plaidClient } from "@/lib/plaid";
+import { checkRateLimit } from "@/lib/rateLimit";
+import { syncTransactionsForPlaidItems } from "@/lib/plaidTransactionsSync";
 
 const attentionCodes = new Set([
   "PENDING_DISCONNECT",
@@ -18,6 +20,13 @@ const disconnectedCodes = new Set([
 ]);
 
 const recoveredCodes = new Set(["LOGIN_REPAIRED", "ITEM_LOGIN_REPAIRED"]);
+const transactionWebhookCodes = new Set([
+  "SYNC_UPDATES_AVAILABLE",
+  "DEFAULT_UPDATE",
+  "INITIAL_UPDATE",
+  "HISTORICAL_UPDATE",
+  "TRANSACTIONS_REMOVED",
+]);
 
 const verifyWebhook = async (rawBody: string, jwt: string) => {
   const header = decodeProtectedHeader(jwt);
@@ -92,7 +101,7 @@ export async function POST(request: Request) {
     }
     try {
       await verifyWebhook(rawBody, signedJwt);
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: "Webhook verification failed." },
         { status: 401 }
@@ -104,7 +113,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  const { webhook_code } = payload;
+  const { webhook_type, webhook_code } = payload;
   if (!webhook_code) {
     return NextResponse.json({ ok: true });
   }
@@ -123,6 +132,34 @@ export async function POST(request: Request) {
       where: { itemId: payload.item_id },
       data: { status },
     });
+  }
+
+  const shouldSyncTransactions =
+    webhook_type === "TRANSACTIONS" &&
+    transactionWebhookCodes.has(webhook_code);
+
+  if (shouldSyncTransactions) {
+    const limit = checkRateLimit({
+      key: `plaid:webhook-sync:${payload.item_id}`,
+      limit: 6,
+      windowMs: 60 * 1000,
+    });
+    if (!limit.allowed) {
+      return NextResponse.json({ ok: true, throttled: true });
+    }
+
+    const plaidItems = await prisma.plaidItem.findMany({
+      where: { itemId: payload.item_id, status: "active" },
+      select: {
+        id: true,
+        userId: true,
+        accessToken: true,
+        transactionsCursor: true,
+      },
+    });
+    if (plaidItems.length > 0) {
+      await syncTransactionsForPlaidItems(plaidItems);
+    }
   }
 
   return NextResponse.json({ ok: true });

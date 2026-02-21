@@ -1,4 +1,10 @@
 {
   "framework": "nextjs",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "crons": [
+    {
+      "path": "/api/plaid/transactions/cron",
+      "schedule": "0 */2 * * *"
+    }
+  ]
 }
