@@ -2,7 +2,7 @@
 
 - Procedure owner: Branden Nevius
 - Effective date: 2026-02-15
-- Last reviewed: 2026-02-20
+- Last reviewed: 2026-02-21
 
 This document operationalizes `/Users/brandennevius/Desktop/LEDGR/docs/security/information-security-policy.md`.
 

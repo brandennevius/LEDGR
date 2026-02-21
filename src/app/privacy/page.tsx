@@ -45,6 +45,7 @@ const sections: Array<{ title: string; body: string[] }> = [
     title: "5) Security Controls",
     body: [
       "Data in transit is encrypted using TLS.",
+      "Linked-institution access tokens are encrypted at the application layer before database storage.",
       "Access is controlled by authenticated APIs, environment-scoped credentials, and server-side authorization checks.",
       "We apply monitoring and abuse controls (including rate limiting) to protect the platform.",
     ],

@@ -3,9 +3,9 @@
 - Document owner: Branden Nevius (Founder / Engineering)
 - Security contact: brandennevius@gmail.com
 - Effective date: 2026-02-15
-- Last reviewed: 2026-02-20
+- Last reviewed: 2026-02-21
 - Review cadence: At least annually, and after material architecture changes
-- Version: 1.1
+- Version: 1.2
 
 ## 1) Purpose
 
@@ -135,7 +135,7 @@ Any exception to this policy must include:
 - Risk acceptance by the document owner
 - Expiration date and remediation plan
 
-## 13) Policy Operational Status (as of 2026-02-20)
+## 13) Policy Operational Status (as of 2026-02-21)
 
 This section is included so external compliance responses remain accurate.
 
@@ -144,6 +144,7 @@ Implemented now:
 - Authenticated API routes enforce authorization checks
 - Plaid webhook signature verification route is implemented
 - Plaid access credentials are stored server-side, not client-side
+- Plaid access tokens are encrypted at application layer (AES-GCM) and key rotation is documented
 - Data deletion endpoints exist for account/transaction cleanup
 - AI chat context is request-scoped: aggregate context by default with
   transaction-level context only for transaction-detail prompts
@@ -153,6 +154,8 @@ Implemented now:
   - Plaid link/exchange/sync routes
   - AI insight and recategorization routes
 - Plaid sync/exchange includes ownership conflict guards to prevent cross-user reassignment of linked resources
+- Plaid token encryption rotation runbook is maintained at
+  `/Users/brandennevius/Desktop/LEDGR/docs/security/plaid-token-encryption-runbook.md`
 
 In progress / requires formalization:
 
