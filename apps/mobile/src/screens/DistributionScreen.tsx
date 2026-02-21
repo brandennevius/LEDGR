@@ -7,14 +7,17 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import ModalSheet from '../components/ModalSheet';
 import { Screen } from '../components/Screen';
 import { apiRequest } from '../lib/api';
 import { colors } from '../theme';
 
 type CashFlowType = 'income' | 'spend' | 'internal_transfer' | 'transfer' | 'investment';
 type MetricKey = 'net' | 'spend' | 'income';
-type RangeKey = 'mtd' | 'ytd' | '12m' | '3m' | '4w';
+type RangeKey = '4w' | '3m' | 'ytd' | '12m' | 'mtd';
+type Granularity = 'day' | 'week' | 'month';
 
 type CashFlowTx = {
   id: string;
@@ -27,10 +30,6 @@ type CashFlowTx = {
 };
 
 type DistributionResponse = {
-  rangeLabel: string;
-  incomeTotal: number;
-  spendTotal: number;
-  savings: number;
   cashFlowTransactions?: CashFlowTx[];
 };
 
@@ -48,11 +47,11 @@ type BucketData = {
 };
 
 const RANGE_OPTIONS: Array<{ key: RangeKey; label: string }> = [
-  { key: 'mtd', label: 'MTD' },
-  { key: 'ytd', label: 'YTD' },
-  { key: '12m', label: '12M' },
-  { key: '3m', label: '3M' },
   { key: '4w', label: '4W' },
+  { key: '3m', label: '3M' },
+  { key: 'ytd', label: 'YTD' },
+  { key: '12m', label: '1Y' },
+  { key: 'mtd', label: 'MTD' },
 ];
 
 const STACK_PALETTE = ['#38bdf8', '#22c55e', '#f59e0b', '#a78bfa', '#f97316', '#f43f5e', '#14b8a6'];
@@ -64,7 +63,24 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   });
 
-const formatShortCurrency = (value: number) =>
+const formatPct = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+
+const formatDateRange = (start: Date, end: Date) => {
+  const sameYear = start.getFullYear() === end.getFullYear();
+  const startFmt = start.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+  const endFmt = end.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  return `${startFmt} - ${endFmt}`;
+};
+
+const shortAmount = (value: number) =>
   value.toLocaleString('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -72,10 +88,9 @@ const formatShortCurrency = (value: number) =>
     maximumFractionDigits: 1,
   });
 
-const pct = (value: number) => `${Math.round(value)}%`;
-
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 const endOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+
 const addDays = (date: Date, days: number) => {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
@@ -97,22 +112,43 @@ const categoryColor = (name: string) => {
 
 const getRangeBounds = (range: RangeKey, now: Date) => {
   if (range === 'mtd') {
-    return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now, granularity: 'week' as const };
+    return {
+      start: new Date(now.getFullYear(), now.getMonth(), 1),
+      end: now,
+      granularity: 'day' as Granularity,
+    };
   }
   if (range === 'ytd') {
-    return { start: new Date(now.getFullYear(), 0, 1), end: now, granularity: 'month' as const };
+    return {
+      start: new Date(now.getFullYear(), 0, 1),
+      end: now,
+      granularity: 'month' as Granularity,
+    };
   }
   if (range === '12m') {
-    return { start: new Date(now.getFullYear(), now.getMonth() - 11, 1), end: now, granularity: 'month' as const };
+    return {
+      start: new Date(now.getFullYear(), now.getMonth() - 11, 1),
+      end: now,
+      granularity: 'month' as Granularity,
+    };
   }
   if (range === '3m') {
-    return { start: new Date(now.getFullYear(), now.getMonth() - 2, 1), end: now, granularity: 'month' as const };
+    return {
+      start: new Date(now.getFullYear(), now.getMonth() - 2, 1),
+      end: now,
+      granularity: 'week' as Granularity,
+    };
   }
-  return { start: addDays(now, -27), end: now, granularity: 'week' as const };
+  return {
+    start: addDays(now, -27),
+    end: now,
+    granularity: 'day' as Granularity,
+  };
 };
 
-const buildIntervals = (start: Date, end: Date, granularity: 'month' | 'week') => {
+const buildIntervals = (start: Date, end: Date, granularity: Granularity) => {
   const intervals: Array<{ start: Date; end: Date; key: string; label: string }> = [];
+
   if (granularity === 'month') {
     let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
     while (cursor <= end) {
@@ -131,24 +167,38 @@ const buildIntervals = (start: Date, end: Date, granularity: 'month' | 'week') =
     return intervals;
   }
 
+  if (granularity === 'week') {
+    let cursor = startOfDay(start);
+    let weekIndex = 1;
+    while (cursor <= end) {
+      const bucketStart = cursor;
+      const bucketEnd = addDays(bucketStart, 6) > end ? end : addDays(bucketStart, 6);
+      intervals.push({
+        start: bucketStart,
+        end: bucketEnd,
+        key: `${bucketStart.toISOString()}-${bucketEnd.toISOString()}`,
+        label: `W${weekIndex}`,
+      });
+      weekIndex += 1;
+      cursor = addDays(bucketEnd, 1);
+    }
+    return intervals;
+  }
+
   let cursor = startOfDay(start);
-  let weekIndex = 1;
   while (cursor <= end) {
-    const bucketStart = cursor;
-    const bucketEnd = addDays(bucketStart, 6) > end ? end : addDays(bucketStart, 6);
     intervals.push({
-      start: bucketStart,
-      end: bucketEnd,
-      key: `${bucketStart.toISOString()}-${bucketEnd.toISOString()}`,
-      label: `W${weekIndex}`,
+      start: cursor,
+      end: cursor,
+      key: cursor.toISOString(),
+      label: cursor.toLocaleDateString('en-US', { day: 'numeric' }),
     });
-    weekIndex += 1;
-    cursor = addDays(bucketEnd, 1);
+    cursor = addDays(cursor, 1);
   }
   return intervals;
 };
 
-const buildBuckets = (transactions: CashFlowTx[], start: Date, end: Date, granularity: 'month' | 'week') => {
+const buildBuckets = (transactions: CashFlowTx[], start: Date, end: Date, granularity: Granularity): BucketData[] => {
   const intervals = buildIntervals(start, end, granularity);
 
   const buckets = intervals.map((interval) => ({
@@ -173,6 +223,7 @@ const buildBuckets = (transactions: CashFlowTx[], start: Date, end: Date, granul
       bucket.income += tx.amount;
       bucket.incomeTx.push(tx);
     }
+
     if (tx.type === 'spend') {
       bucket.spend += tx.amount;
       bucket.spendTx.push(tx);
@@ -196,14 +247,263 @@ const buildBuckets = (transactions: CashFlowTx[], start: Date, end: Date, granul
   }));
 };
 
+const metricValue = (bucket: BucketData, metric: MetricKey) =>
+  metric === 'income' ? bucket.income : metric === 'spend' ? bucket.spend : bucket.net;
+
+const metricColor = (metric: MetricKey, value: number) => {
+  if (metric === 'income') return '#22c55e';
+  if (metric === 'spend') return '#f97316';
+  return value < 0 ? '#ef4444' : '#22c55e';
+};
+
+const makeSummary = ({
+  metric,
+  current,
+  previous,
+  delta,
+  spendTop,
+}: {
+  metric: MetricKey;
+  current: BucketData[];
+  previous: BucketData[];
+  delta: number;
+  spendTop: Array<{ name: string; value: number }>;
+}) => {
+  if (!current.length) return ['No data in this range.'];
+
+  let biggestDelta = 0;
+  let biggestLabel = current[0]?.label ?? 'period';
+  current.forEach((bucket, index) => {
+    const change = metricValue(bucket, metric) - metricValue(previous[index] ?? bucket, metric);
+    if (Math.abs(change) > Math.abs(biggestDelta)) {
+      biggestDelta = change;
+      biggestLabel = bucket.label;
+    }
+  });
+
+  const bullets: string[] = [];
+  const trendWord = delta >= 0 ? 'up' : 'down';
+  bullets.push(`${trendWord} ${shortAmount(Math.abs(delta))} vs prior.`);
+
+  if (metric === 'spend' && spendTop.length > 0) {
+    bullets.push(`Top driver: ${spendTop[0].name} (${shortAmount(spendTop[0].value)}).`);
+  } else {
+    bullets.push(`Largest swing: ${biggestLabel} (${biggestDelta >= 0 ? '+' : '-'}${shortAmount(Math.abs(biggestDelta))}).`);
+  }
+
+  return bullets.slice(0, 2);
+};
+
+type MetricCardProps = {
+  metric: MetricKey;
+  title: string;
+  currentBuckets: BucketData[];
+  previousBuckets: BucketData[];
+  currentValue: number;
+  previousValue: number;
+  currentRangeText: string;
+  previousRangeText: string;
+  spendTop: Array<{ name: string; value: number }>;
+  spendKeys: string[];
+  onBarPress: (index: number) => void;
+};
+
+function MetricCard({
+  metric,
+  title,
+  currentBuckets,
+  previousBuckets,
+  currentValue,
+  previousValue,
+  currentRangeText,
+  previousRangeText,
+  spendTop,
+  spendKeys,
+  onBarPress,
+}: MetricCardProps) {
+  const delta = currentValue - previousValue;
+  const deltaPct = previousValue !== 0 ? (delta / Math.abs(previousValue)) * 100 : 0;
+  const summaryBullets = makeSummary({
+    metric,
+    current: currentBuckets,
+    previous: previousBuckets,
+    delta,
+    spendTop,
+  });
+
+  const absMax = useMemo(() => {
+    const values = currentBuckets.map((bucket, index) => {
+      const current = Math.abs(metricValue(bucket, metric));
+      const prior = Math.abs(metricValue(previousBuckets[index] ?? bucket, metric));
+      return Math.max(current, prior);
+    });
+    return Math.max(1, ...values);
+  }, [currentBuckets, metric, previousBuckets]);
+
+  const yTop = metric === 'net' ? formatCurrency(absMax) : formatCurrency(absMax);
+  const yMid = metric === 'net' ? '$0' : formatCurrency(absMax / 2);
+  const yBottom = metric === 'net' ? `-${formatCurrency(absMax).replace('$', '$')}` : '$0';
+
+  const isNet = metric === 'net';
+  const barHeight = 126;
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>{title}</Text>
+      <Text style={styles.cardRange}>{currentRangeText}</Text>
+      <Text style={styles.cardValue}>{formatCurrency(currentValue)}</Text>
+      <View style={[styles.deltaPill, delta >= 0 ? styles.deltaPositive : styles.deltaNegative]}>
+        <Text style={[styles.deltaPillText, delta >= 0 ? styles.deltaPositiveText : styles.deltaNegativeText]}>
+          {formatPct(deltaPct)}
+        </Text>
+      </View>
+      <Text style={styles.compareText}>vs {formatCurrency(previousValue)} in {previousRangeText}</Text>
+
+      <View style={styles.summaryBox}>
+        {summaryBullets.map((bullet) => (
+          <Text key={`${metric}-${bullet}`} style={styles.summaryBullet}>• {bullet}</Text>
+        ))}
+      </View>
+
+      <View style={styles.chartWrap}>
+        <View style={styles.yAxis}>
+          <Text style={styles.yLabel}>{yTop}</Text>
+          <Text style={styles.yLabel}>{yMid}</Text>
+          <Text style={styles.yLabel}>{yBottom}</Text>
+        </View>
+
+        <View style={styles.chartArea}>
+          <View style={[styles.gridLine, { top: 0 }]} />
+          <View style={[styles.gridLine, { top: barHeight / 2 }]} />
+          <View style={[styles.gridLine, { top: barHeight }]} />
+
+          {isNet ? <View style={[styles.zeroLine, { top: barHeight / 2 }]} /> : null}
+
+          <View style={styles.barRow}>
+            {currentBuckets.map((bucket, index) => {
+              const value = metricValue(bucket, metric);
+              const prior = metricValue(previousBuckets[index] ?? bucket, metric);
+              const columnHeight = isNet
+                ? Math.max(2, Math.round((Math.abs(value) / absMax) * (barHeight / 2)))
+                : Math.max(2, Math.round((Math.abs(value) / absMax) * barHeight));
+              const priorHeight = isNet
+                ? Math.max(2, Math.round((Math.abs(prior) / absMax) * (barHeight / 2)))
+                : Math.max(2, Math.round((Math.abs(prior) / absMax) * barHeight));
+
+              return (
+                <Pressable key={`${metric}-${bucket.key}`} style={styles.barPressable} onPress={() => onBarPress(index)}>
+                  <View style={styles.barColumn}>
+                    {isNet ? (
+                      <>
+                        <View
+                          style={[
+                            styles.priorTick,
+                            {
+                              height: priorHeight,
+                              bottom: prior >= 0 ? barHeight / 2 : barHeight / 2 - priorHeight,
+                            },
+                          ]}
+                        />
+                        <View
+                          style={[
+                            styles.metricBar,
+                            {
+                              height: columnHeight,
+                              backgroundColor: metricColor(metric, value),
+                              bottom: value >= 0 ? barHeight / 2 : barHeight / 2 - columnHeight,
+                            },
+                          ]}
+                        />
+                      </>
+                    ) : metric === 'spend' ? (
+                      <>
+                        <View style={[styles.priorTick, { height: priorHeight, bottom: 0 }]} />
+                        <View style={[styles.metricBarBase, { height: columnHeight }]}> 
+                          {spendKeys.map((key) => {
+                            const topFiveNames = spendTop.map((item) => item.name);
+                            const segmentValue =
+                              key === '__other__'
+                                ? Math.max(
+                                    0,
+                                    bucket.spend -
+                                      bucket.spendByCategory
+                                        .filter((item) => topFiveNames.includes(item.name))
+                                        .reduce((sum, item) => sum + item.value, 0)
+                                  )
+                                : bucket.spendByCategory.find((item) => item.name === key)?.value ?? 0;
+                            if (segmentValue <= 0) return null;
+                            return (
+                              <View
+                                key={`${bucket.key}-${key}`}
+                                style={{
+                                  flex: segmentValue,
+                                  width: '100%',
+                                  backgroundColor: key === '__other__' ? 'rgba(255,255,255,0.35)' : categoryColor(key),
+                                }}
+                              />
+                            );
+                          })}
+                        </View>
+                      </>
+                    ) : (
+                      <>
+                        <View style={[styles.priorTick, { height: priorHeight, bottom: 0 }]} />
+                        <View
+                          style={[
+                            styles.metricBar,
+                            {
+                              height: columnHeight,
+                              bottom: 0,
+                              backgroundColor: metricColor(metric, value),
+                            },
+                          ]}
+                        />
+                      </>
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={styles.xAxisRow}>
+            <Text style={styles.xLabel}>{currentBuckets[0]?.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</Text>
+            <Text style={styles.xLabel}>
+              {currentBuckets[Math.floor((currentBuckets.length - 1) / 2)]?.start.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+              })}
+            </Text>
+            <Text style={styles.xLabel}>{currentBuckets[currentBuckets.length - 1]?.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</Text>
+          </View>
+        </View>
+      </View>
+
+      {metric === 'spend' ? (
+        <View style={styles.topCategoryBlock}>
+          <Text style={styles.topCategoryTitle}>Top categories</Text>
+          {spendTop.map((item) => (
+            <View key={item.name} style={styles.topCategoryRow}>
+              <View style={[styles.categoryDot, { backgroundColor: item.name === 'All other categories' ? 'rgba(255,255,255,0.4)' : categoryColor(item.name) }]} />
+              <Text style={styles.topCategoryName}>{item.name}</Text>
+              <Text style={styles.topCategoryAmount}>{formatCurrency(item.value)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export function DistributionScreen() {
+  const insets = useSafeAreaInsets();
   const [data, setData] = useState<DistributionResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>('mtd');
-  const [compareOn, setCompareOn] = useState(true);
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>('net');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -226,7 +526,6 @@ export function DistributionScreen() {
         if (isMounted) setLoading(false);
       }
     };
-
     load();
     return () => {
       isMounted = false;
@@ -245,23 +544,25 @@ export function DistributionScreen() {
     const prevStart = addDays(prevEnd, -(durationDays - 1));
     const previous = buildBuckets(rows, prevStart, prevEnd, granularity);
 
-    return { start, end, current, previous };
+    return { start, end, prevStart, prevEnd, current, previous };
   }, [range, rows]);
+  const currentBuckets = rangeData.current;
+  const previousBuckets = rangeData.previous;
 
   useEffect(() => {
-    const maxIndex = Math.max(0, rangeData.current.length - 1);
+    const maxIndex = Math.max(0, currentBuckets.length - 1);
     if (selectedIndex > maxIndex) {
       setSelectedIndex(maxIndex);
     }
-  }, [rangeData.current.length, selectedIndex]);
+  }, [currentBuckets, selectedIndex]);
 
   const totals = useMemo(() => {
-    const income = rangeData.current.reduce((sum, bucket) => sum + bucket.income, 0);
-    const spend = rangeData.current.reduce((sum, bucket) => sum + bucket.spend, 0);
+    const income = currentBuckets.reduce((sum, bucket) => sum + bucket.income, 0);
+    const spend = currentBuckets.reduce((sum, bucket) => sum + bucket.spend, 0);
     const net = income - spend;
 
-    const previousIncome = rangeData.previous.reduce((sum, bucket) => sum + bucket.income, 0);
-    const previousSpend = rangeData.previous.reduce((sum, bucket) => sum + bucket.spend, 0);
+    const previousIncome = previousBuckets.reduce((sum, bucket) => sum + bucket.income, 0);
+    const previousSpend = previousBuckets.reduce((sum, bucket) => sum + bucket.spend, 0);
     const previousNet = previousIncome - previousSpend;
 
     return {
@@ -272,223 +573,133 @@ export function DistributionScreen() {
       previousSpend,
       previousNet,
     };
-  }, [rangeData.current, rangeData.previous]);
+  }, [currentBuckets, previousBuckets]);
 
-  const selectedBucket = rangeData.current[selectedIndex] ?? null;
-  const compareBucket = rangeData.previous[selectedIndex] ?? null;
-
-  const topSpendCategories = useMemo(() => {
+  const spendTopSix = useMemo(() => {
     const map = new Map<string, number>();
-    rangeData.current.forEach((bucket) => {
+    currentBuckets.forEach((bucket) => {
       bucket.spendByCategory.forEach((item) => {
         map.set(item.name, (map.get(item.name) ?? 0) + item.value);
       });
     });
-    return Array.from(map.entries())
+    const sorted = Array.from(map.entries())
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
-  }, [rangeData.current]);
+      .sort((a, b) => b.value - a.value);
 
-  const chartMax = useMemo(() => {
-    const values = rangeData.current.flatMap((bucket) => [bucket.income, bucket.spend, Math.abs(bucket.net)]);
-    const compareValues = rangeData.previous.flatMap((bucket) => [bucket.income, bucket.spend, Math.abs(bucket.net)]);
-    return Math.max(1, ...values, ...compareValues);
-  }, [rangeData.current, rangeData.previous]);
+    const topFive = sorted.slice(0, 5);
+    const otherTotal = sorted.slice(5).reduce((sum, item) => sum + item.value, 0);
+    if (otherTotal > 0) {
+      topFive.push({ name: 'All other categories', value: otherTotal });
+    }
+    return topFive;
+  }, [currentBuckets]);
 
-  const renderMetricCard = (metric: MetricKey, title: string, value: number, previousValue: number) => {
-    const delta = value - previousValue;
-    const deltaPct = previousValue > 0 ? (delta / previousValue) * 100 : 0;
+  const spendKeys = useMemo(() => {
+    const topNames = spendTopSix
+      .filter((item) => item.name !== 'All other categories')
+      .map((item) => item.name);
+    if (spendTopSix.some((item) => item.name === 'All other categories')) {
+      return [...topNames, '__other__'];
+    }
+    return topNames;
+  }, [spendTopSix]);
 
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardHeaderRow}>
-          <Text style={styles.cardTitle}>{title}</Text>
-          <Text style={styles.cardValue}>{formatCurrency(value)}</Text>
-        </View>
-        {compareOn ? (
-          <Text style={styles.cardMeta}>
-            {delta >= 0 ? '+' : ''}
-            {formatShortCurrency(delta)} vs prior ({pct(deltaPct)})
-          </Text>
-        ) : (
-          <Text style={styles.cardMeta}>Comparison hidden</Text>
-        )}
-
-        <View style={styles.chartRow}>
-          {rangeData.current.map((bucket, index) => {
-            const currentValue = metric === 'income' ? bucket.income : metric === 'spend' ? bucket.spend : Math.abs(bucket.net);
-            const prevValue = metric === 'income'
-              ? rangeData.previous[index]?.income ?? 0
-              : metric === 'spend'
-                ? rangeData.previous[index]?.spend ?? 0
-                : Math.abs(rangeData.previous[index]?.net ?? 0);
-
-            const barHeight = Math.max(6, Math.round((currentValue / chartMax) * 96));
-            const compareHeight = Math.max(4, Math.round((prevValue / chartMax) * 96));
-            const isSelected = selectedMetric === metric && selectedIndex === index;
-
-            return (
-              <Pressable
-                key={`${metric}-${bucket.key}`}
-                style={[styles.barPressable, isSelected && styles.barPressableSelected]}
-                onPress={() => {
-                  setSelectedMetric(metric);
-                  setSelectedIndex(index);
-                }}
-              >
-                <View style={styles.barTrack}>
-                  {compareOn ? <View style={[styles.compareBar, { height: compareHeight }]} /> : null}
-                  {metric === 'spend' && currentValue > 0 ? (
-                    <View style={[styles.stackBar, { height: barHeight }]}> 
-                      {topSpendCategories.map((category) => {
-                        const segmentValue = bucket.spendByCategory.find((item) => item.name === category.name)?.value ?? 0;
-                        if (segmentValue <= 0) return null;
-                        return (
-                          <View
-                            key={`${bucket.key}-${category.name}`}
-                            style={{
-                              flex: segmentValue,
-                              backgroundColor: categoryColor(category.name),
-                              width: '100%',
-                            }}
-                          />
-                        );
-                      })}
-                    </View>
-                  ) : (
-                    <View
-                      style={[
-                        styles.valueBar,
-                        { height: barHeight },
-                        metric === 'income'
-                          ? styles.incomeBar
-                          : metric === 'spend'
-                            ? styles.spendBar
-                            : bucket.net < 0
-                              ? styles.netNegativeBar
-                              : styles.netPositiveBar,
-                      ]}
-                    />
-                  )}
-                </View>
-                <Text style={styles.barLabel}>{bucket.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-    );
-  };
-
-  const detailTitle = selectedBucket
-    ? `${selectedMetric === 'net' ? 'Net' : selectedMetric === 'spend' ? 'Spend' : 'Income'} · ${selectedBucket.label}`
-    : 'Details';
-
-  const detailValue = selectedBucket
-    ? selectedMetric === 'net'
-      ? selectedBucket.net
-      : selectedMetric === 'spend'
-        ? selectedBucket.spend
-        : selectedBucket.income
-    : 0;
-
-  const detailCompare = compareBucket
-    ? selectedMetric === 'net'
-      ? compareBucket.net
-      : selectedMetric === 'spend'
-        ? compareBucket.spend
-        : compareBucket.income
-    : 0;
+  const selectedBucket = currentBuckets[selectedIndex] ?? null;
+  const compareBucket = previousBuckets[selectedIndex] ?? null;
 
   const detailTransactions = useMemo(() => {
     if (!selectedBucket) return [] as CashFlowTx[];
-    if (selectedMetric === 'income') return selectedBucket.incomeTx.slice(0, 8);
-    if (selectedMetric === 'spend') return selectedBucket.spendTx.slice(0, 8);
-    return [...selectedBucket.spendTx, ...selectedBucket.incomeTx]
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 8);
+    if (selectedMetric === 'income') return selectedBucket.incomeTx;
+    if (selectedMetric === 'spend') return selectedBucket.spendTx;
+    return [...selectedBucket.spendTx, ...selectedBucket.incomeTx].sort((a, b) => b.amount - a.amount);
   }, [selectedBucket, selectedMetric]);
 
   const detailCategories = useMemo(() => {
     if (!selectedBucket || selectedMetric !== 'spend') return [] as Array<{ name: string; value: number }>;
-    return selectedBucket.spendByCategory.slice(0, 6);
+    const sorted = selectedBucket.spendByCategory.slice().sort((a, b) => b.value - a.value);
+    const topFive = sorted.slice(0, 5);
+    const otherTotal = sorted.slice(5).reduce((sum, item) => sum + item.value, 0);
+    if (otherTotal > 0) {
+      topFive.push({ name: 'All other categories', value: otherTotal });
+    }
+    return topFive;
   }, [selectedBucket, selectedMetric]);
+
+  const currentRangeText = formatDateRange(rangeData.start, rangeData.end);
+  const previousRangeText = formatDateRange(rangeData.prevStart, rangeData.prevEnd);
 
   return (
     <Screen edgeToEdge>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {loading ? (
-          <View style={styles.loadingCard}>
-            <ActivityIndicator color={colors.primary} />
-            <Text style={styles.loadingText}>Loading cash flow...</Text>
-          </View>
-        ) : null}
-
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        <View style={styles.controlsRow}>
-          <View>
-            <Text style={styles.rangeLabel}>
-              {rangeData.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} -{' '}
-              {rangeData.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </Text>
-          </View>
-          <Pressable
-            onPress={() => setCompareOn((prev) => !prev)}
-            style={[styles.compareToggle, compareOn && styles.compareToggleActive]}
-          >
-            <Text style={[styles.compareToggleLabel, compareOn && styles.compareToggleLabelActive]}>
-              {compareOn ? 'Comparison on' : 'Comparison off'}
-            </Text>
-          </Pressable>
-        </View>
-
-        {renderMetricCard('net', 'Net income', totals.net, totals.previousNet)}
-        {renderMetricCard('spend', 'Spending', totals.spend, totals.previousSpend)}
-        {renderMetricCard('income', 'Income', totals.income, totals.previousIncome)}
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{detailTitle}</Text>
-          <Text style={styles.cardValue}>{formatCurrency(detailValue)}</Text>
-          {compareOn ? <Text style={styles.cardMeta}>Previous period: {formatCurrency(detailCompare)}</Text> : null}
-
-          {detailCategories.length > 0 ? (
-            <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>Category breakdown</Text>
-              {detailCategories.map((category) => {
-                const ratio = detailValue > 0 ? (category.value / detailValue) * 100 : 0;
-                return (
-                  <View key={`${selectedBucket?.key}-${category.name}`} style={styles.categoryRow}>
-                    <View style={[styles.categoryDot, { backgroundColor: categoryColor(category.name) }]} />
-                    <Text style={styles.categoryName}>{category.name}</Text>
-                    <Text style={styles.categoryAmount}>{formatCurrency(category.value)}</Text>
-                    <Text style={styles.categoryPct}>{pct(ratio)}</Text>
-                  </View>
-                );
-              })}
+      <View style={styles.root}>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: 110 + insets.bottom }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {loading ? (
+            <View style={styles.loadingCard}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={styles.loadingText}>Loading cash flow...</Text>
             </View>
           ) : null}
 
-          <View style={styles.detailSection}>
-            <Text style={styles.detailSectionTitle}>Transactions</Text>
-            {detailTransactions.length > 0 ? (
-              detailTransactions.map((tx) => (
-                <View key={`${selectedMetric}-${tx.id}`} style={styles.txRow}>
-                  <View style={styles.txLeft}>
-                    <Text style={styles.txName} numberOfLines={1}>{tx.name}</Text>
-                    <Text style={styles.txMeta}>{tx.category}</Text>
-                  </View>
-                  <Text style={styles.txAmount}>{formatCurrency(tx.amount)}</Text>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.emptyText}>No transactions in this bucket.</Text>
-            )}
-          </View>
-        </View>
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <View style={styles.rangeSelector}>
+          <MetricCard
+            metric="net"
+            title="Net income"
+            currentBuckets={currentBuckets}
+            previousBuckets={previousBuckets}
+            currentValue={totals.net}
+            previousValue={totals.previousNet}
+            currentRangeText={currentRangeText}
+            previousRangeText={previousRangeText}
+            spendTop={spendTopSix}
+            spendKeys={spendKeys}
+            onBarPress={(index) => {
+              setSelectedMetric('net');
+              setSelectedIndex(index);
+              setDetailOpen(true);
+            }}
+          />
+
+          <MetricCard
+            metric="spend"
+            title="Spend"
+            currentBuckets={currentBuckets}
+            previousBuckets={previousBuckets}
+            currentValue={totals.spend}
+            previousValue={totals.previousSpend}
+            currentRangeText={currentRangeText}
+            previousRangeText={previousRangeText}
+            spendTop={spendTopSix}
+            spendKeys={spendKeys}
+            onBarPress={(index) => {
+              setSelectedMetric('spend');
+              setSelectedIndex(index);
+              setDetailOpen(true);
+            }}
+          />
+
+          <MetricCard
+            metric="income"
+            title="Income"
+            currentBuckets={currentBuckets}
+            previousBuckets={previousBuckets}
+            currentValue={totals.income}
+            previousValue={totals.previousIncome}
+            currentRangeText={currentRangeText}
+            previousRangeText={previousRangeText}
+            spendTop={spendTopSix}
+            spendKeys={spendKeys}
+            onBarPress={(index) => {
+              setSelectedMetric('income');
+              setSelectedIndex(index);
+              setDetailOpen(true);
+            }}
+          />
+        </ScrollView>
+
+        <View style={[styles.rangeDock, { bottom: 8 + insets.bottom }]}>
           {RANGE_OPTIONS.map((option) => (
             <Pressable
               key={option.key}
@@ -504,15 +715,64 @@ export function DistributionScreen() {
             </Pressable>
           ))}
         </View>
-      </ScrollView>
+      </View>
+
+      <ModalSheet visible={detailOpen} onClose={() => setDetailOpen(false)}>
+        <View style={styles.sheetGrip} />
+        <Text style={styles.sheetTitle}>
+          {selectedMetric === 'net' ? 'Net income' : selectedMetric === 'spend' ? 'Spend' : 'Income'} ·{' '}
+          {selectedBucket ? formatDateRange(selectedBucket.start, selectedBucket.end) : ''}
+        </Text>
+        {selectedBucket ? (
+          <Text style={styles.sheetValue}>{formatCurrency(metricValue(selectedBucket, selectedMetric))}</Text>
+        ) : null}
+        {compareBucket ? (
+          <Text style={styles.sheetMeta}>Prior: {formatCurrency(metricValue(compareBucket, selectedMetric))}</Text>
+        ) : null}
+
+        {detailCategories.length > 0 ? (
+          <View style={styles.sheetSection}>
+            <Text style={styles.sheetSectionTitle}>Categories</Text>
+            {detailCategories.map((item) => (
+              <View key={item.name} style={styles.sheetRow}>
+                <View style={[styles.categoryDot, { backgroundColor: item.name === 'All other categories' ? 'rgba(255,255,255,0.4)' : categoryColor(item.name) }]} />
+                <Text style={styles.sheetRowLabel}>{item.name}</Text>
+                <Text style={styles.sheetRowValue}>{formatCurrency(item.value)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        <View style={styles.sheetSection}>
+          <Text style={styles.sheetSectionTitle}>Transactions</Text>
+          {detailTransactions.length ? (
+            <ScrollView style={styles.sheetTxList} contentContainerStyle={styles.sheetTxListContent}>
+              {detailTransactions.map((tx) => (
+                <View key={`${selectedMetric}-${tx.id}`} style={styles.sheetTxRow}>
+                  <View style={styles.sheetTxLeft}>
+                    <Text numberOfLines={1} style={styles.sheetTxName}>{tx.name}</Text>
+                    <Text style={styles.sheetTxMeta}>{tx.category}</Text>
+                  </View>
+                  <Text style={styles.sheetTxAmount}>{formatCurrency(tx.amount)}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.sheetEmpty}>No transactions in this bar.</Text>
+          )}
+        </View>
+      </ModalSheet>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   content: {
-    paddingHorizontal: 20,
-    paddingBottom: 26,
+    paddingHorizontal: 18,
+    paddingTop: 8,
     gap: 14,
   },
   loadingCard: {
@@ -531,159 +791,274 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.danger,
     fontSize: 12,
-  },
-  controlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  rangeLabel: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  compareToggle: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  compareToggleActive: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(56, 189, 248, 0.18)',
-  },
-  compareToggleLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  compareToggleLabelActive: {
-    color: colors.text,
+    paddingHorizontal: 2,
   },
   card: {
     padding: 14,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    gap: 8,
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
+    borderRadius: 18,
+    backgroundColor: 'rgba(12, 17, 34, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    gap: 6,
   },
   cardTitle: {
     color: colors.text,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
+    textAlign: 'center',
+  },
+  cardRange: {
+    color: colors.textMuted,
+    fontSize: 12,
+    textAlign: 'center',
   },
   cardValue: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 32,
     fontWeight: '800',
+    textAlign: 'center',
   },
-  cardMeta: {
+  deltaPill: {
+    alignSelf: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  deltaPositive: {
+    backgroundColor: 'rgba(34, 197, 94, 0.18)',
+  },
+  deltaNegative: {
+    backgroundColor: 'rgba(239, 68, 68, 0.18)',
+  },
+  deltaPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  deltaPositiveText: {
+    color: '#4ade80',
+  },
+  deltaNegativeText: {
+    color: '#f87171',
+  },
+  compareText: {
     color: colors.textMuted,
-    fontSize: 11,
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 2,
   },
-  chartRow: {
+  summaryBox: {
+    gap: 2,
+    marginBottom: 4,
+  },
+  summaryBullet: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  chartWrap: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
     gap: 6,
     marginTop: 4,
+  },
+  yAxis: {
+    width: 44,
+    height: 144,
+    justifyContent: 'space-between',
+  },
+  yLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+  },
+  chartArea: {
+    flex: 1,
+    position: 'relative',
+    height: 162,
+  },
+  gridLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  zeroLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  barRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 126,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
+    gap: 2,
   },
   barPressable: {
     flex: 1,
     alignItems: 'center',
-    gap: 5,
   },
-  barPressableSelected: {
-    opacity: 1,
+  barColumn: {
+    width: 10,
+    height: 126,
+    position: 'relative',
   },
-  barTrack: {
-    width: '100%',
-    height: 96,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-  },
-  compareBar: {
+  priorTick: {
     position: 'absolute',
-    left: '28%',
-    right: '28%',
+    left: 4,
+    width: 2,
+    borderRadius: 1,
+    backgroundColor: 'rgba(148, 163, 184, 0.8)',
+  },
+  metricBar: {
+    position: 'absolute',
+    left: 1,
+    width: 8,
+    borderRadius: 4,
+  },
+  metricBarBase: {
+    position: 'absolute',
+    left: 1,
     bottom: 0,
-    backgroundColor: 'rgba(255,255,255,0.28)',
-  },
-  valueBar: {
-    width: '100%',
-    borderRadius: 8,
-  },
-  incomeBar: {
-    backgroundColor: '#22c55e',
-  },
-  spendBar: {
-    backgroundColor: '#38bdf8',
-  },
-  netPositiveBar: {
-    backgroundColor: '#a78bfa',
-  },
-  netNegativeBar: {
-    backgroundColor: '#ef4444',
-  },
-  stackBar: {
-    width: '100%',
-    borderRadius: 8,
+    width: 8,
+    borderRadius: 4,
     overflow: 'hidden',
     justifyContent: 'flex-end',
   },
-  barLabel: {
+  xAxisRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  xLabel: {
     color: colors.textMuted,
     fontSize: 10,
-    fontWeight: '700',
   },
-  detailSection: {
-    marginTop: 6,
-    gap: 8,
+  topCategoryBlock: {
+    marginTop: 8,
+    gap: 6,
   },
-  detailSectionTitle: {
+  topCategoryTitle: {
     color: colors.textMuted,
     fontSize: 11,
-    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
+    fontWeight: '700',
   },
-  categoryRow: {
+  topCategoryRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  topCategoryName: {
+    color: colors.text,
+    fontSize: 12,
+    flex: 1,
+  },
+  topCategoryAmount: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
   },
   categoryDot: {
     width: 8,
     height: 8,
     borderRadius: 999,
   },
-  categoryName: {
-    color: colors.text,
-    fontSize: 12,
-    flex: 1,
+  rangeDock: {
+    position: 'absolute',
+    left: 14,
+    right: 14,
+    flexDirection: 'row',
+    gap: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(7, 11, 24, 0.92)',
+    padding: 6,
   },
-  categoryAmount: {
-    color: colors.text,
+  rangeChip: {
+    flex: 1,
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingVertical: 8,
+  },
+  rangeChipActive: {
+    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+  },
+  rangeChipLabel: {
+    color: colors.textMuted,
     fontSize: 12,
     fontWeight: '700',
   },
-  categoryPct: {
+  rangeChipLabelActive: {
+    color: colors.text,
+  },
+  sheetGrip: {
+    width: 54,
+    height: 5,
+    borderRadius: 999,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(148, 163, 184, 0.6)',
+    marginBottom: 10,
+  },
+  sheetTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  sheetValue: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  sheetMeta: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  sheetSection: {
+    marginTop: 14,
+    gap: 8,
+  },
+  sheetSectionTitle: {
     color: colors.textMuted,
     fontSize: 11,
-    width: 42,
-    textAlign: 'right',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
-  txRow: {
+  sheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sheetRowLabel: {
+    color: colors.text,
+    fontSize: 13,
+    flex: 1,
+  },
+  sheetRowValue: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sheetTxList: {
+    maxHeight: 280,
+  },
+  sheetTxListContent: {
+    gap: 6,
+  },
+  sheetTxRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -692,53 +1067,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.cardBorder,
   },
-  txLeft: {
+  sheetTxLeft: {
     flex: 1,
     marginRight: 8,
   },
-  txName: {
+  sheetTxName: {
     color: colors.text,
     fontSize: 13,
     fontWeight: '600',
   },
-  txMeta: {
+  sheetTxMeta: {
     color: colors.textMuted,
     fontSize: 11,
     marginTop: 2,
   },
-  txAmount: {
+  sheetTxAmount: {
     color: colors.text,
     fontSize: 12,
     fontWeight: '700',
   },
-  emptyText: {
+  sheetEmpty: {
     color: colors.textMuted,
     fontSize: 12,
-  },
-  rangeSelector: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 6,
-  },
-  rangeChip: {
-    flex: 1,
-    alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    paddingVertical: 8,
-  },
-  rangeChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-  },
-  rangeChipLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  rangeChipLabelActive: {
-    color: colors.text,
   },
 });
