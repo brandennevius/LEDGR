@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -184,7 +185,7 @@ export function AccountsScreen() {
     try {
       const data = await apiRequest<LinkTokenResponse>('/api/plaid/link-token', {
         method: 'POST',
-        body: { mode: 'create' },
+        body: { mode: 'create', platform: Platform.OS },
       });
       await destroyPlaidLink();
       createPlaidLink({ token: data.link_token });
@@ -217,7 +218,7 @@ export function AccountsScreen() {
     try {
       const data = await apiRequest<LinkTokenResponse>('/api/plaid/link-token', {
         method: 'POST',
-        body: { mode: 'update', itemId },
+        body: { mode: 'update', itemId, platform: Platform.OS },
       });
       await destroyPlaidLink();
       createPlaidLink({ token: data.link_token });

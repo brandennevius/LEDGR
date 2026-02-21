@@ -9,6 +9,7 @@ import { getPlaidAccessToken } from "@/lib/plaidAccessToken";
 type LinkTokenBody = {
   mode?: "create" | "update";
   itemId?: string;
+  platform?: "ios" | "android" | "web";
 };
 
 export async function POST(request: Request) {
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => ({}))) as LinkTokenBody;
   const mode = body?.mode ?? "create";
+  const requestedPlatform = body?.platform;
 
   const linkRequest: LinkTokenCreateRequest = {
     user: {
@@ -47,8 +49,21 @@ export async function POST(request: Request) {
     language: "en",
   };
 
-  if (process.env.PLAID_REDIRECT_URI) {
-    linkRequest.redirect_uri = process.env.PLAID_REDIRECT_URI;
+  const defaultRedirectUri = process.env.PLAID_REDIRECT_URI;
+  const iosRedirectUri = process.env.PLAID_REDIRECT_URI_IOS ?? defaultRedirectUri;
+  const androidPackageName = process.env.PLAID_ANDROID_PACKAGE_NAME;
+
+  if (requestedPlatform === "android") {
+    if (androidPackageName) {
+      linkRequest.android_package_name = androidPackageName;
+    }
+  } else if (requestedPlatform === "ios") {
+    if (iosRedirectUri) {
+      linkRequest.redirect_uri = iosRedirectUri;
+    }
+  } else if (defaultRedirectUri) {
+    // Web or unknown callers continue using default redirect behavior.
+    linkRequest.redirect_uri = defaultRedirectUri;
   }
 
   if (process.env.PLAID_WEBHOOK_URL) {

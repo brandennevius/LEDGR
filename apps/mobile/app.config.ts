@@ -10,6 +10,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     process.env.EXPO_IOS_BUNDLE_IDENTIFIER ?? 'com.brandennevius.ledgr';
   const androidPackage =
     process.env.EXPO_ANDROID_PACKAGE ?? 'com.brandennevius.ledgr';
+  const plaidUniversalLinkDomain =
+    process.env.EXPO_PUBLIC_PLAID_UNIVERSAL_LINK_DOMAIN ?? 'ledgr-henna.vercel.app';
 
   return {
     ...config,
@@ -28,6 +30,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ios: {
       supportsTablet: true,
       bundleIdentifier,
+      associatedDomains: [`applinks:${plaidUniversalLinkDomain}`],
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
       },
