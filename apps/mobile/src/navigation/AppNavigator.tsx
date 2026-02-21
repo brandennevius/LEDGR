@@ -78,6 +78,8 @@ export function AppNavigator({ userId }: { userId: string }) {
   const [faceIdRequired, setFaceIdRequired] = useState(false);
   const [unlocked, setUnlocked] = useState(true);
   const appStateRef = useRef(AppState.currentState);
+  const lockOnNextActiveRef = useRef(false);
+  const unlockingRef = useRef(false);
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
 
   const navigateToTab = useCallback((tab: AppTabName) => {
@@ -85,19 +87,26 @@ export function AppNavigator({ userId }: { userId: string }) {
   }, []);
 
   const promptUnlock = useCallback(async () => {
+    if (unlockingRef.current) return;
+    unlockingRef.current = true;
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const enrolled = await LocalAuthentication.isEnrolledAsync();
     if (!hasHardware || !enrolled) {
       setUnlocked(true);
+      unlockingRef.current = false;
       return;
     }
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Unlock LEDGR',
-      fallbackLabel: 'Use device passcode',
-      cancelLabel: 'Cancel',
-      disableDeviceFallback: false,
-    });
-    setUnlocked(result.success);
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Unlock LEDGR',
+        fallbackLabel: 'Use device passcode',
+        cancelLabel: 'Cancel',
+        disableDeviceFallback: false,
+      });
+      setUnlocked(result.success);
+    } finally {
+      unlockingRef.current = false;
+    }
   }, []);
 
   useEffect(() => {
@@ -126,17 +135,24 @@ export function AppNavigator({ userId }: { userId: string }) {
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (nextState) => {
-      const prev = appStateRef.current;
       appStateRef.current = nextState;
-      if (prev.match(/inactive|background/) && nextState === 'active') {
+      if (nextState === 'background') {
+        lockOnNextActiveRef.current = true;
+        return;
+      }
+
+      if (nextState === 'active') {
         const enabled = (await AsyncStorage.getItem('settings.faceIdRequired')) === 'true';
         setFaceIdRequired(enabled);
-        if (enabled) {
+        if (enabled && lockOnNextActiveRef.current) {
+          lockOnNextActiveRef.current = false;
           setUnlocked(false);
           void promptUnlock();
           return;
         }
-        setUnlocked(true);
+        if (!enabled) {
+          setUnlocked(true);
+        }
       }
     });
     return () => sub.remove();
