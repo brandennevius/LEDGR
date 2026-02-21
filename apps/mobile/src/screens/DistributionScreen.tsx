@@ -80,14 +80,6 @@ const formatDateRange = (start: Date, end: Date) => {
   return `${startFmt} - ${endFmt}`;
 };
 
-const shortAmount = (value: number) =>
-  value.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  });
-
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 const endOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
 
@@ -264,44 +256,6 @@ const metricColor = (metric: MetricKey, value: number) => {
   return value < 0 ? '#ef4444' : '#22c55e';
 };
 
-const makeSummary = ({
-  metric,
-  current,
-  previous,
-  delta,
-  spendTop,
-}: {
-  metric: MetricKey;
-  current: BucketData[];
-  previous: BucketData[];
-  delta: number;
-  spendTop: Array<{ name: string; value: number }>;
-}) => {
-  if (!current.length) return ['No data in this range.'];
-
-  let biggestDelta = 0;
-  let biggestLabel = current[0]?.label ?? 'period';
-  current.forEach((bucket, index) => {
-    const change = metricValue(bucket, metric) - metricValue(previous[index] ?? bucket, metric);
-    if (Math.abs(change) > Math.abs(biggestDelta)) {
-      biggestDelta = change;
-      biggestLabel = bucket.label;
-    }
-  });
-
-  const bullets: string[] = [];
-  const trendWord = delta >= 0 ? 'up' : 'down';
-  bullets.push(`${trendWord} ${shortAmount(Math.abs(delta))} vs prior.`);
-
-  if (metric === 'spend' && spendTop.length > 0) {
-    bullets.push(`Top driver: ${spendTop[0].name} (${shortAmount(spendTop[0].value)}).`);
-  } else {
-    bullets.push(`Largest swing: ${biggestLabel} (${biggestDelta >= 0 ? '+' : '-'}${shortAmount(Math.abs(biggestDelta))}).`);
-  }
-
-  return bullets.slice(0, 2);
-};
-
 type MetricCardProps = {
   metric: MetricKey;
   title: string;
@@ -331,13 +285,6 @@ function MetricCard({
 }: MetricCardProps) {
   const delta = currentValue - previousValue;
   const deltaPct = previousValue !== 0 ? (delta / Math.abs(previousValue)) * 100 : 0;
-  const summaryBullets = makeSummary({
-    metric,
-    current: currentBuckets,
-    previous: previousBuckets,
-    delta,
-    spendTop,
-  });
 
   const absMax = useMemo(() => {
     const values = currentBuckets.map((bucket, index) => {
@@ -366,12 +313,6 @@ function MetricCard({
         </Text>
       </View>
       <Text style={styles.compareText}>vs {formatCurrency(previousValue)} in {previousRangeText}</Text>
-
-      <View style={styles.summaryBox}>
-        {summaryBullets.map((bullet) => (
-          <Text key={`${metric}-${bullet}`} style={styles.summaryBullet}>• {bullet}</Text>
-        ))}
-      </View>
 
       <View style={styles.chartWrap}>
         <View style={styles.yAxis}>
@@ -860,15 +801,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     marginBottom: 2,
-  },
-  summaryBox: {
-    gap: 2,
-    marginBottom: 4,
-  },
-  summaryBullet: {
-    color: colors.textMuted,
-    fontSize: 12,
-    lineHeight: 16,
   },
   chartWrap: {
     flexDirection: 'row',
