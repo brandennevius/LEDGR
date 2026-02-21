@@ -397,7 +397,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   button: {
-    flex: 1,
     borderRadius: 12,
     paddingVertical: 11,
     alignItems: 'center',
@@ -430,6 +429,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   oauthButton: {
+    flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: colors.cardBorder,
