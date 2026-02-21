@@ -293,33 +293,36 @@ export function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    gap: 14,
+    gap: 12,
   },
   modeRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 8,
+    gap: 6,
+    marginBottom: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    padding: 4,
   },
   modeButton: {
     flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    paddingVertical: 10,
+    borderRadius: 10,
+    paddingVertical: 8,
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    backgroundColor: 'transparent',
   },
   modeButtonActive: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(56, 189, 248, 0.18)',
+    backgroundColor: 'rgba(56, 189, 248, 0.22)',
   },
   modeLabel: {
     color: colors.textMuted,
-    fontWeight: '700',
-    fontSize: 14,
+    fontWeight: '600',
+    fontSize: 13,
   },
   modeLabelActive: {
     color: colors.text,
+    fontWeight: '700',
   },
   fieldGroup: {
     gap: 8,
@@ -395,8 +398,8 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
-    borderRadius: 14,
-    paddingVertical: 12,
+    borderRadius: 12,
+    paddingVertical: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -409,6 +412,7 @@ const styles = StyleSheet.create({
   primaryLabel: {
     color: colors.background,
     fontWeight: '700',
+    fontSize: 15,
   },
   divider: {
     flexDirection: 'row',
@@ -433,6 +437,6 @@ const styles = StyleSheet.create({
   oauthLabel: {
     color: colors.text,
     fontWeight: '600',
+    fontSize: 14,
   },
 });
-
