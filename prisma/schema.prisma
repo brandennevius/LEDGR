@@ -113,7 +113,7 @@ model PlaidItem {
   id                 String   @id @default(uuid()) @db.Uuid
   userId             String   @db.Uuid
   itemId             String   @unique
-  accessToken        String
+  accessTokenEncrypted String @map("accessToken")
   institutionId      String?
   institutionName    String?
   status             String   @default("active")

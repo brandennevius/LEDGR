@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { plaidClient } from "@/lib/plaid";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { syncTransactionsForPlaidItems } from "@/lib/plaidTransactionsSync";
+import { hydratePlaidItemsWithAccessTokens } from "@/lib/plaidAccessToken";
 
 const attentionCodes = new Set([
   "PENDING_DISCONNECT",
@@ -153,12 +154,15 @@ export async function POST(request: Request) {
       select: {
         id: true,
         userId: true,
-        accessToken: true,
+        itemId: true,
+        accessTokenEncrypted: true,
         transactionsCursor: true,
       },
     });
     if (plaidItems.length > 0) {
-      await syncTransactionsForPlaidItems(plaidItems);
+      const itemsWithAccessTokens =
+        await hydratePlaidItemsWithAccessTokens(plaidItems);
+      await syncTransactionsForPlaidItems(itemsWithAccessTokens);
     }
   }
 

@@ -3,6 +3,7 @@ import { plaidClient } from "@/lib/plaid";
 import { prisma } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { getPlaidAccessToken } from "@/lib/plaidAccessToken";
 
 export async function POST(request: Request) {
   const user = await getAuthedUser();
@@ -28,6 +29,13 @@ export async function POST(request: Request) {
       userId: user.id,
       ...(body?.itemId ? { itemId: body.itemId } : { status: "active" }),
     },
+    select: {
+      id: true,
+      itemId: true,
+      accessTokenEncrypted: true,
+      status: true,
+      institutionName: true,
+    },
   });
 
   if (items.length === 0) {
@@ -40,8 +48,9 @@ export async function POST(request: Request) {
   let accountsSynced = 0;
 
   for (const item of items) {
+    const accessToken = await getPlaidAccessToken(item);
     const accountsResponse = await plaidClient.accountsGet({
-      access_token: item.accessToken,
+      access_token: accessToken,
     });
     const institutionName = accountsResponse.data.item?.institution_name ?? null;
 

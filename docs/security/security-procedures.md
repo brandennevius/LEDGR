@@ -164,3 +164,6 @@ Evidence to retain:
 - Prompt payload field list
 - Reviewer confirmation that minimization rules were applied
 
+## 11) Key Rotation Runbooks
+
+- Plaid token encryption key management: `/Users/brandennevius/Desktop/LEDGR/docs/security/plaid-token-encryption-runbook.md`
