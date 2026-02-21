@@ -50,6 +50,16 @@
   - `POST /api/policies/accept`
 - Added policy acceptance gate after authentication in app.
 - Added versioned policy constants for Terms and Privacy.
+- Embedded Terms and Privacy inside the mobile app (no browser redirect) from:
+  - Auth screen
+  - Policy consent gate
+  - Settings > About
+- Rewrote Terms and Privacy content to be more detailed and aligned to current LEDGR behavior:
+  - account linking + Plaid scope
+  - AI usage and limitations
+  - data sharing boundaries
+  - retention/deletion model
+  - security controls and disclosures
 
 ### Remaining Optional Enhancements
 - Show policy version and acceptance timestamp in Settings.
