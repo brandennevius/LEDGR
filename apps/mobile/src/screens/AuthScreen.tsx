@@ -10,21 +10,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Constants from 'expo-constants';
 
+import { LegalDocumentModal } from '../components/LegalDocumentModal';
+import { type LegalDocType } from '../content/legal';
 import { Screen } from '../components/Screen';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme';
 
 type Mode = 'signIn' | 'signUp';
-
-const resolvedBaseUrl =
-  Constants.expoConfig?.extra?.apiBaseUrl ??
-  process.env.EXPO_PUBLIC_API_BASE_URL ??
-  process.env.EXPO_PUBLIC_API_URL ??
-  'https://ledgr-henna.vercel.app';
-
-const normalizedBaseUrl = resolvedBaseUrl.replace(/\/$/, '');
 
 const parseVerifiedFromUrl = (value?: string | null) => {
   if (!value) return false;
@@ -75,6 +68,7 @@ export function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [legalDoc, setLegalDoc] = useState<LegalDocType | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -112,14 +106,6 @@ export function AuthScreen() {
     }
     return true;
   }, [acceptPrivacy, acceptTerms, confirmPassword, email, mode, password]);
-
-  const openLegal = async (path: '/terms' | '/privacy') => {
-    try {
-      await Linking.openURL(`${normalizedBaseUrl}${path}`);
-    } catch {
-      setError('Unable to open legal document.');
-    }
-  };
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -236,14 +222,14 @@ export function AuthScreen() {
                 onToggle={() => setAcceptTerms((prev) => !prev)}
                 labelPrefix="I agree to the"
                 labelAction="Terms of Service"
-                onOpen={() => openLegal('/terms')}
+                onOpen={() => setLegalDoc('terms')}
               />
               <LegalCheck
                 checked={acceptPrivacy}
                 onToggle={() => setAcceptPrivacy((prev) => !prev)}
                 labelPrefix="I acknowledge the"
                 labelAction="Privacy Policy"
-                onOpen={() => openLegal('/privacy')}
+                onOpen={() => setLegalDoc('privacy')}
               />
             </View>
           </>
@@ -286,6 +272,7 @@ export function AuthScreen() {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+      <LegalDocumentModal visible={legalDoc !== null} type={legalDoc} onClose={() => setLegalDoc(null)} />
     </Screen>
   );
 }

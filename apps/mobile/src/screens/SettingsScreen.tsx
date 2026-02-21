@@ -18,6 +18,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as LocalAuthentication from 'expo-local-authentication';
 
+import { LegalDocumentModal } from '../components/LegalDocumentModal';
+import { type LegalDocType } from '../content/legal';
 import { Screen } from '../components/Screen';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../lib/api';
@@ -108,6 +110,7 @@ export function SettingsScreen() {
   const [faceIdRequired, setFaceIdRequired] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [faceIdBusy, setFaceIdBusy] = useState(false);
+  const [legalDoc, setLegalDoc] = useState<LegalDocType | null>(null);
 
   const appVersion = useMemo(() => {
     const version = Constants.expoConfig?.version ?? '1.0.0';
@@ -343,8 +346,8 @@ export function SettingsScreen() {
             label="Visit our website"
             onPress={() => Linking.openURL('https://ledgr-henna.vercel.app')}
           />
-          <Row label="Terms of service" onPress={() => openWebLink('/terms')} />
-          <Row label="Privacy policy" onPress={() => openWebLink('/privacy')} />
+          <Row label="Terms of service" onPress={() => setLegalDoc('terms')} />
+          <Row label="Privacy policy" onPress={() => setLegalDoc('privacy')} />
         </View>
 
         <SectionHeader title="Advanced" />
@@ -397,6 +400,7 @@ export function SettingsScreen() {
 
         {status ? <Text style={styles.statusText}>{status}</Text> : null}
       </ScrollView>
+      <LegalDocumentModal visible={legalDoc !== null} type={legalDoc} onClose={() => setLegalDoc(null)} />
     </Screen>
   );
 }

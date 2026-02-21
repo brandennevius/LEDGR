@@ -1,25 +1,17 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import Constants from 'expo-constants';
 
+import { LegalDocumentModal } from '../components/LegalDocumentModal';
+import { type LegalDocType } from '../content/legal';
 import { Screen } from '../components/Screen';
 import { apiRequest } from '../lib/api';
 import { colors } from '../theme';
-
-const resolvedBaseUrl =
-  Constants.expoConfig?.extra?.apiBaseUrl ??
-  process.env.EXPO_PUBLIC_API_BASE_URL ??
-  process.env.EXPO_PUBLIC_API_URL ??
-  'https://ledgr-henna.vercel.app';
-
-const normalizedBaseUrl = resolvedBaseUrl.replace(/\/$/, '');
 
 export function PolicyConsentScreen({
   onAccepted,
@@ -28,14 +20,7 @@ export function PolicyConsentScreen({
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const openLegal = async (path: '/terms' | '/privacy') => {
-    try {
-      await Linking.openURL(`${normalizedBaseUrl}${path}`);
-    } catch {
-      setError('Unable to open legal document.');
-    }
-  };
+  const [legalDoc, setLegalDoc] = useState<LegalDocType | null>(null);
 
   const acceptPolicies = async () => {
     setSaving(true);
@@ -60,10 +45,10 @@ export function PolicyConsentScreen({
           To use LEDGR, please review and accept the current Terms of Service and Privacy Policy.
         </Text>
         <View style={styles.linkRow}>
-          <Text style={styles.link} onPress={() => openLegal('/terms')}>
+          <Text style={styles.link} onPress={() => setLegalDoc('terms')}>
             Terms of Service
           </Text>
-          <Text style={styles.link} onPress={() => openLegal('/privacy')}>
+          <Text style={styles.link} onPress={() => setLegalDoc('privacy')}>
             Privacy Policy
           </Text>
         </View>
@@ -78,6 +63,7 @@ export function PolicyConsentScreen({
           )}
         </Pressable>
       </View>
+      <LegalDocumentModal visible={legalDoc !== null} type={legalDoc} onClose={() => setLegalDoc(null)} />
     </Screen>
   );
 }
@@ -117,4 +103,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-

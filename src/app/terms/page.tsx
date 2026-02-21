@@ -3,10 +3,98 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Terms of Service • LEDGR",
-  description: "Terms governing use of LEDGR apps and services.",
+  description: "Terms governing use of LEDGR web and mobile services.",
 };
 
-const updatedAt = "February 20, 2026";
+const updatedAt = "February 21, 2026";
+
+const sections: Array<{ title: string; body: string[] }> = [
+  {
+    title: "1) Agreement and Scope",
+    body: [
+      "These Terms of Service govern your use of LEDGR web and mobile applications, APIs, and related services.",
+      "By creating an account, connecting financial institutions, or using LEDGR, you agree to these Terms.",
+    ],
+  },
+  {
+    title: "2) Eligibility and Account Responsibilities",
+    body: [
+      "You must be at least 18 years old and legally able to enter this agreement.",
+      "You are responsible for account credentials, device security, and actions taken under your account.",
+    ],
+  },
+  {
+    title: "3) Service Description",
+    body: [
+      "LEDGR provides software for transaction review, budgeting, goals, cash-flow analysis, and AI-based coaching.",
+      "LEDGR is not a bank, broker, credit union, lender, accounting firm, law firm, or investment advisor.",
+    ],
+  },
+  {
+    title: "4) Financial Connections and Third Parties",
+    body: [
+      "When you link financial accounts, you authorize LEDGR and providers such as Plaid to retrieve account and transaction data needed to operate the product.",
+      "Institution connectivity and data availability may vary due to provider or bank-side limitations.",
+    ],
+  },
+  {
+    title: "5) Transaction Data, Categories, and Rules",
+    body: [
+      "LEDGR may auto-classify transactions and suggest categories, transaction types, and related insights.",
+      "You remain responsible for reviewing and confirming classifications, internal transfers, and budgeting decisions.",
+    ],
+  },
+  {
+    title: "6) AI Coaching Features",
+    body: [
+      "Penny responses are informational and are generated from your request context and available data.",
+      "AI output may be incomplete or incorrect and does not constitute legal, tax, accounting, lending, or investment advice.",
+    ],
+  },
+  {
+    title: "7) Acceptable Use",
+    body: [
+      "You may not misuse the service, attempt unauthorized access, interfere with operations, scrape non-public systems, or use LEDGR for unlawful activity.",
+      "We may suspend, restrict, or terminate access for abuse, fraud, security risk, or Terms violations.",
+    ],
+  },
+  {
+    title: "8) Availability, Changes, and Beta Features",
+    body: [
+      "Features, limits, integrations, and user interfaces may change over time, including during beta testing.",
+      "We may add, modify, or discontinue features without prior notice where reasonably required for security or operations.",
+    ],
+  },
+  {
+    title: "9) Fees and Subscriptions",
+    body: [
+      "If paid plans are offered, pricing and billing terms will be presented before purchase.",
+      "Mobile subscriptions are billed and managed by the platform provider (for example, Apple) under that provider's billing terms.",
+    ],
+  },
+  {
+    title: "10) Disclaimers",
+    body: [
+      "LEDGR is provided \"as is\" and \"as available\" without warranties of uninterrupted availability, complete accuracy, or fitness for a particular purpose.",
+      "We do not guarantee uninterrupted institution syncs, transaction freshness, or universal account support.",
+    ],
+  },
+  {
+    title: "11) Limitation of Liability",
+    body: [
+      "To the fullest extent permitted by law, LEDGR is not liable for indirect, incidental, consequential, punitive, or special damages, including loss of profits, data, or goodwill.",
+      "Our aggregate liability for claims arising from the service is limited to amounts you paid to LEDGR in the preceding 12 months.",
+    ],
+  },
+  {
+    title: "12) Changes to Terms and Contact",
+    body: [
+      "We may update these Terms and will revise the \"Last updated\" date when changes are published.",
+      "If you continue using LEDGR after updates, you accept the revised Terms.",
+      "Questions: brandennevius@gmail.com",
+    ],
+  },
+];
 
 export default function TermsPage() {
   return (
@@ -27,98 +115,16 @@ export default function TermsPage() {
         </header>
 
         <section className="space-y-5 rounded-[32px] bg-white/85 p-6 ring-soft">
-          <p className="text-sm text-[color:var(--ink-soft)]">
-            These Terms of Service ("Terms") govern your access to and use of LEDGR web and mobile
-            applications, APIs, and related services (collectively, the "Services"). By using LEDGR,
-            you agree to these Terms.
-          </p>
-
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">1) Eligibility and Accounts</h2>
-            <p className="text-sm text-[color:var(--ink-soft)]">
-              You must provide accurate account information and keep your login credentials secure.
-              You are responsible for activity performed through your account.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">2) Service Scope</h2>
-            <p className="text-sm text-[color:var(--ink-soft)]">
-              LEDGR provides budgeting, cash-flow analysis, account aggregation, and coaching tools.
-              LEDGR is not a bank, broker, lender, accountant, law firm, or registered investment
-              advisor.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">3) Financial Data and Connected Accounts</h2>
-            <p className="text-sm text-[color:var(--ink-soft)]">
-              When you connect financial accounts, you authorize LEDGR and service providers (including
-              Plaid) to retrieve and process account and transaction data needed to operate the
-              Services.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">4) AI Coaching Features</h2>
-            <p className="text-sm text-[color:var(--ink-soft)]">
-              AI outputs are informational and may contain errors. You should verify important details
-              before acting. AI responses are not legal, tax, accounting, or investment advice.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">5) Acceptable Use</h2>
-            <p className="text-sm text-[color:var(--ink-soft)]">
-              You agree not to misuse the Services, attempt unauthorized access, reverse engineer the
-              platform, interfere with operations, or use LEDGR for unlawful activity.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">6) Suspension and Termination</h2>
-            <p className="text-sm text-[color:var(--ink-soft)]">
-              We may suspend or terminate access if we detect abuse, security risk, legal violations,
-              or violations of these Terms.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">7) Disclaimers</h2>
-            <p className="text-sm text-[color:var(--ink-soft)]">
-              Services are provided "as is" and "as available" without warranties of uninterrupted
-              operation, accuracy, or fitness for a particular purpose.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">8) Limitation of Liability</h2>
-            <p className="text-sm text-[color:var(--ink-soft)]">
-              To the maximum extent permitted by law, LEDGR is not liable for indirect, incidental,
-              special, consequential, or punitive damages, or loss of profits, data, or goodwill.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">9) Changes to Terms</h2>
-            <p className="text-sm text-[color:var(--ink-soft)]">
-              We may update these Terms. Continued use of the Services after updates means you accept
-              the revised Terms.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">10) Contact</h2>
-            <p className="text-sm text-[color:var(--ink-soft)]">
-              Questions about these Terms: {" "}
-              <a
-                href="mailto:brandennevius@gmail.com"
-                className="font-medium text-[color:var(--ocean-dark)] underline underline-offset-4"
-              >
-                brandennevius@gmail.com
-              </a>
-            </p>
-          </div>
+          {sections.map((section) => (
+            <div key={section.title} className="space-y-2">
+              <h2 className="text-lg font-semibold">{section.title}</h2>
+              {section.body.map((paragraph) => (
+                <p key={`${section.title}-${paragraph}`} className="text-sm text-[color:var(--ink-soft)]">
+                  {paragraph}
+                </p>
+              ))}
+            </div>
+          ))}
         </section>
       </main>
     </div>
