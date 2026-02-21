@@ -15,6 +15,7 @@ import {
   isIncomeTransaction,
   isTransferTransaction,
   normalizeCategory,
+  resolveTransactionType,
 } from "@/lib/transactionRules";
 import type { User } from "@prisma/client";
 
@@ -80,6 +81,7 @@ const computeIncomeForecast = (
     category?: string | null;
     name?: string | null;
     merchantName?: string | null;
+    transactionType?: string | null;
   }>,
   override?: number | null
 ) => {
@@ -467,7 +469,13 @@ export const getClientOverviewData = async (user: User) => {
       name: tx.merchantName ?? tx.name,
       category: tx.category ?? "Uncategorized",
       amount: Math.abs(tx.amount),
-      isIncome: tx.amount < 0,
+      isIncome: resolveTransactionType({
+        amount: tx.amount,
+        category: tx.category,
+        name: tx.name,
+        merchantName: tx.merchantName,
+        transactionType: tx.transactionType,
+      }) === "INCOME",
       date: formatDay(tx.date),
     }));
   const assetsTotal = accounts
@@ -648,10 +656,28 @@ export const getCoachDashboardData = async (user: User) => {
   const expandedMonthTx = expandTransactionsWithSplits(monthTx);
 
   const income = expandedMonthTx
-    .filter((tx) => tx.amount < 0)
+    .filter(
+      (tx) =>
+        resolveTransactionType({
+          amount: tx.amount,
+          category: tx.category,
+          name: tx.name,
+          merchantName: tx.merchantName,
+          transactionType: tx.transactionType,
+        }) === "INCOME"
+    )
     .reduce((acc, tx) => acc + Math.abs(tx.amount), 0);
   const spend = expandedMonthTx
-    .filter((tx) => tx.amount > 0)
+    .filter(
+      (tx) =>
+        resolveTransactionType({
+          amount: tx.amount,
+          category: tx.category,
+          name: tx.name,
+          merchantName: tx.merchantName,
+          transactionType: tx.transactionType,
+        }) === "REGULAR" && tx.amount > 0
+    )
     .reduce((acc, tx) => acc + tx.amount, 0);
 
   const cashOnHand = computeCashOnHand(accounts);
@@ -675,7 +701,13 @@ export const getCoachDashboardData = async (user: User) => {
       name: tx.merchantName ?? tx.name,
       category: tx.category ?? "Uncategorized",
       amount: Math.abs(tx.amount),
-      isIncome: tx.amount < 0,
+      isIncome: resolveTransactionType({
+        amount: tx.amount,
+        category: tx.category,
+        name: tx.name,
+        merchantName: tx.merchantName,
+        transactionType: tx.transactionType,
+      }) === "INCOME",
       day: formatDay(tx.date),
     })),
   };

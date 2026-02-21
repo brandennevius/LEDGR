@@ -4,9 +4,7 @@ import { getAuthedUser } from "@/lib/auth";
 import { getOpenAI } from "@/lib/openai";
 import { hydrateGoals } from "@/lib/goals";
 import { buildClientSnapshot } from "@/utils/trends";
-
-const incomePattern = /income|payroll|salary|wages|benefit|deposit|refund/i;
-const transferPattern = /transfer|payment|p2p|venmo|cash app|zelle/i;
+import { resolveTransactionType } from "@/lib/transactionRules";
 
 const formatCurrency = (value: number) =>
   value.toLocaleString("en-US", {
@@ -101,6 +99,7 @@ export async function POST() {
   const settingsMap = new Map(
     categorySettings.map((setting) => [normalizeCategory(setting.name), setting])
   );
+  const accountMap = new Map(accounts.map((account) => [account.id, account]));
 
   let income = 0;
   let spend = 0;
@@ -110,16 +109,22 @@ export async function POST() {
   const monthTx = transactions.filter((tx) => tx.date >= monthStart);
   monthTx.forEach((tx) => {
     const category = normalizeCategory(tx.category);
-    const name = (tx.merchantName ?? tx.name).toLowerCase();
-    const isTransfer = transferPattern.test(category) || transferPattern.test(name);
-    const isIncome =
-      tx.amount < 0 || incomePattern.test(category) || incomePattern.test(name);
+    const account = accountMap.get(tx.accountId);
+    const resolvedType = resolveTransactionType({
+      amount: tx.amount,
+      category: tx.category,
+      name: tx.name,
+      merchantName: tx.merchantName,
+      transactionType: tx.transactionType,
+      accountType: account?.type ?? null,
+      accountSubtype: account?.subtype ?? null,
+    });
     const amount = Math.abs(tx.amount);
-    if (isIncome) {
+    if (resolvedType === "INCOME") {
       income += amount;
       return;
     }
-    if (isTransfer) return;
+    if (resolvedType === "INTERNAL_TRANSFER") return;
     spend += amount;
     const setting = settingsMap.get(category);
     if (setting?.essential) {

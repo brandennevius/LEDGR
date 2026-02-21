@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { resolveCategoryColor } from "@/lib/categoryColors";
+import { isIncomeTransaction } from "@/lib/transactionRules";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -81,7 +82,13 @@ export async function GET(request: Request) {
           category: displayCategory(tx),
           categoryColor: resolveTxColor(displayCategory(tx)),
           amount: Math.abs(tx.amount),
-          isIncome: tx.amount < 0,
+          isIncome: isIncomeTransaction({
+            amount: tx.amount,
+            category: tx.category,
+            name: tx.name,
+            merchantName: tx.merchantName,
+            transactionType: tx.transactionType,
+          }),
           transactionType: tx.transactionType,
           needsReview: tx.categoryNeedsReview,
           source: tx.categorySource,
@@ -99,7 +106,13 @@ export async function GET(request: Request) {
       category: split.category,
       categoryColor: resolveTxColor(split.category),
       amount: Math.abs(split.amount),
-      isIncome: sign < 0,
+      isIncome: isIncomeTransaction({
+        amount: sign < 0 ? -Math.abs(split.amount) : Math.abs(split.amount),
+        category: split.category,
+        name: tx.name,
+        merchantName: tx.merchantName,
+        transactionType: tx.transactionType,
+      }),
       transactionType: tx.transactionType,
       needsReview: false,
       source: "USER",
@@ -119,7 +132,13 @@ export async function GET(request: Request) {
               category: displayCategory(tx),
               categoryColor: resolveTxColor(displayCategory(tx)),
               amount: remaining,
-              isIncome: sign < 0,
+              isIncome: isIncomeTransaction({
+                amount: sign < 0 ? -Math.abs(remaining) : Math.abs(remaining),
+                category: tx.category,
+                name: tx.name,
+                merchantName: tx.merchantName,
+                transactionType: tx.transactionType,
+              }),
               transactionType: tx.transactionType,
               needsReview: tx.categoryNeedsReview,
               source: tx.categorySource,

@@ -20,7 +20,11 @@ export const isIncomeTransaction = (tx: {
   category?: string | null;
   name?: string | null;
   merchantName?: string | null;
+  transactionType?: string | null;
 }) => {
+  if (tx.transactionType === "INCOME") return true;
+  if (tx.transactionType === "INTERNAL_TRANSFER") return false;
+  if (tx.transactionType === "REGULAR") return false;
   const category = normalizeCategory(tx.category);
   const name = (tx.merchantName ?? tx.name ?? "").toLowerCase();
   return (
@@ -61,6 +65,25 @@ export const classifyTransactionType = (tx: {
     return "INTERNAL_TRANSFER";
   }
   return "REGULAR";
+};
+
+export const resolveTransactionType = (tx: {
+  amount: number;
+  category?: string | null;
+  name?: string | null;
+  merchantName?: string | null;
+  transactionType?: string | null;
+  accountType?: string | null;
+  accountSubtype?: string | null;
+}) => {
+  if (
+    tx.transactionType === "INCOME" ||
+    tx.transactionType === "INTERNAL_TRANSFER" ||
+    tx.transactionType === "REGULAR"
+  ) {
+    return tx.transactionType;
+  }
+  return classifyTransactionType(tx);
 };
 
 export const accountKind = (account?: {

@@ -4,10 +4,9 @@ import { getAuthedUser } from "@/lib/auth";
 import { getOpenAI } from "@/lib/openai";
 import { buildClientSnapshot } from "@/utils/trends";
 import { computeCashOnHand } from "@/lib/goals";
+import { resolveTransactionType } from "@/lib/transactionRules";
 
 const debtPattern = /loan|debt|credit|card payment|payment|mortgage|student/i;
-const incomePattern = /income|payroll|salary|wages|benefit|deposit|refund/i;
-const transferPattern = /transfer|payment|p2p|venmo|cash app|zelle/i;
 
 const responseSchema = {
   type: "object",
@@ -264,6 +263,7 @@ export async function POST(request: Request) {
   const budgets = new Map(
     categorySettings.map((row) => [row.name, row.monthlyBudget ?? null])
   );
+  const accountMap = new Map(accounts.map((account) => [account.id, account]));
 
   const recentTx = transactions.filter((tx) => tx.date >= periodStart);
   const monthTotals = new Map<string, { income: number; expense: number }>();
@@ -274,12 +274,16 @@ export async function POST(request: Request) {
   let flexibleSpendTotal = 0;
 
   recentTx.forEach((tx) => {
-    const name = (tx.merchantName ?? tx.name ?? "").toLowerCase();
-    const categoryLabel = (tx.category ?? "").toLowerCase();
-    const isTransfer =
-      transferPattern.test(name) || transferPattern.test(categoryLabel);
-    const isIncome =
-      tx.amount < 0 || incomePattern.test(name) || incomePattern.test(categoryLabel);
+    const account = accountMap.get(tx.accountId);
+    const resolvedType = resolveTransactionType({
+      amount: tx.amount,
+      category: tx.category,
+      name: tx.name,
+      merchantName: tx.merchantName,
+      transactionType: tx.transactionType,
+      accountType: account?.type ?? null,
+      accountSubtype: account?.subtype ?? null,
+    });
 
     const key = formatMonthKey(tx.date);
     if (!monthTotals.has(key)) {
@@ -288,9 +292,9 @@ export async function POST(request: Request) {
     const month = monthTotals.get(key);
     if (!month) return;
 
-    if (isIncome) {
+    if (resolvedType === "INCOME") {
       month.income += Math.abs(tx.amount);
-    } else if (tx.amount > 0 && !isTransfer) {
+    } else if (resolvedType === "REGULAR" && tx.amount > 0) {
       month.expense += tx.amount;
       const category = tx.category ?? "Uncategorized";
       categoryTotals.set(category, (categoryTotals.get(category) ?? 0) + tx.amount);
@@ -347,7 +351,17 @@ export async function POST(request: Request) {
   dayStart.setHours(0, 0, 0, 0);
   const dayBuckets = new Map<string, number[]>();
   recentTx.forEach((tx) => {
-    if (tx.amount <= 0) return;
+    const account = accountMap.get(tx.accountId);
+    const resolvedType = resolveTransactionType({
+      amount: tx.amount,
+      category: tx.category,
+      name: tx.name,
+      merchantName: tx.merchantName,
+      transactionType: tx.transactionType,
+      accountType: account?.type ?? null,
+      accountSubtype: account?.subtype ?? null,
+    });
+    if (resolvedType !== "REGULAR" || tx.amount <= 0) return;
     if (tx.date < dayStart) return;
     const dayIndex = Math.floor(
       (tx.date.getTime() - dayStart.getTime()) / 86400000
