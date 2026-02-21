@@ -541,10 +541,17 @@ export function DistributionScreen() {
   }, []);
 
   const rows = useMemo(() => data?.cashFlowTransactions ?? [], [data?.cashFlowTransactions]);
+  const rangeAnchor = useMemo(() => {
+    if (!rows.length) return new Date();
+    const latest = rows.reduce((max, tx) => {
+      const parsed = normalizeTxDate(tx.date).getTime();
+      return parsed > max ? parsed : max;
+    }, 0);
+    return new Date(latest || Date.now());
+  }, [rows]);
 
   const rangeData = useMemo(() => {
-    const now = new Date();
-    const { start, end, granularity } = getRangeBounds(range, now);
+    const { start, end, granularity } = getRangeBounds(range, rangeAnchor);
     const current = buildBuckets(rows, start, end, granularity);
 
     const durationDays = daysBetweenInclusive(start, end);
@@ -553,7 +560,7 @@ export function DistributionScreen() {
     const previous = buildBuckets(rows, prevStart, prevEnd, granularity);
 
     return { start, end, prevStart, prevEnd, current, previous };
-  }, [range, rows]);
+  }, [range, rows, rangeAnchor]);
   const currentBuckets = rangeData.current;
   const previousBuckets = rangeData.previous;
 
