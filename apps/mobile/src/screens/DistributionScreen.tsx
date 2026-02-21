@@ -118,37 +118,38 @@ const categoryColor = (name: string) => {
 };
 
 const getRangeBounds = (range: RangeKey, now: Date) => {
+  const normalizedEnd = endOfDay(now);
   if (range === 'mtd') {
     return {
       start: new Date(now.getFullYear(), now.getMonth(), 1),
-      end: now,
+      end: normalizedEnd,
       granularity: 'day' as Granularity,
     };
   }
   if (range === 'ytd') {
     return {
       start: new Date(now.getFullYear(), 0, 1),
-      end: now,
+      end: normalizedEnd,
       granularity: 'month' as Granularity,
     };
   }
   if (range === '12m') {
     return {
       start: new Date(now.getFullYear(), now.getMonth() - 11, 1),
-      end: now,
+      end: normalizedEnd,
       granularity: 'month' as Granularity,
     };
   }
   if (range === '3m') {
     return {
       start: new Date(now.getFullYear(), now.getMonth() - 2, 1),
-      end: now,
+      end: normalizedEnd,
       granularity: 'week' as Granularity,
     };
   }
   return {
-    start: addDays(now, -27),
-    end: now,
+    start: startOfDay(addDays(now, -27)),
+    end: normalizedEnd,
     granularity: 'day' as Granularity,
   };
 };
