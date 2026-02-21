@@ -109,9 +109,7 @@ const buildSeries = (overview: OverviewResponse | null): ChartSeries => {
   const expectedIncomeTotal = Math.max(overview?.incomeSummary?.expected ?? 0, 0);
   const budgetTotal = Math.max(overview?.monthBudgetTotal ?? 0, 0);
 
-  const expectedIncome = Array.from({ length: daysInMonth }, (_, index) =>
-    (expectedIncomeTotal / daysInMonth) * (index + 1)
-  );
+  const expectedIncome = Array.from({ length: daysInMonth }, () => expectedIncomeTotal);
   const budget = Array.from({ length: daysInMonth }, (_, index) =>
     (budgetTotal / daysInMonth) * (index + 1)
   );

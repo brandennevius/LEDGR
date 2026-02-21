@@ -74,17 +74,6 @@ const getDisplayName = (user: User) => {
   return "Client";
 };
 
-
-const median = (values: number[]) => {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 0) {
-    return (sorted[mid - 1] + sorted[mid]) / 2;
-  }
-  return sorted[mid];
-};
-
 const computeIncomeForecast = (
   transactions: Array<{
     amount: number;
@@ -97,13 +86,10 @@ const computeIncomeForecast = (
 ) => {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const sixtyDaysAgo = new Date(now);
-  sixtyDaysAgo.setDate(now.getDate() - 60);
-  const sixMonthsAgo = new Date(now);
-  sixMonthsAgo.setMonth(now.getMonth() - 6);
+  const lookbackStart = new Date(now.getFullYear(), now.getMonth() - 4, 1);
 
   const incomeTx = transactions
-    .filter((tx) => tx.date >= sixMonthsAgo)
+    .filter((tx) => tx.date >= lookbackStart)
     .filter((tx) => isIncomeTransaction(tx) && !isTransferTransaction(tx))
     .map((tx) => ({ ...tx, amount: Math.abs(tx.amount) }))
     .filter((tx) => tx.amount >= 20)
@@ -113,44 +99,25 @@ const computeIncomeForecast = (
     .filter((tx) => tx.date >= monthStart)
     .reduce((acc, tx) => acc + tx.amount, 0);
 
-  const incomeTxRecent = incomeTx.filter((tx) => tx.date >= sixtyDaysAgo);
-  const intervals: number[] = [];
-  for (let i = 1; i < incomeTxRecent.length; i += 1) {
-    const diffDays = Math.round(
-      (incomeTxRecent[i].date.getTime() -
-        incomeTxRecent[i - 1].date.getTime()) /
-        86400000
-    );
-    if (diffDays > 0) intervals.push(diffDays);
+  const monthTotals = new Map<string, number>();
+  incomeTx.forEach((tx) => {
+    const key = `${tx.date.getFullYear()}-${tx.date.getMonth()}`;
+    monthTotals.set(key, (monthTotals.get(key) ?? 0) + tx.amount);
+  });
+
+  const previousThreeMonthTotals: number[] = [];
+  for (let offset = 1; offset <= 3; offset += 1) {
+    const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const key = `${date.getFullYear()}-${date.getMonth()}`;
+    const total = monthTotals.get(key) ?? 0;
+    if (total > 0) previousThreeMonthTotals.push(total);
   }
 
-  let expectedMonthlyIncome = 0;
-  if (intervals.length >= 3) {
-    const medianDays = median(intervals);
-    let periodsPerMonth = 1;
-    if (medianDays <= 8) periodsPerMonth = 4.33;
-    else if (medianDays <= 15) periodsPerMonth = 2.17;
-    else if (medianDays <= 20) periodsPerMonth = 2;
-
-    const recentAmounts = incomeTxRecent
-      .slice(-8)
-      .map((tx) => tx.amount);
-    const paycheck = median(recentAmounts) || median(incomeTx.map((tx) => tx.amount));
-    expectedMonthlyIncome = paycheck * periodsPerMonth;
-  } else {
-    const monthTotals = new Map<string, number>();
-    incomeTx.forEach((tx) => {
-      const key = `${tx.date.getFullYear()}-${tx.date.getMonth()}`;
-      monthTotals.set(key, (monthTotals.get(key) ?? 0) + tx.amount);
-    });
-    const totals = Array.from(monthTotals.values())
-      .slice(-3)
-      .filter((value) => value > 0);
-    expectedMonthlyIncome =
-      totals.length > 0
-        ? totals.reduce((acc, value) => acc + value, 0) / totals.length
-        : actualMonthIncome;
-  }
+  let expectedMonthlyIncome =
+    previousThreeMonthTotals.length > 0
+      ? previousThreeMonthTotals.reduce((acc, value) => acc + value, 0) /
+        previousThreeMonthTotals.length
+      : actualMonthIncome;
 
   if (override && override > 0) {
     expectedMonthlyIncome = override;
