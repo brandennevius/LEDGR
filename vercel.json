@@ -4,7 +4,7 @@
   "crons": [
     {
       "path": "/api/plaid/transactions/cron",
-      "schedule": "0 */2 * * *"
+      "schedule": "0 6 * * *"
     }
   ]
 }
