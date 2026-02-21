@@ -543,7 +543,9 @@ export function DistributionScreen() {
   const rows = useMemo(() => data?.cashFlowTransactions ?? [], [data?.cashFlowTransactions]);
   const rangeAnchor = useMemo(() => {
     if (!rows.length) return new Date();
-    const latest = rows.reduce((max, tx) => {
+    const rangeRows = rows.filter((tx) => tx.type === 'income' || tx.type === 'spend');
+    const source = rangeRows.length ? rangeRows : rows;
+    const latest = source.reduce((max, tx) => {
       const parsed = normalizeTxDate(tx.date).getTime();
       return parsed > max ? parsed : max;
     }, 0);
