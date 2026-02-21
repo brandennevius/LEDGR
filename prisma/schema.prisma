@@ -52,6 +52,11 @@ enum RuleMatchType {
   PARTIAL
 }
 
+enum PolicyType {
+  TERMS
+  PRIVACY
+}
+
 model User {
   id             String          @id @default(uuid()) @db.Uuid
   email          String          @unique
@@ -74,6 +79,7 @@ model User {
   clientThreads  Thread[]        @relation("ClientThreads")
   plaidItems     PlaidItem[]
   categoryGroups CategoryGroup[]
+  policyAcceptances PolicyAcceptance[]
 }
 
 model Category {
@@ -266,4 +272,18 @@ model Message {
 
   thread Thread @relation(fields: [threadId], references: [id])
   sender User   @relation("MessageSender", fields: [senderId], references: [id])
+}
+
+model PolicyAcceptance {
+  id         String     @id @default(uuid()) @db.Uuid
+  userId     String     @db.Uuid
+  policyType PolicyType
+  version    String
+  acceptedAt DateTime   @default(now())
+  createdAt  DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, policyType, version])
+  @@index([userId, policyType])
 }

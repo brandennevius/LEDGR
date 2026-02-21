@@ -1,4 +1,3 @@
-import * as Linking from 'expo-linking';
 import * as AuthSession from 'expo-auth-session';
 import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
@@ -20,7 +19,11 @@ export type AuthContextValue = {
   user: User | null;
   initializing: boolean;
   signInWithPassword: (email: string, password: string) => Promise<string | null>;
-  signUp: (email: string, password: string) => Promise<string | null>;
+  signUp: (
+    email: string,
+    password: string,
+    options?: { termsAccepted?: boolean; privacyAccepted?: boolean }
+  ) => Promise<string | null>;
   signInWithOAuth: (provider: 'google' | 'apple') => Promise<string | null>;
   signOut: () => Promise<void>;
 };
@@ -35,6 +38,26 @@ const parseFragmentParams = (hash?: string) => {
 
   const params = new URLSearchParams(fragment);
   return Object.fromEntries(params.entries());
+};
+
+const getAppLoginRedirectUrl = () => {
+  const configured = process.env.EXPO_PUBLIC_SUPABASE_REDIRECT_URL;
+  const fallback = "financialcoaching://login?verified=1";
+
+  if (!configured) return fallback;
+
+  try {
+    const parsed = new URL(configured);
+    parsed.pathname = "/login";
+    parsed.search = "?verified=1";
+    return parsed.toString();
+  } catch {
+    if (configured.includes("://")) {
+      const [scheme] = configured.split("://");
+      return `${scheme}://login?verified=1`;
+    }
+    return fallback;
+  }
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -75,10 +98,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return error?.message ?? null;
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    return error?.message ?? null;
-  }, []);
+  const signUp = useCallback(
+    async (
+      email: string,
+      password: string,
+      options?: { termsAccepted?: boolean; privacyAccepted?: boolean }
+    ) => {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: getAppLoginRedirectUrl(),
+          data: {
+            termsAcceptedAt:
+              options?.termsAccepted === true ? new Date().toISOString() : null,
+            privacyAcceptedAt:
+              options?.privacyAccepted === true ? new Date().toISOString() : null,
+          },
+        },
+      });
+      return error?.message ?? null;
+    },
+    []
+  );
 
   const signInWithOAuth = useCallback(async (provider: 'google' | 'apple') => {
     if (Constants.appOwnership === 'expo') {
@@ -93,12 +135,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const redirectTo =
       process.env.EXPO_PUBLIC_SUPABASE_REDIRECT_URL ?? fallbackRedirect;
 
-    console.log('[auth] starting oauth', {
-      provider,
-      appOwnership: Constants.appOwnership,
-      redirectTo,
-    });
-
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -108,25 +144,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (error) {
-      console.log('[auth] signInWithOAuth error', error);
       return error.message;
     }
 
     if (!data?.url) {
-      console.log('[auth] missing oauth url from supabase response');
       return 'Unable to start OAuth flow.';
     }
 
-    console.log('[auth] oauth url', data.url);
-
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-    console.log('[auth] openAuthSession result', result);
 
     if (result.type !== 'success' || !result.url) {
       return 'OAuth cancelled.';
     }
 
-    const parsed = Linking.parse(result.url);
     const parsedUrl = new URL(result.url);
     const queryParams = Object.fromEntries(parsedUrl.searchParams.entries());
     const fragmentParams = parseFragmentParams(parsedUrl.hash);
@@ -134,12 +164,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...fragmentParams,
       ...queryParams,
     };
-    console.log('[auth] callback url parsed', {
-      callbackUrl: result.url,
-      path: parsed.path,
-      queryParams,
-      fragmentParams,
-    });
 
     const code = typeof params?.code === 'string' ? params.code : null;
     const errorDescription =
@@ -164,7 +188,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return null;
         }
 
-        console.log('[auth] setSession from fragment failed', setSessionError);
         return setSessionError.message;
       }
 
@@ -177,11 +200,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-    if (exchangeError) {
-      console.log('[auth] exchangeCodeForSession error', exchangeError);
-    } else {
-      console.log('[auth] exchangeCodeForSession success');
-    }
     return exchangeError?.message ?? null;
   }, []);
 

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -9,25 +10,147 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Constants from 'expo-constants';
 
 import { Screen } from '../components/Screen';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme';
 
+type Mode = 'signIn' | 'signUp';
+
+const resolvedBaseUrl =
+  Constants.expoConfig?.extra?.apiBaseUrl ??
+  process.env.EXPO_PUBLIC_API_BASE_URL ??
+  process.env.EXPO_PUBLIC_API_URL ??
+  'https://ledgr-henna.vercel.app';
+
+const normalizedBaseUrl = resolvedBaseUrl.replace(/\/$/, '');
+
+const parseVerifiedFromUrl = (value?: string | null) => {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.searchParams.get('verified') === '1';
+  } catch {
+    return value.includes('verified=1');
+  }
+};
+
+function LegalCheck({
+  checked,
+  onToggle,
+  labelPrefix,
+  labelAction,
+  onOpen,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+  labelPrefix: string;
+  labelAction: string;
+  onOpen: () => void;
+}) {
+  return (
+    <View style={styles.checkRow}>
+      <Pressable onPress={onToggle} style={[styles.checkbox, checked && styles.checkboxChecked]}>
+        {checked ? <View style={styles.checkboxDot} /> : null}
+      </Pressable>
+      <Text style={styles.checkText}>
+        {labelPrefix}{' '}
+        <Text style={styles.checkLink} onPress={onOpen}>
+          {labelAction}
+        </Text>
+      </Text>
+    </View>
+  );
+}
+
 export function AuthScreen() {
   const { signInWithPassword, signUp, signInWithOAuth } = useAuth();
+  const [mode, setMode] = useState<Mode>('signIn');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const handleAuth = async (mode: 'signIn' | 'signUp') => {
+  useEffect(() => {
+    let mounted = true;
+    Linking.getInitialURL()
+      .then((url) => {
+        if (!mounted) return;
+        if (parseVerifiedFromUrl(url)) {
+          setMode('signIn');
+          setNotice('Email verified. Please sign in.');
+        }
+      })
+      .catch(() => null);
+
+    const sub = Linking.addEventListener('url', ({ url }) => {
+      if (parseVerifiedFromUrl(url)) {
+        setMode('signIn');
+        setNotice('Email verified. Please sign in.');
+      }
+    });
+    return () => {
+      mounted = false;
+      sub.remove();
+    };
+  }, []);
+
+  const canSubmit = useMemo(() => {
+    if (!email.trim() || !password) return false;
+    if (mode === 'signUp') {
+      return (
+        password === confirmPassword &&
+        password.length >= 8 &&
+        acceptTerms &&
+        acceptPrivacy
+      );
+    }
+    return true;
+  }, [acceptPrivacy, acceptTerms, confirmPassword, email, mode, password]);
+
+  const openLegal = async (path: '/terms' | '/privacy') => {
+    try {
+      await Linking.openURL(`${normalizedBaseUrl}${path}`);
+    } catch {
+      setError('Unable to open legal document.');
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
     setLoading(true);
     setError(null);
-    const action = mode === 'signIn' ? signInWithPassword : signUp;
-    const result = await action(email.trim(), password);
+    setNotice(null);
+
+    if (mode === 'signIn') {
+      const result = await signInWithPassword(email.trim(), password);
+      if (result) setError(result);
+      setLoading(false);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setLoading(false);
+      setError('Passwords do not match.');
+      return;
+    }
+
+    const result = await signUp(email.trim(), password, {
+      termsAccepted: acceptTerms,
+      privacyAccepted: acceptPrivacy,
+    });
     if (result) {
       setError(result);
+    } else {
+      setMode('signIn');
+      setNotice('Check your email to verify your account, then sign in.');
+      setPassword('');
+      setConfirmPassword('');
     }
     setLoading(false);
   };
@@ -35,6 +158,7 @@ export function AuthScreen() {
   const handleOAuth = async (provider: 'google' | 'apple') => {
     setLoading(true);
     setError(null);
+    setNotice(null);
     const result = await signInWithOAuth(provider);
     if (result) {
       setError(result);
@@ -43,17 +167,38 @@ export function AuthScreen() {
   };
 
   return (
-    <Screen title="Welcome back" subtitle="Sign in to your financial coach" topInset>
+    <Screen title="LEDGR" subtitle="Private money clarity, every day." topInset>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.select({ ios: 'padding', android: undefined })}
       >
+        <View style={styles.modeRow}>
+          <Pressable
+            style={[styles.modeButton, mode === 'signIn' && styles.modeButtonActive]}
+            onPress={() => {
+              setMode('signIn');
+              setError(null);
+            }}
+          >
+            <Text style={[styles.modeLabel, mode === 'signIn' && styles.modeLabelActive]}>Log in</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.modeButton, mode === 'signUp' && styles.modeButtonActive]}
+            onPress={() => {
+              setMode('signUp');
+              setError(null);
+            }}
+          >
+            <Text style={[styles.modeLabel, mode === 'signUp' && styles.modeLabelActive]}>Create account</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Email</Text>
           <TextInput
             value={email}
             onChangeText={setEmail}
-            placeholder="you@company.com"
+            placeholder="you@email.com"
             placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             keyboardType="email-address"
@@ -65,33 +210,60 @@ export function AuthScreen() {
           <TextInput
             value={password}
             onChangeText={setPassword}
-            placeholder="••••••••"
+            placeholder="At least 8 characters"
             placeholderTextColor={colors.textMuted}
             secureTextEntry
             style={styles.input}
           />
         </View>
+
+        {mode === 'signUp' ? (
+          <>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Confirm password</Text>
+              <TextInput
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="Re-enter password"
+                placeholderTextColor={colors.textMuted}
+                secureTextEntry
+                style={styles.input}
+              />
+            </View>
+            <View style={styles.legalBox}>
+              <LegalCheck
+                checked={acceptTerms}
+                onToggle={() => setAcceptTerms((prev) => !prev)}
+                labelPrefix="I agree to the"
+                labelAction="Terms of Service"
+                onOpen={() => openLegal('/terms')}
+              />
+              <LegalCheck
+                checked={acceptPrivacy}
+                onToggle={() => setAcceptPrivacy((prev) => !prev)}
+                labelPrefix="I acknowledge the"
+                labelAction="Privacy Policy"
+                onOpen={() => openLegal('/privacy')}
+              />
+            </View>
+          </>
+        ) : null}
+
+        {notice ? <Text style={styles.notice}>{notice}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <View style={styles.buttonRow}>
-          <Pressable
-            style={[styles.button, styles.primaryButton]}
-            onPress={() => handleAuth('signIn')}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={colors.background} />
-            ) : (
-              <Text style={styles.primaryLabel}>Sign In</Text>
-            )}
-          </Pressable>
-          <Pressable
-            style={[styles.button, styles.secondaryButton]}
-            onPress={() => handleAuth('signUp')}
-            disabled={loading}
-          >
-            <Text style={styles.secondaryLabel}>Create Account</Text>
-          </Pressable>
-        </View>
+
+        <Pressable
+          style={[styles.button, styles.primaryButton, !canSubmit && styles.buttonDisabled]}
+          onPress={handleSubmit}
+          disabled={loading || !canSubmit}
+        >
+          {loading ? (
+            <ActivityIndicator color={colors.background} />
+          ) : (
+            <Text style={styles.primaryLabel}>{mode === 'signIn' ? 'Sign In' : 'Create Account'}</Text>
+          )}
+        </Pressable>
+
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
           <Text style={styles.dividerText}>or continue with</Text>
@@ -121,7 +293,33 @@ export function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    gap: 16,
+    gap: 14,
+  },
+  modeRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 8,
+  },
+  modeButton: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.02)',
+  },
+  modeButtonActive: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(56, 189, 248, 0.18)',
+  },
+  modeLabel: {
+    color: colors.textMuted,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  modeLabelActive: {
+    color: colors.text,
   },
   fieldGroup: {
     gap: 8,
@@ -141,6 +339,52 @@ const styles = StyleSheet.create({
     color: colors.text,
     backgroundColor: 'rgba(9, 13, 27, 0.7)',
   },
+  legalBox: {
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    padding: 10,
+  },
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.02)',
+  },
+  checkboxChecked: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+  },
+  checkboxDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: colors.primary,
+  },
+  checkText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    flex: 1,
+  },
+  checkLink: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  notice: {
+    color: '#22c55e',
+    fontSize: 13,
+  },
   error: {
     color: colors.danger,
     fontSize: 13,
@@ -156,26 +400,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
   primaryButton: {
     backgroundColor: colors.primary,
-  },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   primaryLabel: {
     color: colors.background,
     fontWeight: '700',
   },
-  secondaryLabel: {
-    color: colors.text,
-    fontWeight: '600',
-  },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginTop: 2,
   },
   dividerLine: {
     flex: 1,
@@ -196,3 +435,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
