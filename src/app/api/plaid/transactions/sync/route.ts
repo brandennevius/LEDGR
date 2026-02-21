@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { syncTransactionsForPlaidItems } from "@/lib/plaidTransactionsSync";
+import { hydratePlaidItemsWithAccessTokens } from "@/lib/plaidAccessToken";
 
 export async function POST() {
   const user = await getAuthedUser();
@@ -22,13 +23,21 @@ export async function POST() {
   }
   const items = await prisma.plaidItem.findMany({
     where: { userId: user.id, status: "active" },
+    select: {
+      id: true,
+      userId: true,
+      itemId: true,
+      accessTokenEncrypted: true,
+      transactionsCursor: true,
+    },
   });
 
   if (items.length === 0) {
     return NextResponse.json({ error: "No linked item found." }, { status: 404 });
   }
 
-  const result = await syncTransactionsForPlaidItems(items);
+  const itemsWithAccessTokens = await hydratePlaidItemsWithAccessTokens(items);
+  const result = await syncTransactionsForPlaidItems(itemsWithAccessTokens);
 
   return NextResponse.json({
     status: "synced",

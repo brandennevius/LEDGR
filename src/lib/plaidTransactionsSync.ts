@@ -14,6 +14,40 @@ type SyncChanges = {
   removed: RemovedTransaction[];
 };
 
+type PlaidErrorInfo = {
+  code: string | null;
+  message: string | null;
+  statusCode: number | null;
+};
+
+const plaidErrorStatusByCode: Record<string, "attention" | "disconnected"> = {
+  ITEM_LOGIN_REQUIRED: "attention",
+  INVALID_ACCESS_TOKEN: "disconnected",
+};
+
+const getPlaidErrorInfo = (error: unknown): PlaidErrorInfo => {
+  const maybeResponse =
+    typeof error === "object" &&
+    error !== null &&
+    "response" in error &&
+    typeof (error as { response?: unknown }).response === "object"
+      ? ((error as { response?: { status?: number; data?: unknown } }).response ?? {})
+      : {};
+
+  const statusCode =
+    typeof maybeResponse.status === "number" ? maybeResponse.status : null;
+  const data =
+    typeof maybeResponse.data === "object" && maybeResponse.data !== null
+      ? (maybeResponse.data as Record<string, unknown>)
+      : {};
+
+  const code = typeof data.error_code === "string" ? data.error_code : null;
+  const message =
+    typeof data.error_message === "string" ? data.error_message : null;
+
+  return { code, message, statusCode };
+};
+
 const syncOnePlaidItem = async (item: {
   id: string;
   accessToken: string;
@@ -195,9 +229,30 @@ export const syncTransactionsForPlaidItems = async (
   }
 
   const userChanges = new Map<string, SyncChanges>();
+  let failedItems = 0;
 
   for (const item of items) {
-    const changes = await syncOnePlaidItem(item);
+    let changes: SyncChanges;
+    try {
+      changes = await syncOnePlaidItem(item);
+    } catch (error: unknown) {
+      const plaidError = getPlaidErrorInfo(error);
+      const nextStatus = plaidError.code
+        ? plaidErrorStatusByCode[plaidError.code]
+        : undefined;
+
+      if (!nextStatus) {
+        throw error;
+      }
+
+      await prisma.plaidItem.updateMany({
+        where: { id: item.id },
+        data: { status: nextStatus },
+      });
+      failedItems += 1;
+      continue;
+    }
+
     const existing = userChanges.get(item.userId) ?? {
       added: [],
       modified: [],
@@ -228,6 +283,6 @@ export const syncTransactionsForPlaidItems = async (
       (sum, value) => sum + value.removed.length,
       0
     ),
+    failedItems,
   };
 };
-

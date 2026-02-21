@@ -41,10 +41,19 @@ PLAID_CLIENT_ID=""
 PLAID_SECRET=""
 PLAID_ENV="sandbox"
 PLAID_REDIRECT_URI=""
+PLAID_TOKEN_ENCRYPTION_KEYS=""
+PLAID_TOKEN_ENCRYPTION_PRIMARY_KEY_ID="v1"
 
 OPENAI_API_KEY=""
 OPENAI_MODEL="gpt-4o-mini"
 ```
+
+Generate a 32-byte key for `PLAID_TOKEN_ENCRYPTION_KEYS`:
+```bash
+openssl rand -base64 32
+```
+Then set `PLAID_TOKEN_ENCRYPTION_KEYS` as `v1:<base64-key>`.
+For rotation, provide multiple keys (e.g. `v1:<old>,v2:<new>`) and set `PLAID_TOKEN_ENCRYPTION_PRIMARY_KEY_ID="v2"`.
 
 ### 3) Prisma
 ```bash

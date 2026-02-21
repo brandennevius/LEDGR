@@ -4,6 +4,7 @@ import { plaidClient } from "@/lib/plaid";
 import { getAuthedUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { getPlaidAccessToken } from "@/lib/plaidAccessToken";
 
 type LinkTokenBody = {
   mode?: "create" | "update";
@@ -63,11 +64,16 @@ export async function POST(request: Request) {
     }
     const item = await prisma.plaidItem.findFirst({
       where: { userId: user.id, itemId: body.itemId },
+      select: {
+        id: true,
+        itemId: true,
+        accessTokenEncrypted: true,
+      },
     });
     if (!item) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
-    linkRequest.access_token = item.accessToken;
+    linkRequest.access_token = await getPlaidAccessToken(item);
   } else {
     linkRequest.products = [Products.Transactions];
   }

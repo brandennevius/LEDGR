@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { syncTransactionsForPlaidItems } from "@/lib/plaidTransactionsSync";
+import { hydratePlaidItemsWithAccessTokens } from "@/lib/plaidAccessToken";
 
 const isAuthorized = (request: Request) => {
   const secret = process.env.CRON_SECRET;
@@ -44,7 +45,8 @@ const runCronSync = async (request: Request) => {
     select: {
       id: true,
       userId: true,
-      accessToken: true,
+      itemId: true,
+      accessTokenEncrypted: true,
       transactionsCursor: true,
     },
   });
@@ -53,7 +55,8 @@ const runCronSync = async (request: Request) => {
     return NextResponse.json({ status: "noop", reason: "no-stale-items" });
   }
 
-  const result = await syncTransactionsForPlaidItems(items);
+  const itemsWithAccessTokens = await hydratePlaidItemsWithAccessTokens(items);
+  const result = await syncTransactionsForPlaidItems(itemsWithAccessTokens);
   return NextResponse.json({
     status: "synced",
     ...result,
