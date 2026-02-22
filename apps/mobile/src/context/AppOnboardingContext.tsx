@@ -43,6 +43,12 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     body: 'This is your command center for spend, income, budget pace, and transactions that need review.',
   },
   {
+    id: 'penny-overview',
+    tab: 'Dashboard',
+    title: 'Penny AI Coach',
+    body: 'Tap the chat icon in the top-right to ask Penny questions about your spending, savings, debt, and next actions.',
+  },
+  {
     id: 'transactions-overview',
     tab: 'Transactions',
     title: 'Transactions',
@@ -64,7 +70,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     id: 'goals-overview',
     tab: 'Goals',
     title: 'Goals',
-    body: 'Create and track goals like debt payoff, emergency fund targets, and savings milestones.',
+    body: 'Goals is coming soon for beta. You will be able to build and track emergency fund, savings, and debt plans here.',
   },
   {
     id: 'accounts-overview',
