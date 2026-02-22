@@ -34,6 +34,7 @@ type TransactionDetail = {
   id: string;
   name: string;
   amount: number;
+  isIncome: boolean;
   category: string;
   transactionType?: 'INCOME' | 'INTERNAL_TRANSFER' | 'REGULAR';
   date: string;
@@ -515,7 +516,7 @@ export function TransactionsScreen() {
             ) : (
               <Pressable onPress={() => setEditingAmount(true)}>
                 <Text style={styles.detailAmount}>
-                  {selected.amount < 0 ? '+' : '-'} {formatCurrency(Math.abs(selected.amount))}
+                  {selected.isIncome ? '+' : '-'} {formatCurrency(Math.abs(selected.amount))}
                 </Text>
                 <Text style={styles.detailAmountHint}>Tap amount to edit</Text>
               </Pressable>

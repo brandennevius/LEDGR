@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthedUser } from "@/lib/auth";
 import { resolveCategoryColor } from "@/lib/categoryColors";
+import { isIncomeTransaction } from "@/lib/transactionRules";
 
 export async function GET(
   _request: Request,
@@ -42,6 +43,13 @@ export async function GET(
     id: transaction.id,
     name: transaction.merchantName ?? transaction.name,
     amount: transaction.amount,
+    isIncome: isIncomeTransaction({
+      amount: transaction.amount,
+      category: transaction.category,
+      name: transaction.name,
+      merchantName: transaction.merchantName,
+      transactionType: transaction.transactionType,
+    }),
     category: categoryName,
     categoryColor: resolveCategoryColor(
       categoryName,
