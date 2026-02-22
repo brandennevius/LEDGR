@@ -10,6 +10,10 @@ import {
 } from "@/lib/transactionRules";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
+type UserScopeMode =
+  | "general_education_only"
+  | "aggregated_financial_context"
+  | "transaction_detail";
 
 type SplitLike = {
   id: string;
@@ -31,6 +35,7 @@ type TxLike = {
 };
 
 type Intent = {
+  mode: UserScopeMode;
   asksTransactions: boolean;
   asksCategories: boolean;
   asksCashflow: boolean;
@@ -39,22 +44,64 @@ type Intent = {
   asksGoals: boolean;
   needsPersonalData: boolean;
   transactionDetailMode: boolean;
-  explicitGeneralEducation: boolean;
-  followUpFromPriorFinance: boolean;
+  classifier: {
+    source: "model" | "fallback";
+    confidence: number;
+    reason: string;
+  };
 };
 
 const debtPattern = /loan|debt|credit|card payment|mortgage|student/i;
-const genericFinancePattern =
-  /finance|money|spend|spending|expense|income|budget|cash|account|bank|debt|loan|save|saving|invest|net worth|payoff|goal/i;
-const personalReferencePattern =
-  /\b(my|me|mine|i|i'm|i’ve|ive|we|our|us)\b|this month|last month|my data|my account|my spending/i;
-const explicitEducationPattern =
-  /^(what is|what are|define|definition|explain|how does|difference between|meaning of)\b/i;
-const followUpPattern =
-  /\b(what about|how about|and what|and if|compare|same|that|those|these|it|again|more detail|break that down)\b/i;
-const transactionDetailCuePattern =
-  /\b(which|show|list|find|what did i|where did i|largest|smallest|merchant|transaction)\b/i;
 const MAX_MESSAGE_CHARS = 1200;
+const CLASSIFIER_PROMPT =
+  "Classify user scope for a personal finance assistant. Output JSON only. " +
+  "Use transaction_detail only when the user explicitly asks for specific transactions, merchants, or list/detail lookups. " +
+  "Use aggregated_financial_context for normal personalized coaching questions about spending, budget, savings, debt, goals, cash flow, or net worth. " +
+  "Use general_education_only for purely educational questions not about their personal finances.";
+const intentSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    scope: {
+      type: "string",
+      enum: [
+        "general_education_only",
+        "aggregated_financial_context",
+        "transaction_detail",
+      ],
+    },
+    asks_transactions: { type: "boolean" },
+    asks_categories: { type: "boolean" },
+    asks_cashflow: { type: "boolean" },
+    asks_net_worth: { type: "boolean" },
+    asks_debt: { type: "boolean" },
+    asks_goals: { type: "boolean" },
+    confidence: { type: "number" },
+    reason: { type: "string" },
+  },
+  required: [
+    "scope",
+    "asks_transactions",
+    "asks_categories",
+    "asks_cashflow",
+    "asks_net_worth",
+    "asks_debt",
+    "asks_goals",
+    "confidence",
+    "reason",
+  ],
+} as const;
+type IntentClassifierResponse = {
+  scope: UserScopeMode;
+  asks_transactions: boolean;
+  asks_categories: boolean;
+  asks_cashflow: boolean;
+  asks_net_worth: boolean;
+  asks_debt: boolean;
+  asks_goals: boolean;
+  confidence: number;
+  reason: string;
+};
 
 const normalizeCategory = (value?: string | null) =>
   value?.trim().toUpperCase() ?? "UNCATEGORIZED";
@@ -112,98 +159,114 @@ const getLastUserMessage = (messages: ChatMessage[] = []) => {
   return "";
 };
 
-const analyzeQuery = (text: string) => {
-  const query = text.trim().toLowerCase();
-  const asksTransactions =
-    /transaction|merchant|charge|purchase|payment|split|refund|receipt/.test(query);
-  const asksCategories = /categor|budget|spend by|over budget|under budget/.test(query);
-  const asksCashflow = /cash flow|income|spend|surplus|monthly|trend/.test(query);
-  const asksNetWorth = /net worth|asset|liabilit|balance|account/.test(query);
-  const asksDebt = /debt|loan|credit card|payoff|interest|min payment/.test(query);
-  const asksGoals = /goal|target|progress|on track|off track/.test(query);
-  const financeTopic =
-    genericFinancePattern.test(query) ||
-    asksTransactions ||
-    asksCategories ||
-    asksCashflow ||
-    asksNetWorth ||
-    asksDebt ||
-    asksGoals;
-  const personalReference = personalReferencePattern.test(query);
-  const explicitGeneralEducation =
-    explicitEducationPattern.test(query) &&
-    !personalReference &&
-    !/\bmy\b|\bmine\b/.test(query);
-  const transactionDetailCue = transactionDetailCuePattern.test(query);
-  const followUpHint = followUpPattern.test(query);
+const clampConfidence = (value: unknown) => {
+  if (typeof value !== "number" || Number.isNaN(value)) return 0;
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return Number(value.toFixed(2));
+};
 
+const buildFallbackIntent = (latestUserPrompt: string, reason: string): Intent => {
+  const hasPrompt = latestUserPrompt.trim().length > 0;
+  const mode: UserScopeMode = hasPrompt
+    ? "aggregated_financial_context"
+    : "general_education_only";
   return {
-    asksTransactions,
-    asksCategories,
-    asksCashflow,
-    asksNetWorth,
-    asksDebt,
-    asksGoals,
-    financeTopic,
-    personalReference,
-    explicitGeneralEducation,
-    transactionDetailCue,
-    followUpHint,
+    mode,
+    asksTransactions: false,
+    asksCategories: false,
+    asksCashflow: hasPrompt,
+    asksNetWorth: false,
+    asksDebt: false,
+    asksGoals: false,
+    needsPersonalData: mode !== "general_education_only",
+    transactionDetailMode: false,
+    classifier: {
+      source: "fallback",
+      confidence: 0,
+      reason,
+    },
   };
 };
 
-const detectIntent = (messages: ChatMessage[]): Intent => {
-  const userMessages = messages
-    .filter((message) => message.role === "user")
-    .map((message) => message.content.trim())
-    .filter(Boolean);
-  const latestQuery = userMessages[userMessages.length - 1] ?? "";
-  const priorQuery = userMessages[userMessages.length - 2] ?? "";
+const classifyIntent = async ({
+  openai,
+  messages,
+  latestUserPrompt,
+}: {
+  openai: NonNullable<ReturnType<typeof getOpenAI>>;
+  messages: ChatMessage[];
+  latestUserPrompt: string;
+}): Promise<Intent> => {
+  if (!latestUserPrompt.trim()) {
+    return buildFallbackIntent(latestUserPrompt, "No user prompt provided.");
+  }
 
-  const latest = analyzeQuery(latestQuery);
-  const prior = analyzeQuery(priorQuery);
+  const conversation = messages
+    .slice(-8)
+    .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+    .join("\n");
 
-  const followUpFromPriorFinance =
-    latest.followUpHint && !latest.financeTopic && prior.financeTopic;
+  try {
+    const response = await openai.responses.create({
+      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+      input: [
+        { role: "system", content: CLASSIFIER_PROMPT },
+        { role: "user", content: conversation },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "chat_intent_classifier",
+          schema: intentSchema,
+          strict: true,
+        },
+      },
+    });
 
-  const asksTransactions = latest.asksTransactions || (followUpFromPriorFinance && prior.asksTransactions);
-  const asksCategories = latest.asksCategories || (followUpFromPriorFinance && prior.asksCategories);
-  const asksCashflow = latest.asksCashflow || (followUpFromPriorFinance && prior.asksCashflow);
-  const asksNetWorth = latest.asksNetWorth || (followUpFromPriorFinance && prior.asksNetWorth);
-  const asksDebt = latest.asksDebt || (followUpFromPriorFinance && prior.asksDebt);
-  const asksGoals = latest.asksGoals || (followUpFromPriorFinance && prior.asksGoals);
+    const parsed = JSON.parse(
+      response.output_text ?? "{}"
+    ) as IntentClassifierResponse;
+    const mode: UserScopeMode =
+      parsed.scope === "transaction_detail" ||
+      parsed.scope === "aggregated_financial_context" ||
+      parsed.scope === "general_education_only"
+        ? parsed.scope
+        : "aggregated_financial_context";
 
-  const financeTopic =
-    latest.financeTopic ||
-    followUpFromPriorFinance ||
-    asksTransactions ||
-    asksCategories ||
-    asksCashflow ||
-    asksNetWorth ||
-    asksDebt ||
-    asksGoals;
+    const lowConfidenceTransactionDetail =
+      mode === "transaction_detail" && clampConfidence(parsed.confidence) < 0.6;
+    const safeMode: UserScopeMode = lowConfidenceTransactionDetail
+      ? "aggregated_financial_context"
+      : mode;
+    const transactionDetailMode = safeMode === "transaction_detail";
+    const asksTransactions = parsed.asks_transactions || transactionDetailMode;
 
-  // Privacy default:
-  // - Use personal context for finance questions.
-  // - Stay in general mode for explicit educational questions.
-  const needsPersonalData = financeTopic && !latest.explicitGeneralEducation;
-  const transactionDetailMode =
-    asksTransactions &&
-    (latest.transactionDetailCue ||
-      (followUpFromPriorFinance && prior.asksTransactions && prior.transactionDetailCue));
-
-  return {
-    asksTransactions,
-    asksCategories,
-    asksCashflow,
-    asksNetWorth,
-    asksDebt,
-    asksGoals,
-    needsPersonalData,
-    transactionDetailMode,
-    explicitGeneralEducation: latest.explicitGeneralEducation,
-    followUpFromPriorFinance,
-  };
+    return {
+      mode: safeMode,
+      asksTransactions,
+      asksCategories: parsed.asks_categories,
+      asksCashflow: parsed.asks_cashflow,
+      asksNetWorth: parsed.asks_net_worth,
+      asksDebt: parsed.asks_debt,
+      asksGoals: parsed.asks_goals,
+      needsPersonalData: safeMode !== "general_education_only",
+      transactionDetailMode,
+      classifier: {
+        source: "model",
+        confidence: clampConfidence(parsed.confidence),
+        reason:
+          typeof parsed.reason === "string" && parsed.reason.trim().length > 0
+            ? parsed.reason.trim().slice(0, 240)
+            : "Model classified user scope.",
+      },
+    };
+  } catch {
+    return buildFallbackIntent(
+      latestUserPrompt,
+      "Classifier failed, used secure aggregated fallback."
+    );
+  }
 };
 
 const sanitizeMessages = (value: unknown): ChatMessage[] => {
@@ -253,7 +316,21 @@ export async function POST(request: Request) {
   const messages = sanitizeMessages(rawBody.messages);
   const streamRequested = rawBody.stream === true;
   const latestUserPrompt = getLastUserMessage(messages);
-  const intent = detectIntent(messages);
+  const openai = getOpenAI();
+  if (!openai) {
+    const fallback =
+      "AI insights are not configured yet. Add an OPENAI_API_KEY to enable chat.";
+    if (streamRequested) {
+      return new Response(fallback, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+        },
+      });
+    }
+    return NextResponse.json({ answer: fallback });
+  }
+  const intent = await classifyIntent({ openai, messages, latestUserPrompt });
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -291,8 +368,6 @@ export async function POST(request: Request) {
   }> = [];
 
   if (intent.needsPersonalData) {
-    const includeGoals = intent.asksGoals || intent.asksDebt;
-
     const txWhere = intent.transactionDetailMode
       ? {
           userId: user.id,
@@ -323,24 +398,22 @@ export async function POST(request: Request) {
           availableBalance: true,
         },
       }),
-      includeGoals
-        ? prisma.goal.findMany({
-            where: { userId: user.id },
-            select: {
-              id: true,
-              name: true,
-              type: true,
-              status: true,
-              target: true,
-              current: true,
-              minPayment: true,
-              interestRate: true,
-              termMonths: true,
-              endDate: true,
-              accountId: true,
-            },
-          })
-        : Promise.resolve([]),
+      prisma.goal.findMany({
+        where: { userId: user.id },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          status: true,
+          target: true,
+          current: true,
+          minPayment: true,
+          interestRate: true,
+          termMonths: true,
+          endDate: true,
+          accountId: true,
+        },
+      }),
     ]);
   }
 
@@ -600,11 +673,7 @@ export async function POST(request: Request) {
   const context: Record<string, unknown> = {
     generatedAt: now.toISOString(),
     userScope: {
-      mode: intent.transactionDetailMode
-        ? "transaction_detail"
-        : intent.needsPersonalData
-          ? "aggregated_financial_context"
-          : "general_education_only",
+      mode: intent.mode,
       latestUserPrompt,
       intent,
     },
@@ -668,7 +737,7 @@ export async function POST(request: Request) {
       },
     };
 
-    if (intent.asksDebt || intent.asksGoals) {
+    if (intent.asksDebt || intent.asksGoals || goals.length > 0) {
       context.debt = {
         hasDebtData: debtAccounts.length > 0 || activeDebtGoals.length > 0,
         totalBalance: debtTotal,
@@ -701,21 +770,6 @@ export async function POST(request: Request) {
         })),
       };
     }
-  }
-
-  const openai = getOpenAI();
-  if (!openai) {
-    const fallback =
-      "AI insights are not configured yet. Add an OPENAI_API_KEY to enable chat.";
-    if (streamRequested) {
-      return new Response(fallback, {
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-          "Cache-Control": "no-cache, no-transform",
-        },
-      });
-    }
-    return NextResponse.json({ answer: fallback });
   }
 
   const systemPrompt = [
