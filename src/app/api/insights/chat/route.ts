@@ -39,9 +39,22 @@ type Intent = {
   asksGoals: boolean;
   needsPersonalData: boolean;
   transactionDetailMode: boolean;
+  explicitGeneralEducation: boolean;
+  followUpFromPriorFinance: boolean;
 };
 
 const debtPattern = /loan|debt|credit|card payment|mortgage|student/i;
+const genericFinancePattern =
+  /finance|money|spend|spending|expense|income|budget|cash|account|bank|debt|loan|save|saving|invest|net worth|payoff|goal/i;
+const personalReferencePattern =
+  /\b(my|me|mine|i|i'm|i’ve|ive|we|our|us)\b|this month|last month|my data|my account|my spending/i;
+const explicitEducationPattern =
+  /^(what is|what are|define|definition|explain|how does|difference between|meaning of)\b/i;
+const followUpPattern =
+  /\b(what about|how about|and what|and if|compare|same|that|those|these|it|again|more detail|break that down)\b/i;
+const transactionDetailCuePattern =
+  /\b(which|show|list|find|what did i|where did i|largest|smallest|merchant|transaction)\b/i;
+const MAX_MESSAGE_CHARS = 1200;
 
 const normalizeCategory = (value?: string | null) =>
   value?.trim().toUpperCase() ?? "UNCATEGORIZED";
@@ -99,9 +112,8 @@ const getLastUserMessage = (messages: ChatMessage[] = []) => {
   return "";
 };
 
-const detectIntent = (text: string): Intent => {
-  const query = text.toLowerCase();
-
+const analyzeQuery = (text: string) => {
+  const query = text.trim().toLowerCase();
   const asksTransactions =
     /transaction|merchant|charge|purchase|payment|split|refund|receipt/.test(query);
   const asksCategories = /categor|budget|spend by|over budget|under budget/.test(query);
@@ -109,9 +121,61 @@ const detectIntent = (text: string): Intent => {
   const asksNetWorth = /net worth|asset|liabilit|balance|account/.test(query);
   const asksDebt = /debt|loan|credit card|payoff|interest|min payment/.test(query);
   const asksGoals = /goal|target|progress|on track|off track/.test(query);
+  const financeTopic =
+    genericFinancePattern.test(query) ||
+    asksTransactions ||
+    asksCategories ||
+    asksCashflow ||
+    asksNetWorth ||
+    asksDebt ||
+    asksGoals;
+  const personalReference = personalReferencePattern.test(query);
+  const explicitGeneralEducation =
+    explicitEducationPattern.test(query) &&
+    !personalReference &&
+    !/\bmy\b|\bmine\b/.test(query);
+  const transactionDetailCue = transactionDetailCuePattern.test(query);
+  const followUpHint = followUpPattern.test(query);
 
-  const needsPersonalData =
-    /\bmy\b|\bme\b|\bmine\b|this month|last month|my data/.test(query) ||
+  return {
+    asksTransactions,
+    asksCategories,
+    asksCashflow,
+    asksNetWorth,
+    asksDebt,
+    asksGoals,
+    financeTopic,
+    personalReference,
+    explicitGeneralEducation,
+    transactionDetailCue,
+    followUpHint,
+  };
+};
+
+const detectIntent = (messages: ChatMessage[]): Intent => {
+  const userMessages = messages
+    .filter((message) => message.role === "user")
+    .map((message) => message.content.trim())
+    .filter(Boolean);
+  const latestQuery = userMessages[userMessages.length - 1] ?? "";
+  const priorQuery = userMessages[userMessages.length - 2] ?? "";
+
+  const latest = analyzeQuery(latestQuery);
+  const prior = analyzeQuery(priorQuery);
+
+  const followUpFromPriorFinance =
+    latest.followUpHint && !latest.financeTopic && prior.financeTopic;
+
+  const asksTransactions = latest.asksTransactions || (followUpFromPriorFinance && prior.asksTransactions);
+  const asksCategories = latest.asksCategories || (followUpFromPriorFinance && prior.asksCategories);
+  const asksCashflow = latest.asksCashflow || (followUpFromPriorFinance && prior.asksCashflow);
+  const asksNetWorth = latest.asksNetWorth || (followUpFromPriorFinance && prior.asksNetWorth);
+  const asksDebt = latest.asksDebt || (followUpFromPriorFinance && prior.asksDebt);
+  const asksGoals = latest.asksGoals || (followUpFromPriorFinance && prior.asksGoals);
+
+  const financeTopic =
+    latest.financeTopic ||
+    followUpFromPriorFinance ||
     asksTransactions ||
     asksCategories ||
     asksCashflow ||
@@ -119,10 +183,14 @@ const detectIntent = (text: string): Intent => {
     asksDebt ||
     asksGoals;
 
+  // Privacy default:
+  // - Use personal context for finance questions.
+  // - Stay in general mode for explicit educational questions.
+  const needsPersonalData = financeTopic && !latest.explicitGeneralEducation;
   const transactionDetailMode =
     asksTransactions &&
-    (/which|show|list|find|what did i|where did i|largest|smallest/.test(query) ||
-      /merchant|transaction/.test(query));
+    (latest.transactionDetailCue ||
+      (followUpFromPriorFinance && prior.asksTransactions && prior.transactionDetailCue));
 
   return {
     asksTransactions,
@@ -133,7 +201,31 @@ const detectIntent = (text: string): Intent => {
     asksGoals,
     needsPersonalData,
     transactionDetailMode,
+    explicitGeneralEducation: latest.explicitGeneralEducation,
+    followUpFromPriorFinance,
   };
+};
+
+const sanitizeMessages = (value: unknown): ChatMessage[] => {
+  if (!Array.isArray(value)) return [];
+  const sanitized = value
+    .flatMap((entry): ChatMessage[] => {
+      if (!entry || typeof entry !== "object") return [];
+      const candidate = entry as { role?: unknown; content?: unknown };
+      const role =
+        candidate.role === "user" || candidate.role === "assistant"
+          ? candidate.role
+          : null;
+      const content =
+        typeof candidate.content === "string"
+          ? candidate.content.trim().slice(0, MAX_MESSAGE_CHARS)
+          : "";
+      if (!role || !content) return [];
+      return [{ role, content }];
+    })
+    .slice(-12);
+
+  return sanitized;
 };
 
 export async function POST(request: Request) {
@@ -153,13 +245,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = (await request.json()) as {
-    messages?: ChatMessage[];
-    stream?: boolean;
+  const rawBody = (await request.json()) as {
+    messages?: unknown;
+    stream?: unknown;
   };
 
-  const latestUserPrompt = getLastUserMessage(body.messages ?? []);
-  const intent = detectIntent(latestUserPrompt);
+  const messages = sanitizeMessages(rawBody.messages);
+  const streamRequested = rawBody.stream === true;
+  const latestUserPrompt = getLastUserMessage(messages);
+  const intent = detectIntent(messages);
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -613,7 +707,7 @@ export async function POST(request: Request) {
   if (!openai) {
     const fallback =
       "AI insights are not configured yet. Add an OPENAI_API_KEY to enable chat.";
-    if (body.stream) {
+    if (streamRequested) {
       return new Response(fallback, {
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
@@ -642,10 +736,10 @@ export async function POST(request: Request) {
       role: "system" as const,
       content: `clientDataContext: ${JSON.stringify(context)}`,
     },
-    ...(body.messages ?? []).slice(-12),
+    ...messages,
   ];
 
-  if (body.stream) {
+  if (streamRequested) {
     const stream = await openai.responses.create({
       model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
       input,
