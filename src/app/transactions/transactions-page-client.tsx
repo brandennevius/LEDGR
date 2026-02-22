@@ -10,6 +10,7 @@ type TransactionRow = {
   name: string;
   category: string;
   amount: number;
+  isInflow?: boolean;
   isIncome: boolean;
   needsReview?: boolean;
   source?: string;
@@ -28,6 +29,7 @@ type TransactionDetail = {
   id: string;
   name: string;
   amount: number;
+  isInflow?: boolean;
   category: string;
   transactionType?: "INCOME" | "INTERNAL_TRANSFER" | "REGULAR";
   date: string;
@@ -347,10 +349,13 @@ export default function TransactionsPageClient() {
                       </div>
                       <div
                         className={`text-sm font-semibold ${
-                          tx.isIncome ? "text-emerald-600" : "text-[color:var(--ink)]"
+                          (tx.isInflow ?? tx.isIncome)
+                            ? "text-emerald-600"
+                            : "text-[color:var(--ink)]"
                         }`}
                       >
-                        {tx.isIncome ? "+" : "-"}${tx.amount.toFixed(2)}
+                        {(tx.isInflow ?? tx.isIncome) ? "+" : "-"}$
+                        {tx.amount.toFixed(2)}
                       </div>
                     </button>
                   ))
@@ -389,7 +394,7 @@ export default function TransactionsPageClient() {
                   <div className="flex items-center justify-between">
                     <h2 className="text-2xl font-semibold">{selected.name}</h2>
                     <span className="text-lg font-semibold">
-                      {selected.amount < 0 ? "-" : "+"}$
+                      {(selected.isInflow ?? selected.amount < 0) ? "+" : "-"}$
                       {Math.abs(selected.amount).toFixed(2)}
                     </span>
                   </div>
@@ -782,7 +787,7 @@ export default function TransactionsPageClient() {
                               </p>
                             </div>
                             <span className="text-[11px] font-semibold text-[color:var(--ink)]">
-                              {item.isIncome ? "+" : "-"}$
+                              {(item.isInflow ?? item.isIncome) ? "+" : "-"}$
                               {item.amount.toFixed(2)}
                             </span>
                           </div>
@@ -856,7 +861,8 @@ export default function TransactionsPageClient() {
                               </p>
                             </div>
                             <span className="font-semibold">
-                              {item.isIncome ? "+" : "-"}${item.amount.toFixed(2)}
+                              {(item.isInflow ?? item.isIncome) ? "+" : "-"}$
+                              {item.amount.toFixed(2)}
                             </span>
                           </div>
                         ))}

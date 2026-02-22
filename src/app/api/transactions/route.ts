@@ -82,6 +82,7 @@ export async function GET(request: Request) {
           category: displayCategory(tx),
           categoryColor: resolveTxColor(displayCategory(tx)),
           amount: Math.abs(tx.amount),
+          isInflow: tx.amount < 0,
           isIncome: isIncomeTransaction({
             amount: tx.amount,
             category: tx.category,
@@ -99,6 +100,7 @@ export async function GET(request: Request) {
     }
 
     const sign = tx.amount < 0 ? -1 : 1;
+    const isInflow = sign < 0;
     const splitRows = tx.splits.map((split) => ({
       id: `split-${split.id}`,
       baseId: tx.id,
@@ -106,6 +108,7 @@ export async function GET(request: Request) {
       category: split.category,
       categoryColor: resolveTxColor(split.category),
       amount: Math.abs(split.amount),
+      isInflow,
       isIncome: isIncomeTransaction({
         amount: sign < 0 ? -Math.abs(split.amount) : Math.abs(split.amount),
         category: split.category,
@@ -132,6 +135,7 @@ export async function GET(request: Request) {
               category: displayCategory(tx),
               categoryColor: resolveTxColor(displayCategory(tx)),
               amount: remaining,
+              isInflow,
               isIncome: isIncomeTransaction({
                 amount: sign < 0 ? -Math.abs(remaining) : Math.abs(remaining),
                 category: tx.category,

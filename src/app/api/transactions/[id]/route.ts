@@ -43,6 +43,7 @@ export async function GET(
     id: transaction.id,
     name: transaction.merchantName ?? transaction.name,
     amount: transaction.amount,
+    isInflow: transaction.amount < 0,
     isIncome: isIncomeTransaction({
       amount: transaction.amount,
       category: transaction.category,

@@ -24,6 +24,7 @@ type TransactionRow = {
   name: string;
   category: string;
   amount: number;
+  isInflow?: boolean;
   isIncome: boolean;
   needsReview?: boolean;
   hasSplits?: boolean;
@@ -34,6 +35,7 @@ type TransactionDetail = {
   id: string;
   name: string;
   amount: number;
+  isInflow?: boolean;
   isIncome: boolean;
   category: string;
   transactionType?: 'INCOME' | 'INTERNAL_TRANSFER' | 'REGULAR';
@@ -379,7 +381,9 @@ export function TransactionsScreen() {
           </View>
         ) : null}
 
-        {filteredRows.map((item) => (
+        {filteredRows.map((item) => {
+          const isInflow = item.isInflow ?? item.isIncome;
+          return (
           <Pressable key={item.id} onPress={() => openDetail(item.baseId ?? item.id)}>
             <View style={styles.row}>
               <View style={styles.meta}>
@@ -390,13 +394,14 @@ export function TransactionsScreen() {
                   {item.hasSplits ? ' · Split' : ''}
                 </Text>
               </View>
-              <Text style={[styles.amount, item.isIncome ? styles.positive : styles.negative]}>
-                {item.isIncome ? '+' : '-'}
+              <Text style={[styles.amount, isInflow ? styles.positive : styles.negative]}>
+                {isInflow ? '+' : '-'}
                 {formatCurrency(item.amount)}
               </Text>
             </View>
           </Pressable>
-        ))}
+          );
+        })}
       </ScrollView>
 
       <ModalSheet visible={filtersOpen} onClose={() => setFiltersOpen(false)}>
@@ -516,7 +521,7 @@ export function TransactionsScreen() {
             ) : (
               <Pressable onPress={() => setEditingAmount(true)}>
                 <Text style={styles.detailAmount}>
-                  {selected.isIncome ? '+' : '-'} {formatCurrency(Math.abs(selected.amount))}
+                  {(selected.isInflow ?? selected.amount < 0) ? '+' : '-'} {formatCurrency(Math.abs(selected.amount))}
                 </Text>
                 <Text style={styles.detailAmountHint}>Tap amount to edit</Text>
               </Pressable>
