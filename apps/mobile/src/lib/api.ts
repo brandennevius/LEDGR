@@ -50,13 +50,35 @@ export async function apiRequest<T>(path: string, options?: ApiRequestOptions): 
 
   if (!response.ok) {
     let payload: ApiError = { error: 'Request failed', status: response.status };
-    try {
-      payload = await response.json();
-      if (!payload.status) {
-        payload.status = response.status;
+    const contentType = response.headers.get('content-type') ?? '';
+
+    if (contentType.includes('application/json')) {
+      try {
+        payload = await response.json();
+        if (!payload.status) {
+          payload.status = response.status;
+        }
+      } catch {
+        // ignore JSON parsing errors
       }
-    } catch {
-      // ignore JSON parsing errors
+    } else {
+      try {
+        const raw = await response.text();
+        if (raw.includes('Authentication Required') && raw.includes('Vercel')) {
+          payload = {
+            error:
+              'API deployment is protected by Vercel authentication. Set EXPO_PUBLIC_API_BASE_URL to a public deployment.',
+            status: response.status,
+          };
+        } else if (raw.trim().length > 0) {
+          payload = {
+            error: raw.trim().slice(0, 200),
+            status: response.status,
+          };
+        }
+      } catch {
+        // ignore text parsing errors
+      }
     }
     throw payload;
   }

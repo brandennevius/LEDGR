@@ -15,7 +15,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
 
   return {
     ...config,
-    name: 'Financial Coaching',
+    name: 'LEDGR',
     slug: 'financial-coaching',
     scheme: 'financialcoaching',
     version: config.version ?? '1.0.0',
