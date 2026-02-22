@@ -19,6 +19,7 @@ import { CategoriesScreen } from '../screens/CategoriesScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { DistributionScreen } from '../screens/DistributionScreen';
 import { GoalsScreen } from '../screens/GoalsScreen';
+import { ManageConnectionsScreen } from '../screens/ManageConnectionsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { TransactionsScreen } from '../screens/TransactionsScreen';
 import { colors, navigationTheme } from '../theme';
@@ -35,6 +36,7 @@ type TopTabParamList = {
 type RootStackParamList = {
   Tabs: NavigatorScreenParams<TopTabParamList>;
   Settings: undefined;
+  ManageConnections: undefined;
 };
 
 const TopTab = createMaterialTopTabNavigator<TopTabParamList>();
@@ -203,6 +205,18 @@ export function AppNavigator({ userId }: { userId: string }) {
               options={{ headerTitle: () => <Text style={styles.headerTitle}>LEDGR</Text> }}
             />
             <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen
+              name="ManageConnections"
+              component={ManageConnectionsScreen}
+              options={({ navigation }) => ({
+                headerTitle: () => <Text style={styles.headerTitle}>Connections</Text>,
+                headerLeft: () => (
+                  <Pressable onPress={() => navigation.goBack()} style={styles.headerIconButton}>
+                    <Ionicons name="chevron-back" size={20} color={chromeText} />
+                  </Pressable>
+                ),
+              })}
+            />
           </Stack.Navigator>
           <AppOnboardingOverlay disabled={faceIdRequired && !unlocked} />
         </AppOnboardingProvider>

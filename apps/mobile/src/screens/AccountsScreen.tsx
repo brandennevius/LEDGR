@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Platform,
@@ -23,7 +24,6 @@ import { colors } from '../theme';
 
 type Account = {
   id: string;
-  plaidItemId?: string;
   name: string;
   type: string;
   mask?: string;
@@ -31,18 +31,10 @@ type Account = {
   balance: number;
 };
 
-type Connection = {
-  id: string;
-  itemId: string;
-  institutionName?: string;
-  status: string;
-  updatedAt: string;
-};
-
 type OverviewResponse = {
   clientName: string;
   accounts: Account[];
-  plaidItems: Connection[];
+  plaidItems?: Array<{ id: string }>;
 };
 
 type LinkTokenResponse = { link_token: string };
@@ -58,14 +50,12 @@ export function AccountsScreen() {
   const connectButtonRef = useRef<View | null>(null);
   const { registerAnchor, unregisterAnchor } = useAppOnboarding();
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [connections, setConnections] = useState<Connection[]>([]);
+  const [connectionCount, setConnectionCount] = useState(0);
   const [clientName, setClientName] = useState('');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [linking, setLinking] = useState(false);
-  const [repairingItemId, setRepairingItemId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [removingAll, setRemovingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const getErrorMessage = (err: unknown, fallback: string) => {
@@ -83,11 +73,11 @@ export function AccountsScreen() {
     return fallback;
   };
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const data = await apiRequest<OverviewResponse>('/api/client/overview');
       setAccounts(data.accounts ?? []);
-      setConnections(data.plaidItems ?? []);
+      setConnectionCount(data.plaidItems?.length ?? 0);
       setClientName(data.clientName ?? '');
       setError(null);
     } catch (err) {
@@ -99,11 +89,13 @@ export function AccountsScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    load();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
 
   const measureConnectButton = useCallback(() => {
     requestAnimationFrame(() => {
@@ -116,29 +108,13 @@ export function AccountsScreen() {
 
   useEffect(() => {
     measureConnectButton();
-  }, [measureConnectButton, loading, accounts.length, connections.length]);
+  }, [measureConnectButton, loading, accounts.length]);
 
   useEffect(() => {
     return () => {
       unregisterAnchor('accounts-connect');
     };
   }, [unregisterAnchor]);
-
-  const connectionCounts = useMemo(() => {
-    const itemIdByInternal = new Map(connections.map((connection) => [connection.id, connection.itemId]));
-    const map = new Map<string, number>();
-    connections.forEach((connection) => {
-      map.set(connection.itemId, 0);
-    });
-    accounts.forEach((account) => {
-      if (!account.plaidItemId) return;
-      const itemId = itemIdByInternal.get(account.plaidItemId);
-      if (!itemId) return;
-      const count = map.get(itemId) ?? 0;
-      map.set(itemId, count + 1);
-    });
-    return map;
-  }, [accounts, connections]);
 
   const syncNow = async () => {
     setSyncing(true);
@@ -162,20 +138,6 @@ export function AccountsScreen() {
       setAccounts((prev) => prev.filter((account) => account.id !== accountId));
     } finally {
       setRemovingId(null);
-    }
-  };
-
-  const removeAll = async () => {
-    setRemovingAll(true);
-    try {
-      await apiRequest('/api/accounts', {
-        method: 'DELETE',
-        body: { all: true },
-      });
-      setAccounts([]);
-      setConnections([]);
-    } finally {
-      setRemovingAll(false);
     }
   };
 
@@ -212,48 +174,20 @@ export function AccountsScreen() {
     }
   };
 
-  const repairConnection = async (itemId: string) => {
-    setRepairingItemId(itemId);
-    setError(null);
-    try {
-      const data = await apiRequest<LinkTokenResponse>('/api/plaid/link-token', {
-        method: 'POST',
-        body: { mode: 'update', itemId, platform: Platform.OS },
-      });
-      await destroyPlaidLink();
-      createPlaidLink({ token: data.link_token });
-      openPlaidLink({
-        onSuccess: async () => {
-          await apiRequest('/api/plaid/accounts/sync', { method: 'POST' });
-          await apiRequest('/api/plaid/transactions/sync', { method: 'POST' });
-          await load();
-        },
-        onExit: (exit: LinkExit) => {
-          if (exit.error?.displayMessage || exit.error?.errorMessage) {
-            setError(exit.error.displayMessage ?? exit.error.errorMessage);
-          }
-        },
-      });
-    } catch (err) {
-      setError(getErrorMessage(err, 'Unable to update this connection right now.'));
-    } finally {
-      setRepairingItemId(null);
-    }
-  };
-
   return (
     <Screen edgeToEdge>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.headerTitle}>Linked accounts</Text>
+            <Text style={styles.headerTitle}>Accounts</Text>
             <Text style={styles.headerSubtitle}>
-              {clientName || 'Client'} · {accounts.length} accounts · {connections.length} connections
+              {clientName || 'Client'} · {accounts.length} connected accounts · {connectionCount}{' '}
+              institutions
             </Text>
           </View>
           <View ref={connectButtonRef} onLayout={measureConnectButton}>
-            <Pressable style={styles.primaryButton} onPress={startLink}>
-              <Text style={styles.primaryLabel}>{linking ? 'Opening...' : 'Connect'}</Text>
+            <Pressable style={styles.primaryButton} onPress={startLink} disabled={linking}>
+              <Text style={styles.primaryLabel}>{linking ? 'Opening...' : 'Add account'}</Text>
             </Pressable>
           </View>
         </View>
@@ -262,57 +196,22 @@ export function AccountsScreen() {
           <Pressable style={styles.secondaryButton} onPress={syncNow} disabled={syncing}>
             <Text style={styles.secondaryLabel}>{syncing ? 'Syncing...' : 'Sync now'}</Text>
           </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={removeAll} disabled={removingAll}>
-            <Text style={styles.secondaryLabel}>{removingAll ? 'Removing...' : 'Remove all'}</Text>
-          </Pressable>
         </View>
 
         {loading ? (
           <View style={styles.loadingCard}>
             <ActivityIndicator color={colors.primary} />
-            <Text style={styles.loadingText}>Loading connections...</Text>
+            <Text style={styles.loadingText}>Loading accounts...</Text>
           </View>
         ) : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Connections</Text>
-          {connections.length === 0 ? (
-            <Text style={styles.emptyText}>No connections yet. Link a bank to get started.</Text>
-          ) : (
-            connections.map((connection) => (
-              <View key={connection.id} style={styles.connectionRow}>
-                <View style={styles.connectionInfo}>
-                  <Text style={styles.connectionName}>
-                    {connection.institutionName ?? 'Bank connection'}
-                  </Text>
-                  <Text style={styles.connectionMeta}>
-                    Status: {connection.status} · {connectionCounts.get(connection.itemId) ?? 0} accounts
-                  </Text>
-                </View>
-                <View style={styles.connectionActions}>
-                  <Text style={styles.connectionMeta}>
-                    Updated {new Date(connection.updatedAt).toLocaleDateString()}
-                  </Text>
-                  <Pressable
-                    style={styles.repairButton}
-                    onPress={() => repairConnection(connection.itemId)}
-                    disabled={repairingItemId === connection.itemId || linking}
-                  >
-                    <Text style={styles.repairLabel}>
-                      {repairingItemId === connection.itemId ? 'Updating...' : 'Update login'}
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            ))
-          )}
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Accounts</Text>
+          <Text style={styles.sectionTitle}>Connected accounts</Text>
           {accounts.length === 0 ? (
-            <Text style={styles.emptyText}>No linked accounts yet.</Text>
+            <Text style={styles.emptyText}>
+              No linked accounts yet. Tap Add account to connect your first bank.
+            </Text>
           ) : (
             accounts.map((account) => (
               <View key={account.id} style={styles.accountRow}>
@@ -367,7 +266,6 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
-    gap: 10,
   },
   primaryButton: {
     backgroundColor: colors.primary,
@@ -380,10 +278,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   secondaryButton: {
-    flex: 1,
     borderRadius: 14,
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: colors.cardBorder,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -411,56 +308,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   sectionCard: {
-    backgroundColor: 'transparent',
-    borderRadius: 0,
-    paddingVertical: 2,
-    gap: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.cardBorder,
+    paddingVertical: 6,
+    gap: 8,
   },
   sectionTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  emptyText: {
     color: colors.textMuted,
     fontSize: 12,
-  },
-  connectionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    gap: 12,
-  },
-  connectionInfo: {
-    flex: 1,
-  },
-  connectionName: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  connectionActions: {
-    alignItems: 'flex-end',
-    gap: 6,
-  },
-  connectionMeta: {
-    color: colors.textMuted,
-    fontSize: 11,
-    marginTop: 4,
-  },
-  repairButton: {
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-  },
-  repairLabel: {
-    color: colors.text,
-    fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    paddingHorizontal: 2,
   },
   accountRow: {
     flexDirection: 'row',
@@ -498,5 +358,10 @@ const styles = StyleSheet.create({
   removeLabel: {
     color: colors.textMuted,
     fontSize: 11,
+  },
+  emptyText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    paddingHorizontal: 2,
   },
 });

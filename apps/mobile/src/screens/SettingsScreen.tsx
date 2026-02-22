@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Alert,
@@ -101,6 +102,7 @@ function ToggleRow({
 }
 
 export function SettingsScreen() {
+  const navigation = useNavigation();
   const { user, signOut } = useAuth();
   const { restart } = useAppOnboarding();
   const [overrideValue, setOverrideValue] = useState('');
@@ -328,6 +330,10 @@ export function SettingsScreen() {
             <Text style={styles.rowLabel}>Email</Text>
             <Text style={styles.rowValue}>{user?.email ?? 'Unknown'}</Text>
           </View>
+          <Row
+            label="Manage bank connections"
+            onPress={() => navigation.navigate('ManageConnections' as never)}
+          />
           <ToggleRow
             label={faceIdBusy ? 'Require Face ID (checking...)' : 'Require Face ID'}
             value={faceIdRequired}
