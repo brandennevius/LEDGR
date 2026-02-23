@@ -40,6 +40,70 @@ type SplitAwareTransaction = {
   }>;
 };
 
+const normalizeSpendCategory = (value?: string | null) => {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return "Uncategorized";
+  if (trimmed.toLowerCase() === "split") return "Uncategorized";
+  return trimmed;
+};
+
+const isTransferCategoryName = (value?: string | null) => {
+  const key = String(value ?? "").trim().toLowerCase();
+  if (!key) return false;
+  return /(transfer[_\s-]*out|transfer[_\s-]*in|internal[_\s-]*transfer)/i.test(
+    key
+  );
+};
+
+const buildRegularSpendEntries = (transactions: SplitAwareTransaction[]) => {
+  const entries: Array<{ category: string; amount: number; date: Date }> = [];
+  transactions.forEach((tx) => {
+    if (tx.transactionType !== "REGULAR") return;
+    const sign = tx.amount < 0 ? -1 : 1;
+
+    if (!tx.splits || tx.splits.length === 0) {
+      const category = normalizeSpendCategory(tx.category);
+      if (isTransferCategoryName(category)) return;
+      entries.push({
+        category,
+        amount: tx.amount,
+        date: tx.date,
+      });
+      return;
+    }
+
+    const splitRows = tx.splits
+      .map((split) => ({
+        category: normalizeSpendCategory(split.category),
+        amount: sign * Math.max(0, Math.abs(split.amount)),
+      }))
+      .filter(
+        (row) => Math.abs(row.amount) > 0 && !isTransferCategoryName(row.category)
+      );
+
+    const splitTotal = splitRows.reduce((sum, row) => sum + Math.abs(row.amount), 0);
+    splitRows.forEach((row) => {
+      entries.push({
+        category: row.category,
+        amount: row.amount,
+        date: tx.date,
+      });
+    });
+
+    const remainder = Math.max(0, Math.abs(tx.amount) - splitTotal);
+    if (remainder > 0.01) {
+      const category = normalizeSpendCategory(tx.category);
+      if (isTransferCategoryName(category)) return;
+      entries.push({
+        category,
+        amount: sign * remainder,
+        date: tx.date,
+      });
+    }
+  });
+  return entries;
+};
+
 const expandTransactionsWithSplits = (
   transactions: SplitAwareTransaction[]
 ) => {
@@ -289,28 +353,28 @@ export const getClientOverviewData = async (user: User) => {
   const daysInMonth = monthEnd.getDate();
   const monthDaily = Array.from({ length: daysInMonth }, () => 0);
   const monthDailyIncome = Array.from({ length: daysInMonth }, () => 0);
+  const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
+  const spendEntries = buildRegularSpendEntries(transactions);
 
   const categoryTotals = new Map<string, number>();
-  expandedTransactions.forEach((tx) => {
-    if (tx.amount <= 0) return;
-    if (isIncomeTransaction(tx) || isTransferTransaction(tx)) return;
-    if (tx.date < windowStart) return;
-    const category = tx.category ?? "Uncategorized";
-    categoryTotals.set(category, (categoryTotals.get(category) ?? 0) + tx.amount);
+  spendEntries.forEach((entry) => {
+    if (entry.date < windowStart) return;
+    categoryTotals.set(
+      entry.category,
+      (categoryTotals.get(entry.category) ?? 0) + entry.amount
+    );
   });
 
   const monthCategoryTotals = new Map<string, number>();
-  expandedTransactions.forEach((tx) => {
-    if (tx.amount <= 0) return;
-    if (isIncomeTransaction(tx) || isTransferTransaction(tx)) return;
-    if (tx.date < monthStart) return;
-    const category = tx.category ?? "Uncategorized";
+  spendEntries.forEach((entry) => {
+    const entryMonthKey = `${entry.date.getFullYear()}-${entry.date.getMonth()}`;
+    if (entryMonthKey !== monthKey) return;
     monthCategoryTotals.set(
-      category,
-      (monthCategoryTotals.get(category) ?? 0) + tx.amount
+      entry.category,
+      (monthCategoryTotals.get(entry.category) ?? 0) + entry.amount
     );
-    const dayIndex = tx.date.getDate() - 1;
-    monthDaily[dayIndex] += tx.amount;
+    const dayIndex = entry.date.getDate() - 1;
+    monthDaily[dayIndex] += entry.amount;
   });
 
   expandedTransactions.forEach((tx) => {
@@ -406,7 +470,9 @@ export const getClientOverviewData = async (user: User) => {
     },
     []
   );
-  const monthSpendTotal = monthDaily.reduce((acc, value) => acc + value, 0);
+  const monthSpendTotal = spendEntries
+    .filter((entry) => `${entry.date.getFullYear()}-${entry.date.getMonth()}` === monthKey)
+    .reduce((acc, entry) => acc + entry.amount, 0);
 
   const incomeSummary = computeIncomeForecast(
     expandedTransactions.map((tx) => ({
