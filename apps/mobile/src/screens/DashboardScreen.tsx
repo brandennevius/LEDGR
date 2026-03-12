@@ -48,6 +48,7 @@ type TransactionRow = {
   name: string;
   category: string;
   amount: number;
+  isInflow?: boolean;
   isIncome: boolean;
   needsReview?: boolean;
   date: string;
@@ -65,6 +66,7 @@ type TransactionDetail = {
   id: string;
   name: string;
   amount: number;
+  isInflow?: boolean;
   category: string;
   transactionType?: 'INCOME' | 'INTERNAL_TRANSFER' | 'REGULAR';
   date: string;
@@ -560,8 +562,13 @@ export function DashboardScreen() {
                         </Text>
                       </View>
                     </View>
-                    <Text style={[styles.reviewAmount, item.isIncome ? styles.positive : styles.negative]}>
-                      {item.isIncome ? '+' : '-'}
+                    <Text
+                      style={[
+                        styles.reviewAmount,
+                        (item.isInflow ?? item.isIncome) ? styles.positive : styles.negative,
+                      ]}
+                    >
+                      {(item.isInflow ?? item.isIncome) ? '+' : '-'}
                       {formatCurrency(item.amount, 2)}
                     </Text>
                   </Pressable>
@@ -653,7 +660,7 @@ export function DashboardScreen() {
             ) : (
               <Pressable onPress={() => setEditingAmount(true)}>
                 <Text style={styles.detailAmount}>
-                  {selected.amount < 0 ? '+' : '-'}
+                  {(selected.isInflow ?? selected.amount < 0) ? '+' : '-'}
                   {formatCurrency(Math.abs(selected.amount), 2)}
                 </Text>
                 <Text style={styles.detailAmountHint}>Tap amount to edit</Text>
