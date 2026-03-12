@@ -5,6 +5,7 @@ import {
   Linking,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -158,119 +159,126 @@ export function AuthScreen() {
         style={styles.container}
         behavior={Platform.select({ ios: 'padding', android: undefined })}
       >
-        <View style={styles.modeRow}>
-          <Pressable
-            style={[styles.modeButton, mode === 'signIn' && styles.modeButtonActive]}
-            onPress={() => {
-              setMode('signIn');
-              setError(null);
-            }}
-          >
-            <Text style={[styles.modeLabel, mode === 'signIn' && styles.modeLabelActive]}>Log in</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.modeButton, mode === 'signUp' && styles.modeButtonActive]}
-            onPress={() => {
-              setMode('signUp');
-              setError(null);
-            }}
-          >
-            <Text style={[styles.modeLabel, mode === 'signUp' && styles.modeLabelActive]}>Create account</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@email.com"
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            style={styles.input}
-          />
-        </View>
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            placeholder="At least 8 characters"
-            placeholderTextColor={colors.textMuted}
-            secureTextEntry
-            style={styles.input}
-          />
-        </View>
-
-        {mode === 'signUp' ? (
-          <>
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Confirm password</Text>
-              <TextInput
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                placeholder="Re-enter password"
-                placeholderTextColor={colors.textMuted}
-                secureTextEntry
-                style={styles.input}
-              />
-            </View>
-            <View style={styles.legalBox}>
-              <LegalCheck
-                checked={acceptTerms}
-                onToggle={() => setAcceptTerms((prev) => !prev)}
-                labelPrefix="I agree to the"
-                labelAction="Terms of Service"
-                onOpen={() => setLegalDoc('terms')}
-              />
-              <LegalCheck
-                checked={acceptPrivacy}
-                onToggle={() => setAcceptPrivacy((prev) => !prev)}
-                labelPrefix="I acknowledge the"
-                labelAction="Privacy Policy"
-                onOpen={() => setLegalDoc('privacy')}
-              />
-            </View>
-          </>
-        ) : null}
-
-        {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <Pressable
-          style={[styles.button, styles.primaryButton, !canSubmit && styles.buttonDisabled]}
-          onPress={handleSubmit}
-          disabled={loading || !canSubmit}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          showsVerticalScrollIndicator={false}
         >
-          {loading ? (
-            <ActivityIndicator color={colors.background} />
-          ) : (
-            <Text style={styles.primaryLabel}>{mode === 'signIn' ? 'Sign In' : 'Create Account'}</Text>
-          )}
-        </Pressable>
+          <View style={styles.modeRow}>
+            <Pressable
+              style={[styles.modeButton, mode === 'signIn' && styles.modeButtonActive]}
+              onPress={() => {
+                setMode('signIn');
+                setError(null);
+              }}
+            >
+              <Text style={[styles.modeLabel, mode === 'signIn' && styles.modeLabelActive]}>Log in</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.modeButton, mode === 'signUp' && styles.modeButtonActive]}
+              onPress={() => {
+                setMode('signUp');
+                setError(null);
+              }}
+            >
+              <Text style={[styles.modeLabel, mode === 'signUp' && styles.modeLabelActive]}>Create account</Text>
+            </Pressable>
+          </View>
 
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or continue with</Text>
-          <View style={styles.dividerLine} />
-        </View>
-        <View style={styles.buttonRow}>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@email.com"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={styles.input}
+            />
+          </View>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="At least 8 characters"
+              placeholderTextColor={colors.textMuted}
+              secureTextEntry
+              style={styles.input}
+            />
+          </View>
+
+          {mode === 'signUp' ? (
+            <>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Confirm password</Text>
+                <TextInput
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Re-enter password"
+                  placeholderTextColor={colors.textMuted}
+                  secureTextEntry
+                  style={styles.input}
+                />
+              </View>
+              <View style={styles.legalBox}>
+                <LegalCheck
+                  checked={acceptTerms}
+                  onToggle={() => setAcceptTerms((prev) => !prev)}
+                  labelPrefix="I agree to the"
+                  labelAction="Terms of Service"
+                  onOpen={() => setLegalDoc('terms')}
+                />
+                <LegalCheck
+                  checked={acceptPrivacy}
+                  onToggle={() => setAcceptPrivacy((prev) => !prev)}
+                  labelPrefix="I acknowledge the"
+                  labelAction="Privacy Policy"
+                  onOpen={() => setLegalDoc('privacy')}
+                />
+              </View>
+            </>
+          ) : null}
+
+          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
           <Pressable
-            style={[styles.button, styles.oauthButton]}
-            onPress={() => handleOAuth('google')}
-            disabled={loading}
+            style={[styles.button, styles.primaryButton, !canSubmit && styles.buttonDisabled]}
+            onPress={handleSubmit}
+            disabled={loading || !canSubmit}
           >
-            <Text style={styles.oauthLabel}>Google</Text>
+            {loading ? (
+              <ActivityIndicator color={colors.background} />
+            ) : (
+              <Text style={styles.primaryLabel}>{mode === 'signIn' ? 'Sign In' : 'Create Account'}</Text>
+            )}
           </Pressable>
-          <Pressable
-            style={[styles.button, styles.oauthButton]}
-            onPress={() => handleOAuth('apple')}
-            disabled={loading}
-          >
-            <Text style={styles.oauthLabel}>Apple</Text>
-          </Pressable>
-        </View>
+
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or continue with</Text>
+            <View style={styles.dividerLine} />
+          </View>
+          <View style={styles.buttonRow}>
+            <Pressable
+              style={[styles.button, styles.oauthButton]}
+              onPress={() => handleOAuth('google')}
+              disabled={loading}
+            >
+              <Text style={styles.oauthLabel}>Google</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.button, styles.oauthButton]}
+              onPress={() => handleOAuth('apple')}
+              disabled={loading}
+            >
+              <Text style={styles.oauthLabel}>Apple</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
       <LegalDocumentModal visible={legalDoc !== null} type={legalDoc} onClose={() => setLegalDoc(null)} />
     </Screen>
@@ -280,7 +288,11 @@ export function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     gap: 12,
+    paddingBottom: 24,
   },
   modeRow: {
     flexDirection: 'row',
