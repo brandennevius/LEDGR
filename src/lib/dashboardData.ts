@@ -599,6 +599,13 @@ export const getClientOverviewData = async (user: User) => {
   const hasDisconnected = plaidItems.some(
     (item) => item.status === "disconnected" || item.status === "inactive"
   );
+  const staleThreshold = new Date(Date.now() - 6 * 60 * 60 * 1000);
+  const staleActiveItems = plaidItems.filter(
+    (item) => item.status === "active" && item.updatedAt < staleThreshold
+  );
+  const lastSuccessfulSyncAt = plaidItems
+    .filter((item) => item.status === "active")
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]?.updatedAt;
 
   const connectionStatus = !hasItems
     ? {
@@ -618,6 +625,12 @@ export const getClientOverviewData = async (user: User) => {
         title: "Action required.",
         description:
           "Reconnect your bank to keep transactions and balances up to date.",
+      }
+    : staleActiveItems.length > 0
+    ? {
+        state: "attention" as const,
+        title: "Sync delayed.",
+        description: "Your latest bank sync looks older than expected. Refresh now.",
       }
     : { state: "connected" as const, title: "", description: "" };
 
@@ -671,6 +684,13 @@ export const getClientOverviewData = async (user: User) => {
     budgetRecommendations,
     incomeSummary,
     connectionStatus,
+    syncSummary: {
+      totalConnections: plaidItems.length,
+      activeConnections: plaidItems.filter((item) => item.status === "active").length,
+      staleConnections: staleActiveItems.length,
+      attentionConnections: plaidItems.filter((item) => item.status !== "active").length,
+      lastSuccessfulSyncAt: lastSuccessfulSyncAt?.toISOString() ?? null,
+    },
     hasBankData: true,
   };
 };

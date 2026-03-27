@@ -87,7 +87,8 @@ export default function App() {
       if (stored === 'light' || stored === 'dark') {
         Appearance.setColorScheme(stored);
       } else {
-        Appearance.setColorScheme(null);
+        await AsyncStorage.setItem('theme', 'light');
+        Appearance.setColorScheme('light');
       }
     };
     loadTheme();

@@ -43,7 +43,6 @@ const TopTab = createMaterialTopTabNavigator<TopTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const chrome = colors.chrome as string;
 const chromeText = colors.chromeText as string;
-const cardBorder = colors.cardBorder as string;
 const primary = colors.primary as string;
 const text = colors.text as string;
 const textMuted = colors.textMuted as string;
@@ -262,10 +261,13 @@ const styles = StyleSheet.create({
   },
   topTabBar: {
     backgroundColor: chrome,
-    borderBottomWidth: 1,
-    borderBottomColor: cardBorder,
+    borderBottomWidth: 0,
     elevation: 0,
     shadowOpacity: 0,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    overflow: 'hidden',
+    paddingBottom: 6,
   },
   topTabItem: {
     width: 'auto',

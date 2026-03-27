@@ -18,9 +18,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     name: 'LEDGR',
     slug: 'financial-coaching',
     scheme: 'financialcoaching',
+    newArchEnabled: true,
     version: config.version ?? '1.0.0',
     orientation: 'portrait',
-    userInterfaceStyle: 'dark',
+    userInterfaceStyle: 'automatic',
     icon: './assets/icon.png',
     splash: {
       image: './assets/splash-icon.png',
@@ -54,6 +55,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       policy: 'appVersion',
     },
     plugins: [
+      'expo-dev-client',
       'expo-font',
       'expo-secure-store',
       'expo-web-browser',

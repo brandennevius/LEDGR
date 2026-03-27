@@ -10,6 +10,7 @@ type LinkTokenBody = {
   mode?: "create" | "update";
   itemId?: string;
   platform?: "ios" | "android" | "web";
+  action?: "repair" | "add_accounts";
 };
 
 export async function POST(request: Request) {
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as LinkTokenBody;
   const mode = body?.mode ?? "create";
   const requestedPlatform = body?.platform;
+  const action = body?.action ?? "repair";
 
   const linkRequest: LinkTokenCreateRequest = {
     user: {
@@ -89,6 +91,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
     linkRequest.access_token = await getPlaidAccessToken(item);
+    linkRequest.update = {
+      account_selection_enabled: action === "add_accounts",
+    };
   } else {
     linkRequest.products = [Products.Transactions];
   }

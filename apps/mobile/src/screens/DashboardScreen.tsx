@@ -16,6 +16,7 @@ import Chip from '../components/Chip';
 import ModalSheet from '../components/ModalSheet';
 import { Screen } from '../components/Screen';
 import { apiRequest } from '../lib/api';
+import { formatRelativeSyncTime } from '../lib/syncStatus';
 import { colors } from '../theme';
 
 type OverviewResponse = {
@@ -30,6 +31,18 @@ type OverviewResponse = {
     remaining: number;
     variance: number;
     progress: number;
+  };
+  connectionStatus?: {
+    state: 'connected' | 'attention' | 'disconnected';
+    title: string;
+    description: string;
+  };
+  syncSummary?: {
+    totalConnections: number;
+    activeConnections: number;
+    staleConnections: number;
+    attentionConnections: number;
+    lastSuccessfulSyncAt?: string | null;
   };
   categoryBudgets?: Array<{
     name: string;
@@ -161,6 +174,10 @@ const formatReviewDay = (value: string) => {
 
 export function DashboardScreen() {
   const navigation = useNavigation<any>();
+  const gridLineColor = colors.cardBorder as string;
+  const budgetLineColor = colors.primary as string;
+  const expectedLineColor = colors.accent as string;
+  const spendLineColor = colors.danger as string;
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [reviewRows, setReviewRows] = useState<TransactionRow[]>([]);
   const [categoryChoices, setCategoryChoices] = useState<string[]>([]);
@@ -429,11 +446,30 @@ export function DashboardScreen() {
         ) : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
+        {overview?.connectionStatus && overview.connectionStatus.state !== 'connected' ? (
+          <View
+            style={[
+              styles.syncBanner,
+              overview.connectionStatus.state === 'disconnected'
+                ? styles.syncBannerDanger
+                : styles.syncBannerWarning,
+            ]}
+          >
+            <Text style={styles.syncBannerTitle}>{overview.connectionStatus.title}</Text>
+            <Text style={styles.syncBannerBody}>{overview.connectionStatus.description}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
             <View>
               <Text style={styles.sectionTitle}>Monthly spend</Text>
               <Text style={styles.sectionSubtitle}>Expected income vs spend and budget pace</Text>
+              {overview?.syncSummary?.lastSuccessfulSyncAt ? (
+                <Text style={styles.sectionSyncText}>
+                  {formatRelativeSyncTime(overview.syncSummary.lastSuccessfulSyncAt)}
+                </Text>
+              ) : null}
             </View>
             <Pressable onPress={() => navigation.navigate('Transactions')}>
               <Text style={styles.linkText}>Transactions</Text>
@@ -467,7 +503,7 @@ export function DashboardScreen() {
                         y1={y}
                         x2={chartWidth}
                         y2={y}
-                        stroke="rgba(255,255,255,0.08)"
+                        stroke={gridLineColor}
                         strokeWidth={1}
                       />
                     );
@@ -477,7 +513,7 @@ export function DashboardScreen() {
                     <Polyline
                       points={budgetPoints}
                       fill="none"
-                      stroke="rgba(99, 102, 241, 0.95)"
+                      stroke={budgetLineColor}
                       strokeWidth={2}
                       strokeDasharray="4,5"
                     />
@@ -487,7 +523,7 @@ export function DashboardScreen() {
                     <Polyline
                       points={expectedIncomePoints}
                       fill="none"
-                      stroke="rgba(56, 189, 248, 0.95)"
+                      stroke={expectedLineColor}
                       strokeWidth={2}
                       strokeDasharray="8,6"
                     />
@@ -505,7 +541,7 @@ export function DashboardScreen() {
                     <Polyline
                       points={spendPoints}
                       fill="none"
-                      stroke="#fb7185"
+                      stroke={spendLineColor}
                       strokeWidth={3}
                     />
                   ) : null}
@@ -798,7 +834,7 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     borderRadius: 18,
-    backgroundColor: 'rgba(18, 24, 46, 0.7)',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
@@ -810,13 +846,38 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 12,
   },
+  syncBanner: {
+    borderRadius: 14,
+    padding: 12,
+    gap: 4,
+  },
+  syncBannerWarning: {
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+  },
+  syncBannerDanger: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+  },
+  syncBannerTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  syncBannerBody: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
   sectionCard: {
-    backgroundColor: 'rgba(17, 22, 43, 0.72)',
-    borderRadius: 22,
+    gap: 10,
     padding: 16,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    gap: 10,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -833,6 +894,11 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 2,
+  },
+  sectionSyncText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 6,
   },
   linkText: {
     color: colors.primary,
@@ -851,12 +917,7 @@ const styles = StyleSheet.create({
   },
   chartFrame: {
     marginTop: 6,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(5, 10, 24, 0.6)',
-    paddingHorizontal: 4,
-    paddingVertical: 6,
+    marginHorizontal: -2,
   },
   chartBody: {
     flexDirection: 'row',
@@ -911,11 +972,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   reviewDayCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(9, 14, 30, 0.56)',
-    padding: 12,
     gap: 10,
   },
   reviewDay: {
@@ -949,11 +1005,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(110, 120, 255, 0.18)',
+    backgroundColor: colors.backgroundAlt,
     maxWidth: '92%',
   },
   categoryChipText: {
-    color: '#d3d8ff',
+    color: colors.primary,
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -968,7 +1024,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: colors.surface,
   },
   reviewButtonLabel: {
     color: colors.primary,
@@ -980,9 +1036,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 10,
     alignItems: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.18)',
+    backgroundColor: 'rgba(56, 189, 248, 0.16)',
     borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.5)',
+    borderColor: 'rgba(56, 189, 248, 0.4)',
   },
   groupReviewLabel: {
     color: colors.primary,
@@ -1016,7 +1072,7 @@ const styles = StyleSheet.create({
   budgetTrack: {
     height: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: colors.progressTrack,
     overflow: 'hidden',
   },
   budgetFill: {
@@ -1071,7 +1127,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: colors.text,
-    backgroundColor: 'rgba(9, 13, 27, 0.7)',
+    backgroundColor: colors.surface,
     fontSize: 28,
     fontWeight: '700',
   },
@@ -1093,7 +1149,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: colors.text,
-    backgroundColor: 'rgba(9, 13, 27, 0.7)',
+    backgroundColor: colors.surface,
   },
   filterRow: {
     flexDirection: 'row',
@@ -1127,7 +1183,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: colors.surface,
   },
   secondaryLabel: {
     color: colors.text,

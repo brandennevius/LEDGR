@@ -4,8 +4,8 @@ const dynamic = (light: string, dark: string) =>
   Platform.OS === 'ios' ? DynamicColorIOS({ light, dark }) : dark;
 
 export const colors = {
-  background: dynamic('#F8FBFF', '#0B0F1E'),
-  backgroundAlt: dynamic('#EDF3FF', '#11162B'),
+  background: dynamic('#FFFFFF', '#0B0F1E'),
+  backgroundAlt: dynamic('#F2F5FF', '#11162B'),
   surface: dynamic('#FFFFFF', '#151B34'),
   card: dynamic('rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.08)'),
   cardBorder: dynamic('rgba(13, 26, 53, 0.12)', 'rgba(255, 255, 255, 0.06)'),
@@ -29,6 +29,6 @@ export const colors = {
 
 export const gradients = {
   appDark: ['#0B0F1E', '#101734', '#0B0F1E'] as const,
-  appLight: ['#7A63F3', '#B9ADFF', '#FFFFFF'] as const,
+  appLight: ['#6F59E8', '#B3A9FF', '#FFFFFF'] as const,
   header: [dynamic('rgba(14, 165, 233, 0.2)', 'rgba(56, 189, 248, 0.3)'), dynamic('rgba(217, 119, 6, 0.18)', 'rgba(245, 158, 11, 0.2)')] as const,
 };

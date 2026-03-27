@@ -9,13 +9,30 @@ export async function GET(request: Request) {
   const days = Number(searchParams.get("days") ?? "30");
   const category = searchParams.get("category");
   const needsReview = searchParams.get("needsReview") === "true";
+  const accountId = searchParams.get("accountId");
+  const month = searchParams.get("month");
+  const year = searchParams.get("year");
 
   const client = await getAuthedUser();
   if (!client) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const since = new Date();
-  since.setDate(since.getDate() - Math.max(days, 1));
+  let dateFilter: { gte: Date; lt?: Date } | undefined;
+  if (month && /^\d{4}-\d{2}$/.test(month)) {
+    const [yearValue, monthValue] = month.split("-").map(Number);
+    const start = new Date(yearValue, monthValue - 1, 1);
+    const end = new Date(yearValue, monthValue, 1);
+    dateFilter = { gte: start, lt: end };
+  } else if (year && /^\d{4}$/.test(year)) {
+    const yearValue = Number(year);
+    const start = new Date(yearValue, 0, 1);
+    const end = new Date(yearValue + 1, 0, 1);
+    dateFilter = { gte: start, lt: end };
+  } else {
+    const since = new Date();
+    since.setDate(since.getDate() - Math.max(days, 1));
+    dateFilter = { gte: since };
+  }
 
   const categoryFilter =
     category === "Uncategorized"
@@ -24,31 +41,44 @@ export async function GET(request: Request) {
       ? { category }
       : {};
 
-  const transactions = await prisma.transaction.findMany({
-    where: {
-      userId: client.id,
-      date: { gte: since },
-      ...categoryFilter,
-      ...(needsReview
-        ? {
-            OR: [
-              { categoryNeedsReview: true },
-              {
-                transactionType: "REGULAR",
-                categorySource: "PLAID",
-              },
-            ],
-          }
-        : {}),
-    },
-    orderBy: { date: "desc" },
-    take: 200,
-    include: { splits: true },
-  });
-  const settings = await prisma.category.findMany({
-    where: { userId: client.id },
-    select: { name: true, color: true },
-  });
+  const [transactions, settings, accounts] = await Promise.all([
+    prisma.transaction.findMany({
+      where: {
+        userId: client.id,
+        ...(dateFilter ? { date: dateFilter } : {}),
+        ...(accountId ? { accountId } : {}),
+        ...categoryFilter,
+        ...(needsReview
+          ? {
+              OR: [
+                { categoryNeedsReview: true },
+                {
+                  transactionType: "REGULAR",
+                  categorySource: "PLAID",
+                },
+              ],
+            }
+          : {}),
+      },
+      orderBy: { date: "desc" },
+      take: 300,
+      include: { splits: true },
+    }),
+    prisma.category.findMany({
+      where: { userId: client.id },
+      select: { name: true, color: true },
+    }),
+    prisma.account.findMany({
+      where: { userId: client.id },
+      select: {
+        id: true,
+        name: true,
+        institutionName: true,
+        mask: true,
+      },
+      orderBy: [{ institutionName: "asc" }, { name: "asc" }],
+    }),
+  ]);
 
   const settingsMap = new Map(
     settings.map((setting) => [setting.name.toLowerCase(), setting.color])
@@ -73,6 +103,9 @@ export async function GET(request: Request) {
       month: "short",
       day: "2-digit",
     });
+    const rowNeedsReview =
+      tx.categoryNeedsReview ||
+      (tx.transactionType === "REGULAR" && tx.categorySource === "PLAID");
     if (tx.splits.length === 0) {
       return [
         {
@@ -91,10 +124,12 @@ export async function GET(request: Request) {
             transactionType: tx.transactionType,
           }),
           transactionType: tx.transactionType,
-          needsReview: tx.categoryNeedsReview,
+          needsReview: rowNeedsReview,
           source: tx.categorySource,
           hasSplits: false,
           date,
+          dateIso: tx.date.toISOString(),
+          accountId: tx.accountId,
         },
       ];
     }
@@ -116,12 +151,14 @@ export async function GET(request: Request) {
         merchantName: tx.merchantName,
         transactionType: tx.transactionType,
       }),
-      transactionType: tx.transactionType,
-      needsReview: false,
-      source: "USER",
-      hasSplits: true,
-      date,
-    }));
+          transactionType: tx.transactionType,
+          needsReview: false,
+          source: "USER",
+          hasSplits: true,
+          date,
+          dateIso: tx.date.toISOString(),
+          accountId: tx.accountId,
+        }));
 
     const splitTotal = tx.splits.reduce((acc, split) => acc + split.amount, 0);
     const remaining = Math.max(0, Math.abs(tx.amount) - splitTotal);
@@ -144,10 +181,12 @@ export async function GET(request: Request) {
                 transactionType: tx.transactionType,
               }),
               transactionType: tx.transactionType,
-              needsReview: tx.categoryNeedsReview,
+              needsReview: rowNeedsReview,
               source: tx.categorySource,
               hasSplits: true,
               date,
+              dateIso: tx.date.toISOString(),
+              accountId: tx.accountId,
             },
           ]
         : [];
@@ -155,5 +194,8 @@ export async function GET(request: Request) {
     return [...splitRows, ...remainderRow];
   });
 
-  return NextResponse.json({ transactions: data });
+  return NextResponse.json({
+    transactions: data,
+    accounts,
+  });
 }

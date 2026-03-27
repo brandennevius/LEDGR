@@ -21,10 +21,12 @@ import * as LocalAuthentication from 'expo-local-authentication';
 
 import { LegalDocumentModal } from '../components/LegalDocumentModal';
 import { type LegalDocType } from '../content/legal';
+import ModalSheet from '../components/ModalSheet';
 import { Screen } from '../components/Screen';
 import { useAppOnboarding } from '../context/AppOnboardingContext';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../lib/api';
+import { DEMO_MODE_KEY, setDemoModeEnabled } from '../lib/demoMode';
 import { supabase } from '../lib/supabase';
 import { colors } from '../theme';
 
@@ -101,6 +103,25 @@ function ToggleRow({
   );
 }
 
+function RadioRow({
+  label,
+  value,
+  onPress,
+}: {
+  label: string;
+  value: boolean;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable style={styles.row} onPress={onPress} disabled={!onPress}>
+      <Text style={styles.rowLabel}>{label}</Text>
+      <View style={[styles.radioOuter, value && styles.radioOuterActive]}>
+        {value ? <View style={styles.radioInner} /> : null}
+      </View>
+    </Pressable>
+  );
+}
+
 export function SettingsScreen() {
   const navigation = useNavigation();
   const { user, signOut } = useAuth();
@@ -110,11 +131,16 @@ export function SettingsScreen() {
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system');
+  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('light');
   const [faceIdRequired, setFaceIdRequired] = useState(false);
+  const [demoModeEnabled, setDemoModeState] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [faceIdBusy, setFaceIdBusy] = useState(false);
   const [legalDoc, setLegalDoc] = useState<LegalDocType | null>(null);
+  const [deleteSheetOpen, setDeleteSheetOpen] = useState(false);
+  const [deleteEmail, setDeleteEmail] = useState('');
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const appVersion = useMemo(() => {
     const version = Constants.expoConfig?.version ?? '1.0.0';
@@ -135,16 +161,20 @@ export function SettingsScreen() {
           setOverrideValue('');
         }
 
-        const [storedTheme, storedFaceId] = await Promise.all([
+        const [storedTheme, storedFaceId, storedDemoMode] = await Promise.all([
           AsyncStorage.getItem('theme'),
           AsyncStorage.getItem(FACE_ID_REQUIRED_KEY),
+          AsyncStorage.getItem(DEMO_MODE_KEY),
         ]);
 
         if (storedTheme === 'light' || storedTheme === 'dark' || storedTheme === 'system') {
           setTheme(storedTheme);
+        } else {
+          setTheme('light');
         }
 
         setFaceIdRequired(storedFaceId === 'true');
+        setDemoModeState(storedDemoMode === 'true');
       } catch {
         // ignore load errors
       } finally {
@@ -258,6 +288,12 @@ export function SettingsScreen() {
     }
   };
 
+  const handleDemoModeToggle = async (nextValue: boolean) => {
+    setDemoModeState(nextValue);
+    await setDemoModeEnabled(nextValue);
+    setStatus(nextValue ? 'Demo data enabled.' : 'Demo data disabled.');
+  };
+
   const handleExportTransactions = async () => {
     setExporting(true);
     setStatus(null);
@@ -309,6 +345,50 @@ export function SettingsScreen() {
     await signOut();
   };
 
+  const handleDeleteAccount = async () => {
+    if (deletingAccount) return;
+    setDeletingAccount(true);
+    setStatus(null);
+
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+
+      if (hasHardware && enrolled) {
+        const authResult = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Confirm account deletion',
+          cancelLabel: 'Cancel',
+          disableDeviceFallback: false,
+        });
+
+        if (!authResult.success) {
+          setStatus('Account deletion cancelled.');
+          return;
+        }
+      }
+
+      await apiRequest('/api/account/delete', {
+        method: 'POST',
+        body: {
+          email: deleteEmail.trim(),
+          confirmation: deleteConfirmation.trim(),
+        },
+      });
+      setDeleteSheetOpen(false);
+      setDeleteEmail('');
+      setDeleteConfirmation('');
+      await signOut();
+    } catch (err) {
+      const message =
+        typeof err === 'object' && err && 'error' in err
+          ? String((err as { error?: string }).error)
+          : 'Unable to delete account right now.';
+      setStatus(message);
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
   const handleReplayTour = async () => {
     await restart();
     setStatus('App walkthrough restarted.');
@@ -317,13 +397,6 @@ export function SettingsScreen() {
   return (
     <Screen edgeToEdge>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <SectionHeader title="Notifications" subtitle="Coming soon" />
-        <View style={styles.sectionCard}>
-          <ToggleRow label="Bank fee alerts" value={false} disabled />
-          <ToggleRow label="Large expense alerts" value={false} disabled />
-          <ToggleRow label="Income updates" value={false} disabled />
-        </View>
-
         <SectionHeader title="Account" />
         <View style={styles.sectionCard}>
           <View style={styles.row}>
@@ -344,6 +417,7 @@ export function SettingsScreen() {
             label={exporting ? 'Exporting transactions...' : 'Export your transactions'}
             onPress={exporting ? undefined : handleExportTransactions}
           />
+          <Row label="Delete account and data" onPress={() => setDeleteSheetOpen(true)} danger />
           <Row label="Log out" onPress={handleLogout} danger />
         </View>
 
@@ -388,6 +462,13 @@ export function SettingsScreen() {
             ))}
           </View>
 
+          <Text style={[styles.inputLabel, { marginTop: 14 }]}>Portfolio mode</Text>
+          <RadioRow
+            label="Show demo data"
+            value={demoModeEnabled}
+            onPress={() => handleDemoModeToggle(!demoModeEnabled)}
+          />
+
           {savedValue !== null ? (
             <Text style={styles.savedBadge}>Current override {formatCurrency(savedValue)}</Text>
           ) : null}
@@ -415,6 +496,60 @@ export function SettingsScreen() {
         {status ? <Text style={styles.statusText}>{status}</Text> : null}
       </ScrollView>
       <LegalDocumentModal visible={legalDoc !== null} type={legalDoc} onClose={() => setLegalDoc(null)} />
+      <ModalSheet visible={deleteSheetOpen} onClose={() => setDeleteSheetOpen(false)}>
+        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={styles.deleteSheetContent}>
+            <Text style={styles.deleteTitle}>Delete account and data</Text>
+            <Text style={styles.deleteBody}>
+              This permanently removes your LEDGR profile, linked accounts, transactions,
+              categories, goals, reviews, and chat data from the app database.
+            </Text>
+            <Text style={styles.deleteBody}>
+              To confirm, enter your email and type DELETE below.
+            </Text>
+
+            <Text style={styles.inputLabel}>Email</Text>
+            <TextInput
+              value={deleteEmail}
+              onChangeText={setDeleteEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholder={user?.email ?? 'name@example.com'}
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+            />
+
+            <Text style={styles.inputLabel}>Type DELETE</Text>
+            <TextInput
+              value={deleteConfirmation}
+              onChangeText={setDeleteConfirmation}
+              autoCapitalize="characters"
+              placeholder="DELETE"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+            />
+
+            <View style={styles.actionRow}>
+              <Pressable
+                style={styles.deleteButton}
+                onPress={handleDeleteAccount}
+                disabled={deletingAccount}
+              >
+                <Text style={styles.deleteButtonLabel}>
+                  {deletingAccount ? 'Deleting...' : 'Delete permanently'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={styles.secondaryButton}
+                onPress={() => setDeleteSheetOpen(false)}
+                disabled={deletingAccount}
+              >
+                <Text style={styles.secondaryLabel}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </ScrollView>
+      </ModalSheet>
     </Screen>
   );
 }
@@ -514,6 +649,24 @@ const styles = StyleSheet.create({
   themeLabelActive: {
     color: colors.text,
   },
+  radioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: colors.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioOuterActive: {
+    borderColor: colors.primary,
+  },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+  },
   savedBadge: {
     marginTop: 12,
     color: colors.success,
@@ -561,5 +714,29 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 8,
+  },
+  deleteSheetContent: {
+    gap: 6,
+    paddingBottom: 12,
+  },
+  deleteTitle: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  deleteBody: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  deleteButton: {
+    borderRadius: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: colors.danger,
+  },
+  deleteButtonLabel: {
+    color: colors.background,
+    fontWeight: '700',
   },
 });

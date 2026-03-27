@@ -21,9 +21,12 @@ export function Screen({
   children,
 }: ScreenProps) {
   const colorScheme = useColorScheme();
-  const appGradient = colorScheme === 'light' ? gradients.appLight : gradients.appDark;
+  const topGradient = colorScheme === 'light'
+    ? ([colors.chrome as string, colors.background as string] as const)
+    : gradients.appDark;
   return (
-    <LinearGradient colors={appGradient} style={styles.root}>
+    <View style={styles.root}>
+      <LinearGradient colors={topGradient} style={styles.topGradient} />
       <SafeAreaView
         style={[
           styles.safe,
@@ -46,13 +49,21 @@ export function Screen({
           </View>
         )}
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: colors.background,
+  },
+  topGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 240,
   },
   safe: {
     flex: 1,
@@ -84,6 +95,10 @@ const styles = StyleSheet.create({
   },
   contentFlat: {
     flex: 1,
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 16,
   },
   inner: {
     flex: 1,
@@ -92,5 +107,9 @@ const styles = StyleSheet.create({
   },
   edgeContent: {
     flex: 1,
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 16,
   },
 });

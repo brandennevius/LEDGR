@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -18,8 +19,10 @@ import {
 } from 'react-native-plaid-link-sdk';
 
 import { Screen } from '../components/Screen';
+import { getDemoModeEnabled } from '../lib/demoMode';
 import { useAppOnboarding } from '../context/AppOnboardingContext';
 import { apiRequest } from '../lib/api';
+import { formatRelativeSyncTime } from '../lib/syncStatus';
 import { colors } from '../theme';
 
 type Account = {
@@ -35,6 +38,18 @@ type OverviewResponse = {
   clientName: string;
   accounts: Account[];
   plaidItems?: Array<{ id: string }>;
+  connectionStatus?: {
+    state: 'connected' | 'attention' | 'disconnected';
+    title: string;
+    description: string;
+  };
+  syncSummary?: {
+    totalConnections: number;
+    activeConnections: number;
+    staleConnections: number;
+    attentionConnections: number;
+    lastSuccessfulSyncAt?: string | null;
+  };
 };
 
 type LinkTokenResponse = { link_token: string };
@@ -52,11 +67,16 @@ export function AccountsScreen() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [connectionCount, setConnectionCount] = useState(0);
   const [clientName, setClientName] = useState('');
+  const [connectionStatus, setConnectionStatus] = useState<
+    OverviewResponse['connectionStatus'] | null
+  >(null);
+  const [syncSummary, setSyncSummary] = useState<OverviewResponse['syncSummary'] | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [linking, setLinking] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [demoModeEnabled, setDemoModeEnabled] = useState(false);
 
   const getErrorMessage = (err: unknown, fallback: string) => {
     if (typeof err === 'object' && err !== null) {
@@ -79,6 +99,8 @@ export function AccountsScreen() {
       setAccounts(data.accounts ?? []);
       setConnectionCount(data.plaidItems?.length ?? 0);
       setClientName(data.clientName ?? '');
+      setConnectionStatus(data.connectionStatus ?? null);
+      setSyncSummary(data.syncSummary ?? null);
       setError(null);
     } catch (err) {
       const message =
@@ -93,6 +115,7 @@ export function AccountsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      void getDemoModeEnabled().then(setDemoModeEnabled);
       void load();
     }, [load])
   );
@@ -141,7 +164,26 @@ export function AccountsScreen() {
     }
   };
 
+  const confirmRemoveAccount = (accountId: string, accountName: string) => {
+    if (demoModeEnabled) return;
+    Alert.alert(
+      'Remove account from LEDGR?',
+      `${accountName} and its synced transactions will be removed from LEDGR. Use Manage connections if you need to repair or reconnect the bank instead.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            void removeAccount(accountId);
+          },
+        },
+      ]
+    );
+  };
+
   const startLink = async () => {
+    if (demoModeEnabled) return;
     setLinking(true);
     setError(null);
     try {
@@ -184,17 +226,54 @@ export function AccountsScreen() {
               {clientName || 'Client'} · {accounts.length} connected accounts · {connectionCount}{' '}
               institutions
             </Text>
+            {syncSummary?.lastSuccessfulSyncAt ? (
+              <Text style={styles.syncSubtitle}>
+                {formatRelativeSyncTime(syncSummary.lastSuccessfulSyncAt)}
+              </Text>
+            ) : null}
           </View>
           <View ref={connectButtonRef} onLayout={measureConnectButton}>
-            <Pressable style={styles.primaryButton} onPress={startLink} disabled={linking}>
-              <Text style={styles.primaryLabel}>{linking ? 'Opening...' : 'Add account'}</Text>
+            <Pressable
+              style={styles.primaryButton}
+              onPress={startLink}
+              disabled={linking || demoModeEnabled}
+            >
+              <Text style={styles.primaryLabel}>
+                {demoModeEnabled ? 'Demo mode' : linking ? 'Opening...' : 'Add account'}
+              </Text>
             </Pressable>
           </View>
         </View>
 
+        {demoModeEnabled ? (
+          <Text style={styles.demoNote}>
+            Demo mode is on. These accounts are sample data for walkthroughs and screenshots.
+          </Text>
+        ) : null}
+
+        {connectionStatus && connectionStatus.state !== 'connected' ? (
+          <View
+            style={[
+              styles.syncBanner,
+              connectionStatus.state === 'disconnected'
+                ? styles.syncBannerDanger
+                : styles.syncBannerWarning,
+            ]}
+          >
+            <Text style={styles.syncBannerTitle}>{connectionStatus.title}</Text>
+            <Text style={styles.syncBannerBody}>{connectionStatus.description}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.actionRow}>
-          <Pressable style={styles.secondaryButton} onPress={syncNow} disabled={syncing}>
-            <Text style={styles.secondaryLabel}>{syncing ? 'Syncing...' : 'Sync now'}</Text>
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={syncNow}
+            disabled={syncing || demoModeEnabled}
+          >
+            <Text style={styles.secondaryLabel}>
+              {demoModeEnabled ? 'Demo data loaded' : syncing ? 'Syncing...' : 'Sync now'}
+            </Text>
           </Pressable>
         </View>
 
@@ -226,11 +305,15 @@ export function AccountsScreen() {
                   <Text style={styles.accountBalance}>{formatCurrency(account.balance)}</Text>
                   <Pressable
                     style={styles.removeButton}
-                    onPress={() => removeAccount(account.id)}
-                    disabled={removingId === account.id}
+                    onPress={() => confirmRemoveAccount(account.id, account.name)}
+                    disabled={removingId === account.id || demoModeEnabled}
                   >
                     <Text style={styles.removeLabel}>
-                      {removingId === account.id ? 'Removing...' : 'Remove'}
+                      {demoModeEnabled
+                        ? 'Demo'
+                        : removingId === account.id
+                        ? 'Removing...'
+                        : 'Remove'}
                     </Text>
                   </Pressable>
                 </View>
@@ -263,6 +346,36 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 4,
+  },
+  syncSubtitle: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 6,
+  },
+  syncBanner: {
+    borderRadius: 14,
+    padding: 12,
+    gap: 4,
+  },
+  syncBannerWarning: {
+    backgroundColor: 'rgba(245, 158, 11, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+  },
+  syncBannerDanger: {
+    backgroundColor: 'rgba(239, 68, 68, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+  },
+  syncBannerTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  syncBannerBody: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
   },
   actionRow: {
     flexDirection: 'row',
@@ -306,6 +419,11 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.danger,
     fontSize: 12,
+  },
+  demoNote: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
   },
   sectionCard: {
     borderTopWidth: StyleSheet.hairlineWidth,

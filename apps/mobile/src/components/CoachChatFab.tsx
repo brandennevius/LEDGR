@@ -13,7 +13,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuth } from '../context/AuthContext';
 import { apiRequest, apiStreamRequest } from '../lib/api';
+import {
+  getSecureJsonString,
+  removeSecureJsonString,
+  setSecureJsonString,
+} from '../lib/secureStorage';
 import { colors } from '../theme';
 
 type ChatMessage = {
@@ -29,7 +35,16 @@ const INITIAL_CHAT: ChatMessage[] = [
   },
 ];
 
-let persistedMessages: ChatMessage[] = [...INITIAL_CHAT];
+const MAX_PERSISTED_MESSAGES = 24;
+const buildThreadStorageKey = (userId: string) => `penny:thread:${userId}`;
+
+function normalizeMessages(messages: ChatMessage[]) {
+  const filtered = messages.filter(
+    (message) => message.content.trim().length > 0 || message.role === 'user'
+  );
+  const trimmed = filtered.slice(-MAX_PERSISTED_MESSAGES);
+  return trimmed.length > 0 ? trimmed : [...INITIAL_CHAT];
+}
 
 type TextSegment = {
   text: string;
@@ -66,16 +81,57 @@ type CoachChatFabProps = {
 };
 
 export function CoachChatFab({ variant = 'fab' }: CoachChatFabProps) {
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const messagesRef = useRef<ScrollView | null>(null);
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>(persistedMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_CHAT);
+  const [messagesHydrated, setMessagesHydrated] = useState(false);
+  const storageKey = useMemo(
+    () => buildThreadStorageKey(user?.id ?? 'guest'),
+    [user?.id]
+  );
 
   useEffect(() => {
-    persistedMessages = messages;
-  }, [messages]);
+    let active = true;
+
+    setMessages(INITIAL_CHAT);
+    setMessagesHydrated(false);
+
+    getSecureJsonString(storageKey)
+      .then((raw) => {
+        if (!active || !raw) return;
+        try {
+          const parsed = JSON.parse(raw) as ChatMessage[];
+          if (!Array.isArray(parsed)) return;
+          const valid = parsed.filter(
+            (message): message is ChatMessage =>
+              (message?.role === 'user' || message?.role === 'assistant') &&
+              typeof message?.content === 'string'
+          );
+          if (valid.length > 0) {
+            setMessages(normalizeMessages(valid));
+          }
+        } catch {
+          // Ignore invalid local thread state.
+        }
+      })
+      .finally(() => {
+        if (active) setMessagesHydrated(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!messagesHydrated) return;
+    const persistableMessages = normalizeMessages(messages);
+    void setSecureJsonString(storageKey, JSON.stringify(persistableMessages));
+  }, [messages, messagesHydrated, storageKey]);
 
   const bottomOffset = useMemo(() => Math.max(24, insets.bottom + 12), [insets.bottom]);
 
@@ -83,7 +139,10 @@ export function CoachChatFab({ variant = 'fab' }: CoachChatFabProps) {
     const trimmed = input.trim();
     if (!trimmed || loading) return;
 
-    const next: ChatMessage[] = [...messages, { role: 'user', content: trimmed }];
+    const next: ChatMessage[] = normalizeMessages([
+      ...messages,
+      { role: 'user', content: trimmed },
+    ]);
     setMessages(next);
     setInput('');
     setLoading(true);
@@ -164,8 +223,8 @@ export function CoachChatFab({ variant = 'fab' }: CoachChatFabProps) {
   };
 
   const clearThread = () => {
-    persistedMessages = [...INITIAL_CHAT];
     setMessages([...INITIAL_CHAT]);
+    void removeSecureJsonString(storageKey);
   };
 
   const trigger =

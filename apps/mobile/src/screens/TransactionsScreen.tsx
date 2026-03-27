@@ -21,14 +21,17 @@ import { colors } from '../theme';
 type TransactionRow = {
   id: string;
   baseId?: string;
+  accountId?: string;
   name: string;
   category: string;
   amount: number;
   isInflow?: boolean;
   isIncome: boolean;
+  transactionType?: 'INCOME' | 'INTERNAL_TRANSFER' | 'REGULAR';
   needsReview?: boolean;
   hasSplits?: boolean;
   date: string;
+  dateIso?: string;
 };
 
 type TransactionDetail = {
@@ -53,6 +56,14 @@ type TransactionDetail = {
 
 type TransactionsResponse = {
   transactions: TransactionRow[];
+  accounts?: AccountOption[];
+};
+
+type AccountOption = {
+  id: string;
+  name: string;
+  institutionName?: string | null;
+  mask?: string | null;
 };
 
 type CategoriesResponse = {
@@ -70,6 +81,7 @@ const dayOptions = [
   { label: '14d', value: 14 },
   { label: '30d', value: 30 },
   { label: '90d', value: 90 },
+  { label: '180d', value: 180 },
 ];
 
 const formatCurrency = (value: number) =>
@@ -85,18 +97,43 @@ const sanitizeAmountInput = (value: string) => {
   return `${whole}.${decimals.join('').slice(0, 2)}`;
 };
 
+const buildMonthOptions = (count = 12) => {
+  const options: Array<{ value: string; label: string }> = [];
+  const cursor = new Date();
+  cursor.setDate(1);
+  for (let index = 0; index < count; index += 1) {
+    const value = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
+    options.push({
+      value,
+      label: cursor.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+    });
+    cursor.setMonth(cursor.getMonth() - 1);
+  }
+  return options;
+};
+
+const buildYearOptions = (count = 4) => {
+  const currentYear = new Date().getFullYear();
+  return Array.from({ length: count }, (_, index) => String(currentYear - index));
+};
+
 export function TransactionsScreen() {
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
+  const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(30);
+  const [periodMode, setPeriodMode] = useState<'ROLLING' | 'MONTH' | 'YEAR'>('ROLLING');
+  const [monthFilter, setMonthFilter] = useState(buildMonthOptions(1)[0]?.value ?? '');
+  const [yearFilter, setYearFilter] = useState(String(new Date().getFullYear()));
   const [categoryFilter, setCategoryFilter] = useState('All');
-  const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
+  const [accountFilter, setAccountFilter] = useState('ALL');
+  const [reviewFilter, setReviewFilter] = useState<'ALL' | 'NEEDS_REVIEW' | 'REVIEWED'>('ALL');
   const [categoryList, setCategoryList] = useState<string[]>([]);
   const [query, setQuery] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [typeFilter, setTypeFilter] = useState<'ALL' | 'SPEND' | 'INCOME'>('ALL');
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'SPEND' | 'INCOME' | 'INTERNAL_TRANSFER'>('ALL');
   const [sortBy, setSortBy] = useState<'DATE_DESC' | 'AMOUNT_DESC' | 'AMOUNT_ASC'>('DATE_DESC');
 
   const [selected, setSelected] = useState<TransactionDetail | null>(null);
@@ -115,16 +152,25 @@ export function TransactionsScreen() {
   const [amountInput, setAmountInput] = useState('');
   const [editingAmount, setEditingAmount] = useState(false);
   const [activeSplitIndex, setActiveSplitIndex] = useState<number | null>(null);
+  const monthOptions = useMemo(() => buildMonthOptions(), []);
+  const yearOptions = useMemo(() => buildYearOptions(), []);
 
   const fetchRows = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      params.set('days', String(days));
+      if (periodMode === 'MONTH' && monthFilter) {
+        params.set('month', monthFilter);
+      } else if (periodMode === 'YEAR' && yearFilter) {
+        params.set('year', yearFilter);
+      } else {
+        params.set('days', String(days));
+      }
       if (categoryFilter !== 'All') params.set('category', categoryFilter);
-      if (needsReviewOnly) params.set('needsReview', 'true');
+      if (accountFilter !== 'ALL') params.set('accountId', accountFilter);
       const data = await apiRequest<TransactionsResponse>(`/api/transactions?${params.toString()}`);
       setTransactions(data.transactions ?? []);
+      setAccounts(data.accounts ?? []);
       setError(null);
     } catch (err) {
       const message =
@@ -136,7 +182,7 @@ export function TransactionsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [categoryFilter, days, needsReviewOnly]);
+  }, [accountFilter, categoryFilter, days, monthFilter, periodMode, yearFilter]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -165,38 +211,66 @@ export function TransactionsScreen() {
       );
     }
 
+    if (reviewFilter === 'NEEDS_REVIEW') {
+      rows = rows.filter((row) => row.needsReview);
+    }
+    if (reviewFilter === 'REVIEWED') {
+      rows = rows.filter((row) => !row.needsReview);
+    }
+
     if (typeFilter === 'SPEND') {
-      rows = rows.filter((row) => !row.isIncome);
+      rows = rows.filter(
+        (row) => row.transactionType !== 'INTERNAL_TRANSFER' && !row.isIncome
+      );
     }
     if (typeFilter === 'INCOME') {
       rows = rows.filter((row) => row.isIncome);
+    }
+    if (typeFilter === 'INTERNAL_TRANSFER') {
+      rows = rows.filter((row) => row.transactionType === 'INTERNAL_TRANSFER');
     }
 
     rows.sort((a, b) => {
       if (sortBy === 'AMOUNT_DESC') return b.amount - a.amount;
       if (sortBy === 'AMOUNT_ASC') return a.amount - b.amount;
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
+      return new Date(b.dateIso ?? b.date).getTime() - new Date(a.dateIso ?? a.date).getTime();
     });
 
     return rows;
-  }, [query, sortBy, transactions, typeFilter]);
+  }, [query, reviewFilter, sortBy, transactions, typeFilter]);
 
   const reviewCount = useMemo(() => transactions.filter((tx) => tx.needsReview).length, [transactions]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (days !== 30) count += 1;
+    if (periodMode !== 'ROLLING' || days !== 30) count += 1;
+    if (accountFilter !== 'ALL') count += 1;
     if (categoryFilter !== 'All') count += 1;
-    if (needsReviewOnly) count += 1;
+    if (reviewFilter !== 'ALL') count += 1;
     if (typeFilter !== 'ALL') count += 1;
     if (sortBy !== 'DATE_DESC') count += 1;
     return count;
-  }, [categoryFilter, days, needsReviewOnly, sortBy, typeFilter]);
+  }, [accountFilter, categoryFilter, days, periodMode, reviewFilter, sortBy, typeFilter]);
 
   const existingCategoryNames = useMemo(
     () => categoryList.filter((name) => name !== 'All'),
     [categoryList]
   );
+  const filteredCategoryNames = useMemo(() => {
+    const needle = categoryInput.trim().toLowerCase();
+    if (!needle) return existingCategoryNames;
+    return existingCategoryNames.filter((name) => name.toLowerCase().includes(needle));
+  }, [categoryInput, existingCategoryNames]);
+  const hasExactCategoryMatch = useMemo(
+    () => existingCategoryNames.some((name) => name.toLowerCase() === categoryInput.trim().toLowerCase()),
+    [categoryInput, existingCategoryNames]
+  );
+
+  const getFilteredSplitCategories = (value: string) => {
+    const needle = value.trim().toLowerCase();
+    if (!needle) return existingCategoryNames;
+    return existingCategoryNames.filter((name) => name.toLowerCase().includes(needle));
+  };
 
   const ensureCategoryExists = async (name: string) => {
     const nextCategory = name.trim();
@@ -376,8 +450,12 @@ export function TransactionsScreen() {
 
         {filteredRows.length === 0 && !loading ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No transactions yet</Text>
-            <Text style={styles.emptyBody}>Connect a bank account to start syncing.</Text>
+            <Text style={styles.emptyTitle}>No transactions found</Text>
+            <Text style={styles.emptyBody}>
+              {transactions.length === 0
+                ? 'Connect a bank account to start syncing.'
+                : 'Adjust your search or filters to widen the results.'}
+            </Text>
           </View>
         ) : null}
 
@@ -412,17 +490,75 @@ export function TransactionsScreen() {
         >
           <Text style={styles.sheetTitle}>Filters</Text>
 
-          <Text style={styles.sheetSection}>Filter by month</Text>
+          <Text style={styles.sheetSection}>Date range</Text>
           <View style={styles.filterRow}>
-            {dayOptions.map((option) => (
-              <Chip
-                key={option.value}
-                label={option.label}
-                active={days === option.value}
-                onPress={() => setDays(option.value)}
-              />
-            ))}
+            <Chip label="Rolling" active={periodMode === 'ROLLING'} onPress={() => setPeriodMode('ROLLING')} />
+            <Chip label="Month" active={periodMode === 'MONTH'} onPress={() => setPeriodMode('MONTH')} />
+            <Chip label="Year" active={periodMode === 'YEAR'} onPress={() => setPeriodMode('YEAR')} />
           </View>
+          {periodMode === 'ROLLING' ? (
+            <View style={styles.filterRow}>
+              {dayOptions.map((option) => (
+                <Chip
+                  key={option.value}
+                  label={option.label}
+                  active={days === option.value}
+                  onPress={() => setDays(option.value)}
+                />
+              ))}
+            </View>
+          ) : null}
+          {periodMode === 'MONTH' ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryScroll}
+              keyboardShouldPersistTaps="handled"
+            >
+              {monthOptions.map((option) => (
+                <View key={option.value}>
+                  <Chip
+                    label={option.label}
+                    active={monthFilter === option.value}
+                    onPress={() => setMonthFilter(option.value)}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          ) : null}
+          {periodMode === 'YEAR' ? (
+            <View style={styles.filterRow}>
+              {yearOptions.map((option) => (
+                <Chip
+                  key={option}
+                  label={option}
+                  active={yearFilter === option}
+                  onPress={() => setYearFilter(option)}
+                />
+              ))}
+            </View>
+          ) : null}
+
+          <Text style={styles.sheetSection}>Filter by account</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryScroll}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View>
+              <Chip label="All accounts" active={accountFilter === 'ALL'} onPress={() => setAccountFilter('ALL')} />
+            </View>
+            {accounts.map((account) => (
+              <View key={account.id}>
+                <Chip
+                  label={`${account.institutionName ?? account.name}${account.mask ? ` •${account.mask}` : ''}`}
+                  active={accountFilter === account.id}
+                  onPress={() => setAccountFilter(account.id)}
+                />
+              </View>
+            ))}
+          </ScrollView>
 
           <Text style={styles.sheetSection}>Filter by category</Text>
           <ScrollView
@@ -438,12 +574,18 @@ export function TransactionsScreen() {
             ))}
           </ScrollView>
 
-          <Text style={styles.sheetSection}>Filter by review status ({reviewCount})</Text>
+          <Text style={styles.sheetSection}>Review status ({reviewCount})</Text>
           <View style={styles.filterRow}>
+            <Chip label="All" active={reviewFilter === 'ALL'} onPress={() => setReviewFilter('ALL')} />
             <Chip
-              label={needsReviewOnly ? 'Needs review only' : 'All reviews'}
-              active={needsReviewOnly}
-              onPress={() => setNeedsReviewOnly((prev) => !prev)}
+              label="Needs review"
+              active={reviewFilter === 'NEEDS_REVIEW'}
+              onPress={() => setReviewFilter('NEEDS_REVIEW')}
+            />
+            <Chip
+              label="Reviewed"
+              active={reviewFilter === 'REVIEWED'}
+              onPress={() => setReviewFilter('REVIEWED')}
             />
           </View>
 
@@ -452,13 +594,11 @@ export function TransactionsScreen() {
             <Chip label="All" active={typeFilter === 'ALL'} onPress={() => setTypeFilter('ALL')} />
             <Chip label="Spend" active={typeFilter === 'SPEND'} onPress={() => setTypeFilter('SPEND')} />
             <Chip label="Income" active={typeFilter === 'INCOME'} onPress={() => setTypeFilter('INCOME')} />
-          </View>
-
-          <Text style={styles.sheetSection}>Other filters</Text>
-          <View style={styles.placeholderList}>
-            <Text style={styles.placeholderItem}>Filter by account (soon)</Text>
-            <Text style={styles.placeholderItem}>Filter by recurring (soon)</Text>
-            <Text style={styles.placeholderItem}>Filter by tag (soon)</Text>
+            <Chip
+              label="Internal transfers"
+              active={typeFilter === 'INTERNAL_TRANSFER'}
+              onPress={() => setTypeFilter('INTERNAL_TRANSFER')}
+            />
           </View>
 
           <Text style={styles.sheetSection}>Sorting</Text>
@@ -479,9 +619,13 @@ export function TransactionsScreen() {
           <View style={styles.sheetActions}>
             <Pressable
               onPress={() => {
+                setPeriodMode('ROLLING');
                 setDays(30);
+                setMonthFilter(monthOptions[0]?.value ?? '');
+                setYearFilter(String(new Date().getFullYear()));
+                setAccountFilter('ALL');
                 setCategoryFilter('All');
-                setNeedsReviewOnly(false);
+                setReviewFilter('ALL');
                 setTypeFilter('ALL');
                 setSortBy('DATE_DESC');
                 setQuery('');
@@ -535,29 +679,48 @@ export function TransactionsScreen() {
                 <TextInput
                   value={categoryInput}
                   onChangeText={setCategoryInput}
-                  placeholder="Category"
+                  placeholder="Type to filter or create a category"
                   placeholderTextColor={colors.textMuted}
                   style={styles.input}
                   blurOnSubmit={false}
                 />
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.categoryScroll}
-                  keyboardShouldPersistTaps="handled"
-                >
-                  {categoryList
-                    .filter((name) => name !== 'All')
-                    .map((name) => (
-                      <View key={name}>
-                        <Chip
-                          label={name}
-                          active={categoryInput.trim().toLowerCase() === name.toLowerCase()}
+                <Text style={styles.categoryHelperText}>
+                  Start typing to narrow the list, then tap a category below.
+                </Text>
+                <View style={styles.categoryPicker}>
+                  <ScrollView nestedScrollEnabled style={styles.categoryPickerScroll} keyboardShouldPersistTaps="handled">
+                    {!hasExactCategoryMatch && categoryInput.trim() ? (
+                      <Pressable onPress={() => setCategoryInput(categoryInput.trim())} style={styles.categoryOption}>
+                        <View style={styles.categoryOptionCopy}>
+                          <Text style={styles.categoryOptionLabel}>Create "{categoryInput.trim()}"</Text>
+                          <Text style={styles.categoryOptionHint}>Save to add this new category</Text>
+                        </View>
+                        <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+                      </Pressable>
+                    ) : null}
+                    {filteredCategoryNames.map((name) => {
+                      const isActive = categoryInput.trim().toLowerCase() === name.toLowerCase();
+                      return (
+                        <Pressable
+                          key={name}
                           onPress={() => setCategoryInput(name)}
-                        />
-                      </View>
-                    ))}
-                </ScrollView>
+                          style={[styles.categoryOption, isActive && styles.categoryOptionActive]}
+                        >
+                          <Text style={[styles.categoryOptionLabel, isActive && styles.categoryOptionLabelActive]}>
+                            {name}
+                          </Text>
+                          {isActive ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
+                        </Pressable>
+                      );
+                    })}
+                    {filteredCategoryNames.length === 0 && hasExactCategoryMatch === false && !categoryInput.trim() ? (
+                      <Text style={styles.emptyText}>No categories yet.</Text>
+                    ) : null}
+                    {filteredCategoryNames.length === 0 && categoryInput.trim() ? (
+                      <Text style={styles.emptyText}>No matches. Save to create this category.</Text>
+                    ) : null}
+                  </ScrollView>
+                </View>
               </>
             )}
 
@@ -651,7 +814,7 @@ export function TransactionsScreen() {
                     );
                   }}
                   onFocus={() => setActiveSplitIndex(index)}
-                  placeholder="Category"
+                  placeholder="Type to filter or create"
                   placeholderTextColor={colors.textMuted}
                   style={[styles.input, styles.splitInput]}
                   blurOnSubmit={false}
@@ -670,26 +833,52 @@ export function TransactionsScreen() {
                 />
                 </View>
                 {activeSplitIndex === index ? (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.categoryScroll}
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    {existingCategoryNames.map((name) => (
-                      <View key={`split-choice-${index}-${name}`}>
-                        <Chip
-                          label={name}
-                          active={split.category.trim().toLowerCase() === name.toLowerCase()}
+                  <View style={styles.categoryPicker}>
+                    <ScrollView nestedScrollEnabled style={styles.categoryPickerScroll} keyboardShouldPersistTaps="handled">
+                      {!existingCategoryNames.some(
+                        (name) => name.toLowerCase() === split.category.trim().toLowerCase()
+                      ) && split.category.trim() ? (
+                        <Pressable
                           onPress={() =>
                             setSplits((prev) =>
-                              prev.map((item, idx) => (idx === index ? { ...item, category: name } : item))
+                              prev.map((item, idx) =>
+                                idx === index ? { ...item, category: split.category.trim() } : item
+                              )
                             )
                           }
-                        />
-                      </View>
-                    ))}
-                  </ScrollView>
+                          style={styles.categoryOption}
+                        >
+                          <View style={styles.categoryOptionCopy}>
+                            <Text style={styles.categoryOptionLabel}>Create "{split.category.trim()}"</Text>
+                            <Text style={styles.categoryOptionHint}>Save splits to add it</Text>
+                          </View>
+                          <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+                        </Pressable>
+                      ) : null}
+                      {getFilteredSplitCategories(split.category).map((name) => {
+                        const isActive = split.category.trim().toLowerCase() === name.toLowerCase();
+                        return (
+                          <Pressable
+                            key={`split-choice-${index}-${name}`}
+                            onPress={() =>
+                              setSplits((prev) =>
+                                prev.map((item, idx) => (idx === index ? { ...item, category: name } : item))
+                              )
+                            }
+                            style={[styles.categoryOption, isActive && styles.categoryOptionActive]}
+                          >
+                            <Text style={[styles.categoryOptionLabel, isActive && styles.categoryOptionLabelActive]}>
+                              {name}
+                            </Text>
+                            {isActive ? <Ionicons name="checkmark" size={18} color={colors.primary} /> : null}
+                          </Pressable>
+                        );
+                      })}
+                      {getFilteredSplitCategories(split.category).length === 0 && split.category.trim() ? (
+                        <Text style={styles.emptyText}>No matches. Save splits to create this category.</Text>
+                      ) : null}
+                    </ScrollView>
+                  </View>
                 ) : null}
               </View>
             ))}
@@ -783,6 +972,52 @@ const styles = StyleSheet.create({
   categoryScroll: {
     gap: 8,
     paddingRight: 6,
+  },
+  categoryHelperText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: -2,
+  },
+  categoryPicker: {
+    maxHeight: 220,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 14,
+    backgroundColor: 'rgba(9, 13, 27, 0.35)',
+    overflow: 'hidden',
+  },
+  categoryPickerScroll: {
+    maxHeight: 220,
+  },
+  categoryOption: {
+    minHeight: 48,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.cardBorder,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  categoryOptionActive: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+  },
+  categoryOptionCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  categoryOptionLabel: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  categoryOptionLabelActive: {
+    color: colors.primary,
+  },
+  categoryOptionHint: {
+    color: colors.textMuted,
+    fontSize: 11,
   },
   placeholderList: {
     backgroundColor: 'rgba(255, 255, 255, 0.03)',

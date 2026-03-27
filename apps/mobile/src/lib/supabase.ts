@@ -1,8 +1,12 @@
 import 'react-native-url-polyfill/auto';
 
 import Constants from 'expo-constants';
-import * as SecureStore from 'expo-secure-store';
 import { createClient } from '@supabase/supabase-js';
+import {
+  getSecureJsonString,
+  removeSecureJsonString,
+  setSecureJsonString,
+} from './secureStorage';
 
 type SecureStoreAdapter = {
   getItem: (key: string) => Promise<string | null>;
@@ -12,13 +16,13 @@ type SecureStoreAdapter = {
 
 const secureStore: SecureStoreAdapter = {
   getItem: async (key) => {
-    return SecureStore.getItemAsync(key);
+    return getSecureJsonString(key);
   },
   setItem: async (key, value) => {
-    await SecureStore.setItemAsync(key, value);
+    await setSecureJsonString(key, value);
   },
   removeItem: async (key) => {
-    await SecureStore.deleteItemAsync(key);
+    await removeSecureJsonString(key);
   },
 };
 

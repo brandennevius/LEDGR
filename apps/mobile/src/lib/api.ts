@@ -1,6 +1,8 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
+import { buildDemoChatResponse, handleDemoApiRequest, isDemoSupportedPath } from './demoData';
+import { getDemoModeEnabled } from './demoMode';
 import { supabase } from './supabase';
 
 const resolvedBaseUrl =
@@ -33,6 +35,13 @@ type ApiRequestOptions = {
 };
 
 export async function apiRequest<T>(path: string, options?: ApiRequestOptions): Promise<T> {
+  if ((await getDemoModeEnabled()) && isDemoSupportedPath(path)) {
+    return handleDemoApiRequest<T>(path, {
+      method: options?.method ?? 'GET',
+      body: options?.body,
+    });
+  }
+
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
 
@@ -97,6 +106,14 @@ export async function apiStreamRequest({
   body,
   onChunk,
 }: ApiStreamOptions): Promise<void> {
+  if ((await getDemoModeEnabled()) && path === '/api/insights/chat') {
+    const response = buildDemoChatResponse(body);
+    const answer = response.answer ?? 'No insight available yet.';
+    const chunks = answer.match(/.{1,80}(\s|$)|\S+/g) ?? [answer];
+    chunks.forEach((chunk) => onChunk(chunk));
+    return;
+  }
+
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
 

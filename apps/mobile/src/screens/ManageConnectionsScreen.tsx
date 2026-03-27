@@ -19,6 +19,8 @@ import {
 
 import { Screen } from '../components/Screen';
 import { apiRequest } from '../lib/api';
+import { getDemoModeEnabled } from '../lib/demoMode';
+import { formatRelativeSyncTime, isStaleSync } from '../lib/syncStatus';
 import { colors } from '../theme';
 
 type Account = {
@@ -43,9 +45,22 @@ type OverviewResponse = {
   clientName: string;
   accounts: Account[];
   plaidItems: Connection[];
+  connectionStatus?: {
+    state: 'connected' | 'attention' | 'disconnected';
+    title: string;
+    description: string;
+  };
+  syncSummary?: {
+    totalConnections: number;
+    activeConnections: number;
+    staleConnections: number;
+    attentionConnections: number;
+    lastSuccessfulSyncAt?: string | null;
+  };
 };
 
 type LinkTokenResponse = { link_token: string };
+type UpdateAction = 'repair' | 'add_accounts';
 
 const formatCurrency = (value: number) =>
   value.toLocaleString('en-US', {
@@ -60,12 +75,17 @@ export function ManageConnectionsScreen() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [clientName, setClientName] = useState('');
+  const [connectionStatus, setConnectionStatus] = useState<
+    OverviewResponse['connectionStatus'] | null
+  >(null);
+  const [syncSummary, setSyncSummary] = useState<OverviewResponse['syncSummary'] | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [linking, setLinking] = useState(false);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [demoModeEnabled, setDemoModeEnabled] = useState(false);
 
   const getErrorMessage = (err: unknown, fallback: string) => {
     if (typeof err === 'object' && err !== null) {
@@ -88,6 +108,8 @@ export function ManageConnectionsScreen() {
       setConnections(data.plaidItems ?? []);
       setAccounts(data.accounts ?? []);
       setClientName(data.clientName ?? '');
+      setConnectionStatus(data.connectionStatus ?? null);
+      setSyncSummary(data.syncSummary ?? null);
       setError(null);
     } catch (err) {
       const message =
@@ -102,11 +124,13 @@ export function ManageConnectionsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      void getDemoModeEnabled().then(setDemoModeEnabled);
       void load();
     }, [load])
   );
 
   const syncNow = async () => {
+    if (demoModeEnabled) return;
     setSyncing(true);
     setError(null);
     try {
@@ -119,6 +143,7 @@ export function ManageConnectionsScreen() {
   };
 
   const startNewConnection = async () => {
+    if (demoModeEnabled) return;
     setLinking(true);
     setError(null);
     try {
@@ -151,13 +176,14 @@ export function ManageConnectionsScreen() {
     }
   };
 
-  const updateConnection = async (itemId: string) => {
+  const updateConnection = async (itemId: string, action: UpdateAction) => {
+    if (demoModeEnabled) return;
     setUpdatingItemId(itemId);
     setError(null);
     try {
       const data = await apiRequest<LinkTokenResponse>('/api/plaid/link-token', {
         method: 'POST',
-        body: { mode: 'update', itemId, platform: Platform.OS },
+        body: { mode: 'update', itemId, platform: Platform.OS, action },
       });
       await destroyPlaidLink();
       createPlaidLink({ token: data.link_token });
@@ -192,11 +218,17 @@ export function ManageConnectionsScreen() {
   }, [accounts]);
 
   const attentionConnections = useMemo(
-    () => connections.filter((connection) => connection.status !== 'active'),
+    () =>
+      connections.filter(
+        (connection) => connection.status !== 'active' || isStaleSync(connection.updatedAt)
+      ),
     [connections]
   );
   const activeConnections = useMemo(
-    () => connections.filter((connection) => connection.status === 'active'),
+    () =>
+      connections.filter(
+        (connection) => connection.status === 'active' && !isStaleSync(connection.updatedAt)
+      ),
     [connections]
   );
 
@@ -209,27 +241,39 @@ export function ManageConnectionsScreen() {
     const isExpanded = expanded[connection.id] === true;
     const isBusy = updatingItemId === connection.itemId || linking;
     const isAttention = connection.status !== 'active';
+    const isDisabled = isBusy || demoModeEnabled;
+    const isStale = !isAttention && isStaleSync(connection.updatedAt);
     return (
       <View key={connection.id} style={styles.connectionCard}>
         <Pressable style={styles.connectionHeader} onPress={() => toggleExpanded(connection.id)}>
           <View style={styles.connectionMetaWrap}>
             <Text style={styles.connectionName}>{connection.institutionName ?? 'Bank connection'}</Text>
             <Text style={styles.connectionMeta}>
-              {statusLabel(connection.status)} · {linkedAccounts.length} accounts · updated{' '}
-              {new Date(connection.updatedAt).toLocaleDateString()}
+              {isStale ? 'stale sync' : statusLabel(connection.status)} · {linkedAccounts.length}{' '}
+              accounts
             </Text>
+            <Text style={styles.connectionSyncMeta}>{formatRelativeSyncTime(connection.updatedAt)}</Text>
           </View>
-          <Text style={styles.chevron}>{isExpanded ? '▾' : '▸'}</Text>
+          <View style={styles.connectionHeaderRight}>
+            <View style={[styles.statusPill, isAttention ? styles.statusPillDanger : isStale ? styles.statusPillWarning : styles.statusPillHealthy]}>
+              <Text style={styles.statusPillLabel}>
+                {isAttention ? 'Needs attention' : isStale ? 'Stale' : 'Healthy'}
+              </Text>
+            </View>
+            <Text style={styles.chevron}>{isExpanded ? '▾' : '▸'}</Text>
+          </View>
         </Pressable>
 
         <View style={styles.connectionButtons}>
           <Pressable
             style={styles.secondaryButton}
-            onPress={() => updateConnection(connection.itemId)}
-            disabled={isBusy}
+            onPress={() => updateConnection(connection.itemId, 'repair')}
+            disabled={isDisabled}
           >
             <Text style={styles.secondaryLabel}>
-              {isBusy
+              {demoModeEnabled
+                ? 'Demo mode'
+                : isBusy
                 ? 'Opening...'
                 : isAttention
                 ? 'Reconnect'
@@ -238,10 +282,12 @@ export function ManageConnectionsScreen() {
           </Pressable>
           <Pressable
             style={styles.secondaryButton}
-            onPress={() => updateConnection(connection.itemId)}
-            disabled={isBusy}
+            onPress={() => updateConnection(connection.itemId, 'add_accounts')}
+            disabled={isDisabled}
           >
-            <Text style={styles.secondaryLabel}>Add existing accounts</Text>
+            <Text style={styles.secondaryLabel}>
+              {demoModeEnabled ? 'Demo mode' : 'Add accounts'}
+            </Text>
           </Pressable>
         </View>
 
@@ -278,15 +324,52 @@ export function ManageConnectionsScreen() {
             <Text style={styles.headerSubtitle}>
               {clientName || 'Client'} · {connections.length} institutions
             </Text>
+            {syncSummary?.lastSuccessfulSyncAt ? (
+              <Text style={styles.headerSyncText}>
+                {formatRelativeSyncTime(syncSummary.lastSuccessfulSyncAt)}
+              </Text>
+            ) : null}
           </View>
-          <Pressable style={styles.primaryButton} onPress={startNewConnection} disabled={linking}>
-            <Text style={styles.primaryLabel}>{linking ? 'Opening...' : 'Add connection'}</Text>
+          <Pressable
+            style={styles.primaryButton}
+            onPress={startNewConnection}
+            disabled={linking || demoModeEnabled}
+          >
+            <Text style={styles.primaryLabel}>
+              {demoModeEnabled ? 'Demo mode' : linking ? 'Opening...' : 'Add connection'}
+            </Text>
           </Pressable>
         </View>
 
+        {demoModeEnabled ? (
+          <Text style={styles.demoNote}>
+            Demo mode is on. Connection management actions are disabled while sample data is active.
+          </Text>
+        ) : null}
+
+        {connectionStatus && connectionStatus.state !== 'connected' ? (
+          <View
+            style={[
+              styles.syncBanner,
+              connectionStatus.state === 'disconnected'
+                ? styles.syncBannerDanger
+                : styles.syncBannerWarning,
+            ]}
+          >
+            <Text style={styles.syncBannerTitle}>{connectionStatus.title}</Text>
+            <Text style={styles.syncBannerBody}>{connectionStatus.description}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.actionRow}>
-          <Pressable style={styles.secondaryButton} onPress={syncNow} disabled={syncing}>
-            <Text style={styles.secondaryLabel}>{syncing ? 'Syncing...' : 'Sync all now'}</Text>
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={syncNow}
+            disabled={syncing || demoModeEnabled}
+          >
+            <Text style={styles.secondaryLabel}>
+              {demoModeEnabled ? 'Demo data loaded' : syncing ? 'Syncing...' : 'Sync all now'}
+            </Text>
           </Pressable>
         </View>
 
@@ -342,9 +425,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
+  headerSyncText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 6,
+  },
   actionRow: {
     flexDirection: 'row',
     gap: 10,
+  },
+  syncBanner: {
+    borderRadius: 14,
+    padding: 12,
+    gap: 4,
+  },
+  syncBannerWarning: {
+    backgroundColor: 'rgba(245, 158, 11, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+  },
+  syncBannerDanger: {
+    backgroundColor: 'rgba(239, 68, 68, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+  },
+  syncBannerTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  syncBannerBody: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
   },
   primaryButton: {
     borderRadius: 14,
@@ -387,6 +500,11 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 12,
   },
+  demoNote: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
   sectionCard: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -428,6 +546,39 @@ const styles = StyleSheet.create({
   connectionMeta: {
     color: colors.textMuted,
     fontSize: 12,
+  },
+  connectionSyncMeta: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  connectionHeaderRight: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  statusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusPillHealthy: {
+    backgroundColor: 'rgba(34, 197, 94, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.35)',
+  },
+  statusPillWarning: {
+    backgroundColor: 'rgba(245, 158, 11, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+  },
+  statusPillDanger: {
+    backgroundColor: 'rgba(239, 68, 68, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+  },
+  statusPillLabel: {
+    color: colors.text,
+    fontSize: 10,
+    fontWeight: '700',
   },
   chevron: {
     color: colors.textMuted,

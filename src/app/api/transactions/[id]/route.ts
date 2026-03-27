@@ -38,6 +38,10 @@ export async function GET(
       : transaction.transactionType === "INCOME"
       ? "Income"
       : transaction.category ?? "Uncategorized";
+  const needsReview =
+    transaction.categoryNeedsReview ||
+    (transaction.transactionType === "REGULAR" &&
+      transaction.categorySource === "PLAID");
 
   return NextResponse.json({
     id: transaction.id,
@@ -59,7 +63,7 @@ export async function GET(
     transactionType: transaction.transactionType,
     transferPeerId: transaction.transferPeerId,
     date: transaction.date.toISOString(),
-    needsReview: transaction.categoryNeedsReview,
+    needsReview,
     source: transaction.categorySource,
     hasSplits: transaction.splits.length > 0,
     splits: transaction.splits.map((split) => ({

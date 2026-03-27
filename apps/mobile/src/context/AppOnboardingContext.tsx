@@ -70,7 +70,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     id: 'goals-overview',
     tab: 'Goals',
     title: 'Goals',
-    body: 'Goals is coming soon for beta. You will be able to build and track emergency fund, savings, and debt plans here.',
+    body: 'Set savings, debt payoff, income, and spending goals here. LEDGR tracks progress from your live account activity and can build a payoff plan for debt goals.',
   },
   {
     id: 'accounts-overview',
