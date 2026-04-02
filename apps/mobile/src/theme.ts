@@ -1,11 +1,11 @@
-import { DarkTheme, type Theme } from '@react-navigation/native';
+import { DefaultTheme, type Theme } from '@react-navigation/native';
 
 import { colors, gradients } from './theme/colors';
 
 export const navigationTheme: Theme = {
-  ...DarkTheme,
+  ...DefaultTheme,
   colors: {
-    ...DarkTheme.colors,
+    ...DefaultTheme.colors,
     primary: colors.primary as unknown as string,
     background: colors.background as unknown as string,
     card: colors.surface as unknown as string,

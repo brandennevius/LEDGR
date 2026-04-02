@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: colors.elevated,
+    backgroundColor: colors.surfaceMuted,
   },
   clearLabel: {
     color: colors.textMuted,
@@ -449,12 +449,12 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.cardBorder,
-    backgroundColor: colors.chrome,
+    backgroundColor: colors.surface,
   },
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: colors.inputBorder,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,

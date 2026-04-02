@@ -388,7 +388,10 @@ function MetricCard({
                                 style={{
                                   flex: segmentValue,
                                   width: '100%',
-                                  backgroundColor: key === '__other__' ? 'rgba(255,255,255,0.35)' : categoryColor(key),
+                                  backgroundColor:
+                                    key === '__other__'
+                                      ? (colors.cardBorderStrong as string)
+                                      : categoryColor(key),
                                 }}
                               />
                             );
@@ -434,7 +437,17 @@ function MetricCard({
           <Text style={styles.topCategoryTitle}>Top categories</Text>
           {spendTop.map((item) => (
             <View key={item.name} style={styles.topCategoryRow}>
-              <View style={[styles.categoryDot, { backgroundColor: item.name === 'All other categories' ? 'rgba(255,255,255,0.4)' : categoryColor(item.name) }]} />
+              <View
+                style={[
+                  styles.categoryDot,
+                  {
+                    backgroundColor:
+                      item.name === 'All other categories'
+                        ? (colors.cardBorderStrong as string)
+                        : categoryColor(item.name),
+                  },
+                ]}
+              />
               <Text style={styles.topCategoryName}>{item.name}</Text>
               <Text style={styles.topCategoryAmount}>{formatCurrency(item.value)}</Text>
             </View>
@@ -695,7 +708,17 @@ export function DistributionScreen() {
             <Text style={styles.sheetSectionTitle}>Categories</Text>
             {detailCategories.map((item) => (
               <View key={item.name} style={styles.sheetRow}>
-                <View style={[styles.categoryDot, { backgroundColor: item.name === 'All other categories' ? 'rgba(255,255,255,0.4)' : categoryColor(item.name) }]} />
+                <View
+                  style={[
+                    styles.categoryDot,
+                    {
+                      backgroundColor:
+                        item.name === 'All other categories'
+                          ? (colors.cardBorderStrong as string)
+                          : categoryColor(item.name),
+                    },
+                  ]}
+                />
                 <Text style={styles.sheetRowLabel}>{item.name}</Text>
                 <Text style={styles.sheetRowValue}>{formatCurrency(item.value)}</Text>
               </View>
@@ -742,7 +765,9 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     borderRadius: 18,
-    backgroundColor: 'rgba(18, 24, 46, 0.7)',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   loadingText: {
     color: colors.textMuted,
@@ -756,9 +781,9 @@ const styles = StyleSheet.create({
   card: {
     padding: 14,
     borderRadius: 18,
-    backgroundColor: 'rgba(12, 17, 34, 0.72)',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.cardBorder,
     gap: 6,
   },
   cardTitle: {
@@ -785,20 +810,20 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   deltaPositive: {
-    backgroundColor: 'rgba(34, 197, 94, 0.18)',
+    backgroundColor: colors.successSoft,
   },
   deltaNegative: {
-    backgroundColor: 'rgba(239, 68, 68, 0.18)',
+    backgroundColor: colors.dangerSoft,
   },
   deltaPillText: {
     fontSize: 12,
     fontWeight: '700',
   },
   deltaPositiveText: {
-    color: '#4ade80',
+    color: colors.success,
   },
   deltaNegativeText: {
-    color: '#f87171',
+    color: colors.danger,
   },
   compareText: {
     color: colors.textMuted,
@@ -830,14 +855,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: colors.cardBorder,
   },
   zeroLine: {
     position: 'absolute',
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: colors.cardBorderStrong,
   },
   barRow: {
     position: 'absolute',
@@ -864,7 +889,7 @@ const styles = StyleSheet.create({
     left: 4,
     width: 2,
     borderRadius: 1,
-    backgroundColor: 'rgba(148, 163, 184, 0.8)',
+    backgroundColor: colors.cardBorderStrong,
   },
   metricBar: {
     position: 'absolute',
@@ -932,8 +957,8 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(7, 11, 24, 0.92)',
+    borderColor: colors.cardBorder,
+    backgroundColor: colors.surface,
     padding: 6,
   },
   rangeChip: {
@@ -943,7 +968,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   rangeChipActive: {
-    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+    backgroundColor: colors.primarySoft,
   },
   rangeChipLabel: {
     color: colors.textMuted,
@@ -958,7 +983,7 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 999,
     alignSelf: 'center',
-    backgroundColor: 'rgba(148, 163, 184, 0.6)',
+    backgroundColor: colors.cardBorderStrong,
     marginBottom: 10,
   },
   sheetTitle: {

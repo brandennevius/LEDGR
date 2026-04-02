@@ -913,7 +913,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 12,
     gap: 10,
-    backgroundColor: 'rgba(17, 22, 43, 0.45)',
+    backgroundColor: colors.inputBg,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
   },
   searchInput: {
     flex: 1,
@@ -928,7 +930,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(9, 13, 27, 0.65)',
+    backgroundColor: colors.surface,
   },
   filterBadge: {
     position: 'absolute',
@@ -983,7 +985,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
     borderRadius: 14,
-    backgroundColor: 'rgba(9, 13, 27, 0.35)',
+    backgroundColor: colors.surface,
     overflow: 'hidden',
   },
   categoryPickerScroll: {
@@ -1001,7 +1003,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   categoryOptionActive: {
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    backgroundColor: colors.primarySoft,
   },
   categoryOptionCopy: {
     flex: 1,
@@ -1020,7 +1022,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   placeholderList: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: colors.cardBorder,
     borderRadius: 12,
@@ -1043,7 +1045,9 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     borderRadius: 18,
-    backgroundColor: 'rgba(18, 24, 46, 0.7)',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   loadingText: {
     color: colors.textMuted,
@@ -1056,7 +1060,9 @@ const styles = StyleSheet.create({
   emptyCard: {
     padding: 18,
     borderRadius: 18,
-    backgroundColor: 'rgba(18, 24, 46, 0.35)',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
     alignItems: 'center',
   },
   emptyTitle: {
@@ -1127,12 +1133,12 @@ const styles = StyleSheet.create({
   },
   amountInput: {
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: colors.inputBorder,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: colors.text,
-    backgroundColor: 'rgba(9, 13, 27, 0.7)',
+    backgroundColor: colors.inputBg,
     fontSize: 18,
     fontWeight: '700',
   },
@@ -1144,12 +1150,12 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: colors.inputBorder,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: colors.text,
-    backgroundColor: 'rgba(9, 13, 27, 0.7)',
+    backgroundColor: colors.inputBg,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -1186,6 +1192,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.cardBorder,
+    backgroundColor: colors.surface,
   },
   secondaryLabel: {
     color: colors.text,

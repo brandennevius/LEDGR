@@ -21,9 +21,7 @@ export function Screen({
   children,
 }: ScreenProps) {
   const colorScheme = useColorScheme();
-  const topGradient = colorScheme === 'light'
-    ? ([colors.chrome as string, colors.background as string] as const)
-    : gradients.appDark;
+  const topGradient = colorScheme === 'light' ? gradients.appLight : gradients.appDark;
   return (
     <View style={styles.root}>
       <LinearGradient colors={topGradient} style={styles.topGradient} />
@@ -85,8 +83,8 @@ const styles = StyleSheet.create({
   title: {
     color: colors.text,
     fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   subtitle: {
     color: colors.textMuted,
@@ -96,9 +94,9 @@ const styles = StyleSheet.create({
   contentFlat: {
     flex: 1,
     backgroundColor: colors.background,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 16,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingTop: 18,
   },
   inner: {
     flex: 1,
@@ -108,8 +106,8 @@ const styles = StyleSheet.create({
   edgeContent: {
     flex: 1,
     backgroundColor: colors.background,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 16,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingTop: 18,
   },
 });

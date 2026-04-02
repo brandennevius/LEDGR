@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: colors.surfaceMuted,
     padding: 4,
   },
   modeButton: {
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   modeButtonActive: {
-    backgroundColor: 'rgba(56, 189, 248, 0.22)',
+    backgroundColor: colors.primarySoft,
   },
   modeLabel: {
     color: colors.textMuted,
@@ -334,19 +334,19 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: colors.inputBorder,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     color: colors.text,
-    backgroundColor: 'rgba(9, 13, 27, 0.7)',
+    backgroundColor: colors.inputBg,
   },
   legalBox: {
     gap: 8,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: colors.surface,
     padding: 10,
   },
   checkRow: {
@@ -362,11 +362,11 @@ const styles = StyleSheet.create({
     borderColor: colors.cardBorder,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    backgroundColor: colors.surfaceMuted,
   },
   checkboxChecked: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+    backgroundColor: colors.primarySoft,
   },
   checkboxDot: {
     width: 8,
@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   notice: {
-    color: '#22c55e',
+    color: colors.success,
     fontSize: 13,
   },
   error: {
@@ -429,7 +429,7 @@ const styles = StyleSheet.create({
   },
   oauthButton: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },

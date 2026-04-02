@@ -988,6 +988,7 @@ function SummaryDonut({
   categories: CategoryRow[];
   total: number;
 }) {
+  const donutTrackColor = colors.progressTrack as string;
   const radius = 36;
   const stroke = 11;
   const circumference = 2 * Math.PI * radius;
@@ -1006,7 +1007,7 @@ function SummaryDonut({
             cx={48}
             cy={48}
             r={radius}
-            stroke="rgba(255,255,255,0.14)"
+            stroke={donutTrackColor}
             strokeWidth={stroke}
             fill="none"
           />
@@ -1130,7 +1131,9 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     borderRadius: 18,
-    backgroundColor: colors.elevated,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   loadingText: {
     color: colors.textMuted,
@@ -1141,7 +1144,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   monthTotalsRow: {
-    backgroundColor: 'transparent',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -1161,7 +1166,7 @@ const styles = StyleSheet.create({
     borderRadius: 53,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.elevated,
+    backgroundColor: colors.surfaceMuted,
   },
   totalValue: {
     color: colors.text,
@@ -1184,7 +1189,7 @@ const styles = StyleSheet.create({
     color: colors.danger,
   },
   totalDeltaUnder: {
-    color: '#22c55e',
+    color: colors.success,
   },
   listHeader: {
     flexDirection: 'row',
@@ -1254,7 +1259,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.cardBorder,
   },
   compactRowActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    backgroundColor: colors.surfaceTint,
   },
   compactLine: {
     flexDirection: 'row',
@@ -1344,7 +1349,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    backgroundColor: colors.surface,
     paddingVertical: 10,
     paddingHorizontal: 8,
   },
@@ -1361,7 +1366,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 100,
     borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: colors.progressTrack,
     justifyContent: 'flex-end',
     overflow: 'hidden',
   },
@@ -1379,7 +1384,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    backgroundColor: colors.surface,
     padding: 12,
     gap: 8,
   },
@@ -1472,11 +1477,11 @@ const styles = StyleSheet.create({
     borderColor: colors.cardBorder,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: colors.surface,
   },
   typeChipActive: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+    backgroundColor: colors.primarySoft,
   },
   typeChipText: {
     color: colors.textMuted,
@@ -1501,13 +1506,13 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: colors.inputBorder,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: colors.text,
     marginBottom: 10,
-    backgroundColor: 'rgba(9, 13, 27, 0.7)',
+    backgroundColor: colors.inputBg,
   },
   toggleButton: {
     borderRadius: 14,
@@ -1556,10 +1561,10 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: colors.cardBorderStrong,
   },
   colorSwatchActive: {
     borderWidth: 2,
-    borderColor: '#ffffff',
+    borderColor: colors.primary,
   },
 });

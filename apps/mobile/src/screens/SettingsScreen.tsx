@@ -97,7 +97,7 @@ function ToggleRow({
         value={value}
         onValueChange={onValueChange}
         disabled={disabled}
-        trackColor={{ true: '#22c55e', false: 'rgba(148, 163, 184, 0.4)' }}
+        trackColor={{ true: colors.success as string, false: colors.cardBorderStrong as string }}
       />
     </View>
   );
@@ -639,7 +639,7 @@ const styles = StyleSheet.create({
   },
   themeChipActive: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    backgroundColor: colors.primarySoft,
   },
   themeLabel: {
     color: colors.textMuted,
@@ -703,7 +703,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: colors.surface,
   },
   secondaryLabel: {
     color: colors.text,

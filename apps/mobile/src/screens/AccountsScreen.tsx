@@ -358,14 +358,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   syncBannerWarning: {
-    backgroundColor: 'rgba(245, 158, 11, 0.14)',
+    backgroundColor: colors.warningSoft,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.35)',
+    borderColor: colors.warning,
   },
   syncBannerDanger: {
-    backgroundColor: 'rgba(239, 68, 68, 0.14)',
+    backgroundColor: colors.dangerSoft,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.35)',
+    borderColor: colors.danger,
   },
   syncBannerTitle: {
     color: colors.text,
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: colors.surface,
   },
   secondaryLabel: {
     color: colors.text,
@@ -410,7 +410,9 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     borderRadius: 18,
-    backgroundColor: 'rgba(18, 24, 46, 0.7)',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   loadingText: {
     color: colors.textMuted,

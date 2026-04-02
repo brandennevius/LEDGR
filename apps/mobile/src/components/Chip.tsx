@@ -30,11 +30,11 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   chipActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
   },
   chipInactive: {
-    backgroundColor: colors.elevated,
+    backgroundColor: colors.surface,
     borderColor: colors.cardBorder,
   },
   label: {
@@ -42,9 +42,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   labelActive: {
-    color: '#0B0E14',
+    color: colors.primary,
   },
   labelInactive: {
-    color: colors.textMuted,
+    color: colors.text,
   },
 });

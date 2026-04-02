@@ -852,14 +852,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   syncBannerWarning: {
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    backgroundColor: colors.warningSoft,
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.35)',
+    borderColor: colors.warning,
   },
   syncBannerDanger: {
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    backgroundColor: colors.dangerSoft,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.35)',
+    borderColor: colors.danger,
   },
   syncBannerTitle: {
     color: colors.text,
@@ -962,10 +962,10 @@ const styles = StyleSheet.create({
     color: colors.success,
   },
   legendExpected: {
-    color: '#38BDF8',
+    color: colors.accent,
   },
   legendBudget: {
-    color: '#6366f1',
+    color: colors.primary,
   },
   emptyText: {
     color: colors.textMuted,
@@ -1036,9 +1036,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 10,
     alignItems: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.16)',
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.4)',
+    borderColor: colors.primary,
   },
   groupReviewLabel: {
     color: colors.primary,
@@ -1122,7 +1122,7 @@ const styles = StyleSheet.create({
   },
   amountInput: {
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: colors.inputBorder,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -1144,7 +1144,7 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: colors.inputBorder,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,

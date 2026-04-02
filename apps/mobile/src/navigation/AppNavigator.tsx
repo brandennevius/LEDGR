@@ -43,9 +43,7 @@ const TopTab = createMaterialTopTabNavigator<TopTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const chrome = colors.chrome as string;
 const chromeText = colors.chromeText as string;
-const primary = colors.primary as string;
-const text = colors.text as string;
-const textMuted = colors.textMuted as string;
+const chromeTextMuted = colors.chromeTextMuted as string;
 
 function MainTabs() {
   return (
@@ -58,8 +56,8 @@ function MainTabs() {
         tabBarItemStyle: styles.topTabItem,
         tabBarStyle: styles.topTabBar,
         tabBarIndicatorStyle: styles.topTabIndicator,
-        tabBarActiveTintColor: text,
-        tabBarInactiveTintColor: textMuted,
+        tabBarActiveTintColor: chromeText,
+        tabBarInactiveTintColor: chromeTextMuted,
         tabBarPressColor: 'transparent',
         tabBarLabelStyle: styles.topTabLabel,
         lazy: true,
@@ -242,9 +240,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: chromeText,
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   headerIconButton: {
     width: 36,
@@ -255,6 +253,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.chromeButtonBorder,
     backgroundColor: colors.chromeButtonBg,
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
   headerSideContainer: {
     paddingHorizontal: 12,
@@ -264,25 +266,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     elevation: 0,
     shadowOpacity: 0,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    overflow: 'hidden',
-    paddingBottom: 6,
+    paddingBottom: 8,
+    paddingHorizontal: 10,
   },
   topTabItem: {
     width: 'auto',
-    paddingHorizontal: 2,
+    paddingHorizontal: 4,
   },
   topTabIndicator: {
-    height: 2,
-    backgroundColor: primary,
+    height: 3,
+    backgroundColor: chromeText,
     borderRadius: 999,
   },
   topTabLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     textTransform: 'none',
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   lockOverlay: {
     ...StyleSheet.absoluteFillObject,
