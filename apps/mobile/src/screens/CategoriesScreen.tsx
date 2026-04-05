@@ -55,6 +55,15 @@ type OverviewResponse = {
     projected: number;
     prevSpend: number;
     changePct: number;
+    history: {
+      trailingMonths: { key: string; label: string; spend: number }[];
+      currentMonthLabel: string;
+      previousMonthLabel: string;
+      yearToDateSpend: number;
+      previousYearToDateSpend: number;
+      yearToDateChangePct: number;
+      averageMonthSpend: number;
+    };
   };
   categories: CategoryRow[];
   groups: GroupRow[];
@@ -100,6 +109,13 @@ const formatCurrencyCompact = (value: number) =>
     notation: 'compact',
     maximumFractionDigits: 1,
   });
+
+const formatChangeLabel = (value: number) => {
+  if (!Number.isFinite(value) || value === 0) return '0%';
+  const abs = Math.abs(value);
+  const decimals = abs >= 10 ? 0 : 1;
+  return `${value > 0 ? '+' : '-'}${abs.toFixed(decimals)}%`;
+};
 
 const sanitizeAmountInput = (value: string) => {
   const cleaned = value.replace(/[^0-9.]/g, '');
@@ -164,6 +180,7 @@ export function CategoriesScreen() {
   const [newColor, setNewColor] = useState(CATEGORY_COLORS[0]);
   const [groupOpen, setGroupOpen] = useState(false);
   const [categoryDetailOpen, setCategoryDetailOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [groupCategories, setGroupCategories] = useState('');
   const [groupBudget, setGroupBudget] = useState('');
@@ -530,41 +547,46 @@ export function CategoriesScreen() {
 
         {overview ? (
           <>
-            <View style={styles.monthTotalsRow}>
-              <View style={styles.totalBlock}>
-                <Text
-                  style={styles.totalValue}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.62}
-                >
-                  {formatCurrency(overview.summary.spend)}
-                </Text>
-                <Text style={styles.totalLabel}>spent in {currentMonthLabel}</Text>
+            <Pressable style={styles.summaryPressable} onPress={() => setHistoryOpen(true)}>
+              <View style={styles.monthTotalsRow}>
+                <View style={styles.totalBlock}>
+                  <Text
+                    style={styles.totalValue}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.62}
+                  >
+                    {formatCurrency(overview.summary.spend)}
+                  </Text>
+                  <Text style={styles.totalLabel}>spent in {currentMonthLabel}</Text>
+                </View>
+                <SummaryDonut categories={overview.categories} total={overview.summary.spend} />
+                <View style={[styles.totalBlock, styles.totalBlockRight]}>
+                  <Text
+                    style={styles.totalValue}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.62}
+                  >
+                    {formatCurrency(overview.summary.budget)}
+                  </Text>
+                  <Text style={styles.totalLabel}>total budget</Text>
+                </View>
               </View>
-              <SummaryDonut categories={overview.categories} total={overview.summary.spend} />
-              <View style={[styles.totalBlock, styles.totalBlockRight]}>
+              <View style={styles.totalFooterRow}>
                 <Text
-                  style={styles.totalValue}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.62}
+                  style={[
+                    styles.totalDelta,
+                    overview.summary.spend > overview.summary.budget ? styles.totalDeltaOver : styles.totalDeltaUnder,
+                  ]}
                 >
-                  {formatCurrency(overview.summary.budget)}
+                  {overview.summary.spend > overview.summary.budget
+                    ? `${formatCurrency(overview.summary.spend - overview.summary.budget)} over budget`
+                    : `${formatCurrency(overview.summary.budget - overview.summary.spend)} under budget`}
                 </Text>
-                <Text style={styles.totalLabel}>total budget</Text>
+                <Text style={styles.totalMetaHint}>Tap for history</Text>
               </View>
-            </View>
-            <Text
-              style={[
-                styles.totalDelta,
-                overview.summary.spend > overview.summary.budget ? styles.totalDeltaOver : styles.totalDeltaUnder,
-              ]}
-            >
-              {overview.summary.spend > overview.summary.budget
-                ? `${formatCurrency(overview.summary.spend - overview.summary.budget)} over budget`
-                : `${formatCurrency(overview.summary.budget - overview.summary.spend)} under budget`}
-            </Text>
+            </Pressable>
           </>
         ) : null}
 
@@ -918,6 +940,106 @@ export function CategoriesScreen() {
         )}
       </ModalSheet>
 
+      <ModalSheet visible={historyOpen} onClose={() => setHistoryOpen(false)}>
+        {overview ? (
+          <ScrollView
+            contentContainerStyle={styles.historyContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Text style={styles.modalTitle}>Category metrics</Text>
+            <Text style={styles.sectionSubtitle}>Month, year-to-date, and recent spend history.</Text>
+
+            <View style={styles.metricsCard}>
+              <Text style={styles.sheetSectionTitle}>Current month</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>{overview.summary.history.currentMonthLabel}</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(overview.summary.spend)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Current budget</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(overview.summary.budget)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Month over month</Text>
+                <Text
+                  style={[
+                    styles.detailValue,
+                    overview.summary.changePct > 0 ? styles.metricNegative : styles.metricPositive,
+                  ]}
+                >
+                  {formatChangeLabel(overview.summary.changePct)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.metricsCard}>
+              <Text style={styles.sheetSectionTitle}>Previous month</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>{overview.summary.history.previousMonthLabel}</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(overview.summary.prevSpend)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Change vs current month</Text>
+                <Text
+                  style={[
+                    styles.detailValue,
+                    overview.summary.spend > overview.summary.prevSpend ? styles.metricNegative : styles.metricPositive,
+                  ]}
+                >
+                  {overview.summary.prevSpend === 0
+                    ? 'No prior baseline'
+                    : `${formatCurrencyDetailed(Math.abs(overview.summary.spend - overview.summary.prevSpend))} ${
+                        overview.summary.spend > overview.summary.prevSpend ? 'higher' : 'lower'
+                      }`}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.metricsCard}>
+              <Text style={styles.sheetSectionTitle}>Year to date</Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Spend this year</Text>
+                <Text style={styles.detailValue}>
+                  {formatCurrencyDetailed(overview.summary.history.yearToDateSpend)}
+                </Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Average per month</Text>
+                <Text style={styles.detailValue}>
+                  {formatCurrencyDetailed(overview.summary.history.averageMonthSpend)}
+                </Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Vs prior year to date</Text>
+                <Text
+                  style={[
+                    styles.detailValue,
+                    overview.summary.history.yearToDateChangePct > 0 ? styles.metricNegative : styles.metricPositive,
+                  ]}
+                >
+                  {overview.summary.history.previousYearToDateSpend === 0
+                    ? 'No prior baseline'
+                    : formatChangeLabel(overview.summary.history.yearToDateChangePct)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.metricsCard}>
+              <Text style={styles.sheetSectionTitle}>Recent months</Text>
+              <View style={styles.historyList}>
+                {overview.summary.history.trailingMonths.map((month) => (
+                  <View key={month.key} style={styles.historyRow}>
+                    <Text style={styles.historyMonthLabel}>{month.label}</Text>
+                    <Text style={styles.historyMonthValue}>{formatCurrencyDetailed(month.spend)}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </ScrollView>
+        ) : null}
+      </ModalSheet>
+
       <ModalSheet visible={addOpen} onClose={() => setAddOpen(false)}>
         <Text style={styles.modalTitle}>Add category</Text>
         <TextInput
@@ -1143,6 +1265,9 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 12,
   },
+  summaryPressable: {
+    gap: 6,
+  },
   monthTotalsRow: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -1182,14 +1307,23 @@ const styles = StyleSheet.create({
   totalDelta: {
     fontSize: 12,
     fontWeight: '600',
-    marginTop: -4,
-    marginBottom: 2,
   },
   totalDeltaOver: {
     color: colors.danger,
   },
   totalDeltaUnder: {
     color: colors.success,
+  },
+  totalFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  totalMetaHint: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
   },
   listHeader: {
     flexDirection: 'row',
@@ -1338,6 +1472,10 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 8,
   },
+  historyContent: {
+    gap: 12,
+    paddingBottom: 8,
+  },
   sheetSectionTitle: {
     color: colors.text,
     fontSize: 12,
@@ -1409,6 +1547,30 @@ const styles = StyleSheet.create({
   detailValue: {
     color: colors.text,
     fontSize: 13,
+    fontWeight: '600',
+  },
+  metricPositive: {
+    color: colors.success,
+  },
+  metricNegative: {
+    color: colors.danger,
+  },
+  historyList: {
+    gap: 10,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  historyMonthLabel: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  historyMonthValue: {
+    color: colors.text,
+    fontSize: 14,
     fontWeight: '600',
   },
   transactionsBlock: {

@@ -47,6 +47,7 @@ export async function GET() {
 
   const currentSpend = new Map<string, number>();
   const prevSpend = new Map<string, number>();
+  const monthlyTotals = new Map<string, number>();
 
   type SpendEntry = { category: string; amount: number; date: Date };
   const spendEntries: SpendEntry[] = [];
@@ -94,6 +95,7 @@ export async function GET() {
 
   spendEntries.forEach((entry) => {
     const key = formatMonthKey(entry.date);
+    monthlyTotals.set(key, (monthlyTotals.get(key) ?? 0) + entry.amount);
     if (key === currentMonthKey) {
       currentSpend.set(
         entry.category,
@@ -154,6 +156,28 @@ export async function GET() {
     totalSpend > 0 ? (totalSpend / daysElapsed) * daysInMonth : 0;
   const changePct =
     totalPrevSpend === 0 ? 0 : ((totalSpend - totalPrevSpend) / totalPrevSpend) * 100;
+  const trailingMonths = Array.from({ length: 6 }).map((_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+    const key = formatMonthKey(date);
+    return {
+      key,
+      label: date.toLocaleDateString("en-US", { month: "short" }),
+      spend: monthlyTotals.get(key) ?? 0,
+    };
+  });
+  const yearStart = new Date(now.getFullYear(), 0, 1);
+  const previousYearStart = new Date(now.getFullYear() - 1, 0, 1);
+  const previousYearToDateCutoff = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const yearToDateSpend = spendEntries
+    .filter((entry) => entry.date >= yearStart)
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const previousYearToDateSpend = spendEntries
+    .filter((entry) => entry.date >= previousYearStart && entry.date <= previousYearToDateCutoff)
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const yearToDateChangePct =
+    previousYearToDateSpend === 0
+      ? 0
+      : ((yearToDateSpend - previousYearToDateSpend) / previousYearToDateSpend) * 100;
 
   const summary = {
     mode: totalBudget > 0 ? ("budget" as const) : ("compare" as const),
@@ -162,6 +186,15 @@ export async function GET() {
     projected: projectedTotal,
     prevSpend: totalPrevSpend,
     changePct,
+    history: {
+      trailingMonths,
+      currentMonthLabel: now.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+      previousMonthLabel: prevMonthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+      yearToDateSpend,
+      previousYearToDateSpend,
+      yearToDateChangePct,
+      averageMonthSpend: yearToDateSpend / Math.max(now.getMonth() + 1, 1),
+    },
   };
 
   const groupsData = groups.map((group) => {
